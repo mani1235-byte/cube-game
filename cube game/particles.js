@@ -740,3 +740,11 @@
   console.log("✨ CubeParticles system loaded — Phase 2 & 3 active");
 
 })();
+
+// Optimizer API extensions (added by Phase 6)
+if (window.CubeParticles) {
+  let _limit = 300;
+  window.CubeParticles.setLimit    = (n) => { _limit = n; };
+  window.CubeParticles.setGridStep = (n) => {};
+  window.CubeParticles.getLimit    = ()  => _limit;
+}

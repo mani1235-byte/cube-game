@@ -176,3 +176,57 @@
   console.log("🏆 Leaderboard loaded!");
 
 })();
+
+/* ═══════════════════════════════════════
+   INDEX PAGE — SESSION CHECK
+═══════════════════════════════════════ */
+(function() {
+  // Don't redirect if we just came from login
+  const justLoggedIn = sessionStorage.getItem("cg_just_logged_in");
+  if (justLoggedIn) {
+    sessionStorage.removeItem("cg_just_logged_in");
+    return;
+  }
+  const from = document.referrer;
+  if (from.includes("login.html")) return;
+
+  try {
+    const user = JSON.parse(localStorage.getItem("cg_current_user"));
+    if (!user) {
+      const hasLang = localStorage.getItem("cg_lang");
+      window.location.replace(hasLang ? "./login.html" : "./lang.html");
+    }
+  } catch(e) {
+    window.location.replace("./lang.html");
+  }
+})();
+
+/* ═══════════════════════════════════════
+   INDEX PAGE — LOAD SAVED GAME MODE
+═══════════════════════════════════════ */
+(function() {
+  const savedMode = localStorage.getItem("cg_game_mode");
+  if (savedMode === "casual") {
+    document.querySelector(".play-normal-btn")?.addEventListener("click", () => {
+      // override with casual if saved
+    });
+  }
+})();
+
+/* ═══════════════════════════════════════
+   INDEX PAGE — SAVE SCORE TO LEADERBOARD
+═══════════════════════════════════════ */
+window.addEventListener('load', function() {
+  const _origEndGame = window.endGame;
+  if (typeof _origEndGame === 'function') {
+    window.endGame = function() {
+      _origEndGame();
+      try {
+        const user = JSON.parse(localStorage.getItem("cg_current_user"));
+        if (user && window.LB) {
+          window.LB.saveScore(user.username, state.game.score, user.totalGames || 1);
+        }
+      } catch(e) {}
+    };
+  }
+});
