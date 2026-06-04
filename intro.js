@@ -88,10 +88,19 @@
   // ── Main loop ─────────────────────────────────────────────────────────────
   function mainLoop(ts) {
     if (!startTime) startTime = ts;
-    const elapsed = (ts - startTime) / 1000; // seconds
+
+    // Use music currentTime as master clock when music is playing
+    // Falls back to RAF timer if music hasn't started yet
+    let elapsed;
+    if (!introMusic.paused && introMusic.currentTime > 0) {
+      elapsed = introMusic.currentTime;
+    } else {
+      elapsed = (ts - startTime) / 1000;
+    }
 
     // Progress bar
-    const pct = Math.min(100, (elapsed / TOTAL_DURATION) * 100);
+    const duration = introMusic.duration > 0 ? introMusic.duration : TOTAL_DURATION;
+    const pct = Math.min(100, (elapsed / duration) * 100);
     progressFill.style.width = pct + "%";
 
     // Scene switching
@@ -107,7 +116,7 @@
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     drawParticles(elapsed);
 
-    // End → redirect
+    // Safety fallback: if elapsed exceeds total duration and music already ended
     if (elapsed >= TOTAL_DURATION && !ended) {
       ended = true;
       endIntro();
@@ -456,6 +465,14 @@
   const introMusic = new Audio("./intro music.mp3");
   introMusic.volume = 0.7;
   introMusic.loop   = false;
+
+  // When music ends → end intro (music is the master clock)
+  introMusic.addEventListener("ended", () => {
+    if (!ended) {
+      ended = true;
+      endIntro();
+    }
+  });
 
   // Try to auto-play immediately
   introMusic.play().catch(() => {

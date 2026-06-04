@@ -1950,29 +1950,36 @@ function draw(ctx, width, height, viewScale) {
 
 function setupCanvases() {
   const ctx = canvas.getContext("2d");
-  // devicePixelRatio alias
-  const dpr = window.devicePixelRatio || 1;
   // View will be scaled so objects appear sized similarly on all screen sizes.
   let viewScale;
   // Dimensions (taking viewScale into account!)
   let width, height;
+  // dpr read fresh on every resize — can change on mobile/external display
+  let dpr = Math.min(window.devicePixelRatio || 1, 2);
 
   function handleResize() {
+    dpr = Math.min(window.devicePixelRatio || 1, 2);
     const w = window.innerWidth;
     const h = window.innerHeight;
     viewScale = h / 1000;
-    width = w / viewScale;
+    width  = w / viewScale;
     height = h / viewScale;
-    canvas.width = w * dpr;
-    canvas.height = h * dpr;
-    canvas.style.width = w + "px";
+    canvas.width  = Math.round(w * dpr);
+    canvas.height = Math.round(h * dpr);
+    canvas.style.width  = w + "px";
     canvas.style.height = h + "px";
+    // Reset transform after resize — prevents cumulative scale crash
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
   }
 
   // Set initial size
   handleResize();
-  // resize fullscreen canvas
-  window.addEventListener("resize", handleResize);
+  // Debounced resize — prevents rapid-fire resize events from crashing
+  let _resizeTimer = null;
+  window.addEventListener("resize", () => {
+    clearTimeout(_resizeTimer);
+    _resizeTimer = setTimeout(handleResize, 80);
+  });
 
   // Expose viewScale for particle system coordinate mapping
   Object.defineProperty(window, "_cgViewScale", { get: () => viewScale });
