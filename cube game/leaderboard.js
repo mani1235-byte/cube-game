@@ -201,32 +201,24 @@
   }
 })();
 
-/* ═══════════════════════════════════════
-   INDEX PAGE — LOAD SAVED GAME MODE
-═══════════════════════════════════════ */
-(function() {
-  const savedMode = localStorage.getItem("cg_game_mode");
-  if (savedMode === "casual") {
-    document.querySelector(".play-normal-btn")?.addEventListener("click", () => {
-      // override with casual if saved
-    });
-  }
-})();
+
 
 /* ═══════════════════════════════════════
-   INDEX PAGE — SAVE SCORE TO LEADERBOARD
+   GUEST BLOCK — runs on leaderboard page
 ═══════════════════════════════════════ */
-window.addEventListener('load', function() {
-  const _origEndGame = window.endGame;
-  if (typeof _origEndGame === 'function') {
-    window.endGame = function() {
-      _origEndGame();
-      try {
-        const user = JSON.parse(localStorage.getItem("cg_current_user"));
-        if (user && window.LB) {
-          window.LB.saveScore(user.username, state.game.score, user.totalGames || 1);
-        }
-      } catch(e) {}
-    };
-  }
-});
+(function() {
+  try {
+    const user = JSON.parse(localStorage.getItem("cg_current_user"));
+    const isGuest = !user || user.isGuest === true;
+    if (isGuest) {
+      // Hide the real content, show the block
+      document.getElementById("guestBlock").style.display = "flex";
+      const table   = document.querySelector(".lb-table-wrap");
+      const search  = document.querySelector(".lb-search-wrap");
+      const rank    = document.getElementById("yourRank");
+      if (table)  table.style.display  = "none";
+      if (search) search.style.display = "none";
+      if (rank)   rank.style.display   = "none";
+    }
+  } catch(e) {}
+})();

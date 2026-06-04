@@ -78,7 +78,8 @@ function togglePass(inputId, btn) {
 // ── Guest play ─────────────────────────────────────────────────────────────
 function playAsGuest() {
   const nameInput = document.getElementById("guestName");
-  const name = nameInput.value.trim() || "Guest";
+  const name = nameInput.value.trim();
+  if (!name) return showError("guestError", "Username required.");
 
   // Load existing guest data or create fresh
   let guestData;

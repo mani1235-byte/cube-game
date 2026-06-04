@@ -1390,6 +1390,32 @@ function endGame() {
   if (isNewHighScore()) {
     setHighScore(state.game.score);
   }
+  // Save score to logged-in user profile
+  try {
+    const user = JSON.parse(localStorage.getItem("cg_current_user"));
+    if (user) {
+      const finalScore = state.game.score;
+      user.highScore    = Math.max(user.highScore || 0, finalScore);
+      user.totalGames   = (user.totalGames || 0) + 1;
+      user.lastScore    = finalScore;
+      user.lastSeen     = Date.now();
+      localStorage.setItem("cg_current_user", JSON.stringify(user));
+      // Also update in the users registry (registered players only)
+      if (!user.isGuest) {
+        try {
+          const users = JSON.parse(localStorage.getItem("cg_users")) || {};
+          if (users[user.username.toLowerCase()]) {
+            users[user.username.toLowerCase()] = user;
+            localStorage.setItem("cg_users", JSON.stringify(users));
+          }
+        } catch(e) {}
+        // Save directly to leaderboard
+        if (window.LB && window.LB.saveScore) {
+          window.LB.saveScore(user.username, finalScore, user.totalGames);
+        }
+      }
+    }
+  } catch(e) {}
   setActiveMenu(MENU_SCORE);
 }
 

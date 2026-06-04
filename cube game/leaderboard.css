@@ -252,3 +252,59 @@ html, body {
 .medal-1::before { content: "🥇 "; }
 .medal-2::before { content: "🥈 "; }
 .medal-3::before { content: "🥉 "; }
+
+
+/* ═══════════════════════════════════════
+   GUEST BLOCK
+═══════════════════════════════════════ */
+.guest-block {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  margin: 40px auto;
+  padding: 48px 36px;
+  max-width: 420px;
+  background: rgba(10, 0, 30, 0.85);
+  border: 2px solid rgba(123, 47, 255, 0.5);
+  border-radius: 16px;
+  box-shadow: 0 0 40px rgba(123, 47, 255, 0.25);
+  text-align: center;
+}
+.guest-block__icon {
+  font-size: 3rem;
+  filter: drop-shadow(0 0 12px rgba(123,47,255,0.7));
+}
+.guest-block__title {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 1.4rem;
+  color: #fff;
+  margin: 0;
+  letter-spacing: 0.1em;
+}
+.guest-block__msg {
+  color: rgba(255,255,255,0.6);
+  font-size: 0.95rem;
+  margin: 0;
+  line-height: 1.5;
+}
+.guest-block__btn {
+  display: inline-block;
+  margin-top: 8px;
+  padding: 12px 32px;
+  background: linear-gradient(135deg, #7b2fff, #00c8ff);
+  color: #fff;
+  font-family: 'Orbitron', sans-serif;
+  font-size: 0.9rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  border-radius: 8px;
+  text-decoration: none;
+  transition: transform 0.15s, box-shadow 0.15s;
+  box-shadow: 0 0 20px rgba(123,47,255,0.4);
+}
+.guest-block__btn:hover {
+  transform: translateY(-2px) scale(1.04);
+  box-shadow: 0 0 30px rgba(123,47,255,0.7);
+}
