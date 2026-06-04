@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CUBE GAME — Login</title>
+  <link rel="icon" type="logo" href="cube_game_logo.png">
+  <link rel="stylesheet" href="./login.css">
+</head>
+<body>
+ 
+  <!-- Animated background cubes -->
+  <div class="bg-cubes" id="bgCubes"></div>
+ 
+  <!-- Main container -->
+  <div class="login-wrap">
+ 
+    <!-- Logo -->
+    <div class="logo">
+      <img src="cube_game_logo.png" alt="CUBE GAME" class="logo-img">
+     </div>
+ 
+    <!-- Card -->
+    <div class="card" id="card">
+ 
+      <!-- Tab switcher -->
+      <div class="card-tabs">
+        <button class="card-tab active" id="tabGuest" onclick="showPanel('guest')">GUEST</button>
+        <button class="card-tab" id="tabLogin" onclick="showPanel('login')">LOGIN</button>
+        <button class="card-tab" id="tabSignup" onclick="showPanel('signup')">SIGN UP</button>
+      </div>
+ 
+      <!-- Guest Panel -->
+      <div class="panel active" id="panelGuest">
+        <p class="panel-desc">Play instantly — no account needed.<br>Your progress saves on this device only.</p>
+        <div class="input-group">
+          <label>YOUR NAME</label>
+          <input type="text" id="guestName" placeholder="Enter a nickname…" maxlength="20" autocomplete="off">
+        </div>
+        <button class="btn btn--primary" onclick="playAsGuest()">
+          <span>PLAY AS GUEST</span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+        </button>
+        <div class="error-msg" id="guestError"></div>
+        <div class="divider"><span>or</span></div>
+        <button class="btn btn--ghost" onclick="showPanel('signup')">CREATE AN ACCOUNT</button>
+        <div class="guest-perks">
+          <div class="perk">✓ Saves score locally</div>
+          <div class="perk">✓ Saves coins locally</div>
+          <div class="perk muted">✗ No cross-device sync</div>
+          <div class="perk muted">✗ No subscriber rewards</div>
+        </div>
+      </div>
+ 
+      <!-- Login Panel -->
+      <div class="panel" id="panelLogin">
+        <div class="input-group">
+          <label>USERNAME</label>
+          <input type="text" id="loginUser" placeholder="Your username…" autocomplete="username">
+        </div>
+        <div class="input-group">
+          <label>PASSWORD</label>
+          <input type="password" id="loginPass" placeholder="Your password…" autocomplete="current-password">
+          <div class="show-pass" onclick="togglePass('loginPass', this)">SHOW</div>
+        </div>
+        <div class="error-msg" id="loginError"></div>
+        <button class="btn btn--primary" onclick="doLogin()">
+          <span>LOGIN</span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+        </button>
+        <p class="switch-note">No account? <a onclick="showPanel('signup')">Sign up free</a></p>
+      </div>
+ 
+      <!-- Signup Panel -->
+      <div class="panel" id="panelSignup">
+        <div class="input-group">
+          <label>USERNAME</label>
+          <input type="text" id="signupUser" placeholder="Choose a username…" maxlength="20" autocomplete="username">
+        </div>
+        <div class="input-group">
+          <label>PASSWORD</label>
+          <input type="password" id="signupPass" placeholder="Choose a password…" autocomplete="new-password">
+          <div class="show-pass" onclick="togglePass('signupPass', this)">SHOW</div>
+        </div>
+        <div class="input-group">
+          <label>CONFIRM PASSWORD</label>
+          <input type="password" id="signupPass2" placeholder="Repeat password…" autocomplete="new-password">
+        </div>
+        <div class="error-msg" id="signupError"></div>
+        <button class="btn btn--primary" onclick="doSignup()">
+          <span>CREATE ACCOUNT</span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+        </button>
+        <p class="switch-note">Already have one? <a onclick="showPanel('login')">Login</a></p>
+        <div class="account-perks">
+          <div class="perk">✓ Everything saves locally</div>
+          <div class="perk">✓ Score, coins & items</div>
+          <div class="perk">✓ Settings saved</div>
+          <div class="perk highlight">★ Ready for cloud sync on launch</div>
+        </div>
+      </div>
+ 
+    </div>
+ 
+    <!-- YouTube link -->
+    <a class="yt-link" href="https://www.youtube.com/@cubegame2026" target="_blank" rel="noopener noreferrer">
+      <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16"><path d="M23.5 6.2a3 3 0 0 0-2.1-2.1C19.5 3.5 12 3.5 12 3.5s-7.5 0-9.4.6A3 3 0 0 0 .5 6.2 31 31 0 0 0 0 12a31 31 0 0 0 .5 5.8 3 3 0 0 0 2.1 2.1c1.9.6 9.4.6 9.4.6s7.5 0 9.4-.6a3 3 0 0 0 2.1-2.1A31 31 0 0 0 24 12a31 31 0 0 0-.5-5.8zM9.75 15.5v-7l6.25 3.5-6.25 3.5z"/></svg>
+      Watch cubegame on YouTube
+    </a>
+ 
+  </div>
+ 
+  <script src="./transition.js"></script>
+<script src="./login.js"></script>
+<script src="./translate.js"></script>
+<script src="./cookie.js"></script>
+</body>
+</html>
