@@ -54,20 +54,22 @@
  
       <!-- Login Panel -->
       <div class="panel" id="panelLogin">
+        <form id="loginForm" action="#" onsubmit="doLogin(); return false;">
         <div class="input-group">
           <label>USERNAME</label>
-          <input type="text" id="loginUser" placeholder="Your username…" autocomplete="username">
+          <input type="text" id="loginUser" name="username" placeholder="Your username…" autocomplete="username">
         </div>
         <div class="input-group">
           <label>PASSWORD</label>
-          <input type="password" id="loginPass" placeholder="Your password…" autocomplete="current-password">
+          <input type="password" id="loginPass" name="password" placeholder="Your password…" autocomplete="current-password">
           <div class="show-pass" onclick="togglePass('loginPass', this)">SHOW</div>
         </div>
         <div class="error-msg" id="loginError"></div>
-        <button class="btn btn--primary" onclick="doLogin()">
+        <button type="submit" class="btn btn--primary">
           <span>LOGIN</span>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
         </button>
+        </form>
         <p class="switch-note">No account? <a onclick="showPanel('signup')">Sign up free</a></p>
       </div>
  

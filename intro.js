@@ -88,19 +88,10 @@
   // ── Main loop ─────────────────────────────────────────────────────────────
   function mainLoop(ts) {
     if (!startTime) startTime = ts;
-
-    // Use music currentTime as master clock when music is playing
-    // Falls back to RAF timer if music hasn't started yet
-    let elapsed;
-    if (!introMusic.paused && introMusic.currentTime > 0) {
-      elapsed = introMusic.currentTime;
-    } else {
-      elapsed = (ts - startTime) / 1000;
-    }
+    const elapsed = (ts - startTime) / 1000; // seconds
 
     // Progress bar
-    const duration = introMusic.duration > 0 ? introMusic.duration : TOTAL_DURATION;
-    const pct = Math.min(100, (elapsed / duration) * 100);
+    const pct = Math.min(100, (elapsed / TOTAL_DURATION) * 100);
     progressFill.style.width = pct + "%";
 
     // Scene switching
@@ -116,12 +107,14 @@
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     drawParticles(elapsed);
 
-    // Safety fallback: if elapsed exceeds total duration and music already ended
+    // End → redirect
     if (elapsed >= TOTAL_DURATION && !ended) {
       ended = true;
       endIntro();
-      return;
+      return; // stop the loop
     }
+
+    if (ended) return; // music or skip already triggered end — stop the loop
 
     requestAnimationFrame(mainLoop);
   }
@@ -130,17 +123,11 @@
 
   // ── End → redirect to login ───────────────────────────────────────────────
   function endIntro() {
-    introMusic.pause();
-    introMusic.currentTime = 0;
-    if (window.CinematicNav) {
-      CinematicNav.cinematic("./login.html");
-    } else {
-      document.body.style.transition = "opacity 1.2s ease";
-      document.body.style.opacity = "0";
-      setTimeout(() => {
-        window.location.href = "./login.html";
-      }, 1300);
-    }
+    try { introMusic.pause(); introMusic.currentTime = 0; } catch(e) {}
+    document.body.style.transition = "opacity 0.8s ease";
+    document.body.style.opacity = "0";
+    setTimeout(() => { window.location.href = "./login.html"; }, 900);
+    setTimeout(() => { window.location.replace("./login.html"); }, 2500);
   }
 
   // ════════════════════════════════════════════════════════════════════════
@@ -462,17 +449,9 @@
   }
 
   // ── Intro music ───────────────────────────────────────────────────────
-  const introMusic = new Audio("./intro music.mp3");
+  const introMusic = new Audio("./intro music_original.mp3");
   introMusic.volume = 0.7;
-  introMusic.loop   = false;
-
-  // When music ends → end intro (music is the master clock)
-  introMusic.addEventListener("ended", () => {
-    if (!ended) {
-      ended = true;
-      endIntro();
-    }
-  });
+  introMusic.loop   = true; // keep looping until the 60s timer ends
 
   // Try to auto-play immediately
   introMusic.play().catch(() => {

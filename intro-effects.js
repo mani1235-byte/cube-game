@@ -89,14 +89,7 @@
     }
     @keyframes blink { 50% { opacity: 0; } }
 
-    /* Slow zoom on scene backgrounds */
-    .scene.active .scene__bg {
-      animation: slowZoom 10s ease-out forwards !important;
-    }
-    @keyframes slowZoom {
-      from { transform: scale(1); }
-      to   { transform: scale(1.08); }
-    }
+    /* scene backgrounds keep their own animations */
     .scene__bg { transform-origin: center center; }
 
     /* Cinematic subtitles */
@@ -136,19 +129,7 @@
       letter-spacing: 0.1em;
     }
 
-    /* Scene slow zoom already defined above — also make cubes slow-zoom */
-    .scene.active .cube-wrap,
-    .scene.active .hero-cube,
-    .scene.active .final-cube {
-      animation-name: heroZoomIn;
-      animation-duration: 10s;
-      animation-fill-mode: forwards;
-      animation-timing-function: ease-out;
-    }
-    @keyframes heroZoomIn {
-      from { transform: scale(0.94) translateY(8px); }
-      to   { transform: scale(1) translateY(0); }
-    }
+    /* cube-wrap and hero-cube keep their own animations from intro.css */
   `;
   document.head.appendChild(glitchStyle);
 
