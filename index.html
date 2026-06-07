@@ -8,8 +8,47 @@
   <link rel="stylesheet" href="./sound.css">
   <link rel="stylesheet" href="./mobile.css">
   <link rel="stylesheet" href="./settings.css">
+  <link rel="stylesheet" href="./profile-avatar.css">
 </head>
 <body>
+
+<!-- ── Profile Avatar (top-right corner, menu only) ── -->
+<div id="profileWrap" class="pa-wrap">
+  <div id="avatarCircle" class="pa-circle" title="Profile"></div>
+  <div id="profileDropdown" class="pa-panel">
+    <div class="pa-header">
+      <div class="pa-avatar-lg" id="avatarCircleLg"></div>
+      <div class="pa-name" id="profileName">Guest</div>
+      <div class="pa-email" id="profileEmail"></div>
+    </div>
+    <div class="pa-stats">
+      <div class="pa-stat">
+        <span class="pa-stat-val" id="paCoins">0</span>
+        <span class="pa-stat-lbl">Coins</span>
+      </div>
+      <div class="pa-stat-sep"></div>
+      <div class="pa-stat">
+        <span class="pa-stat-val" id="paGames">0</span>
+        <span class="pa-stat-lbl">Games</span>
+      </div>
+      <div class="pa-stat-sep"></div>
+      <div class="pa-stat">
+        <span class="pa-stat-val" id="paScore">0</span>
+        <span class="pa-stat-lbl">Best Score</span>
+      </div>
+    </div>
+    <div class="pa-divider"></div>
+    <input type="file" id="paImgInput" accept="image/*" style="display:none">
+    <button class="pa-btn pa-btn-img" id="paUploadBtn">
+      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
+      Upload Photo
+    </button>
+    <button class="pa-btn pa-btn-out" id="profileLogout">
+      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>
+      Log Out
+    </button>
+  </div>
+</div>
  
 <!-- Game canvas -->
 <canvas id="c"></canvas>
@@ -365,7 +404,11 @@
  
 <!-- Session check — redirect to lang picker if no user found -->
 
-<script src="./transition.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+  <script src="./firebase-auth.js"></script>
+  <script src="./profile-avatar.js"></script>
+  <script src="./transition.js"></script>
 <script src="./script.js"></script>
 <script src="./sound.js"></script>
 <script src="./mobile.js"></script>

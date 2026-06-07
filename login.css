@@ -350,3 +350,37 @@ body {
   display: block;
   margin: 0 auto;
 }
+
+/* ── Social login buttons ─────────────────────────────────────────────────── */
+.social-btns {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+.btn--social {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 0.55rem 0.4rem;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 6px;
+  color: rgba(255,255,255,0.75);
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.7rem;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s, color 0.2s, transform 0.15s;
+  white-space: nowrap;
+}
+.btn--social:hover {
+  background: rgba(255,255,255,0.09);
+  border-color: rgba(255,255,255,0.3);
+  color: #fff;
+  transform: translateY(-1px);
+}
+.btn--social:active { transform: translateY(0); }
+.btn--social:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+.btn--social svg { flex-shrink: 0; }

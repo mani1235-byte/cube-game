@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>cubegame — Profile</title>
+  <link rel="icon" href="cube_game_logo.png">
+  <link rel="stylesheet" href="profile.css">
+</head>
+<body>
+
+  <canvas id="bg"></canvas>
+
+  <div class="page">
+
+    <!-- Back button -->
+    <button class="back-btn" onclick="history.back()">
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
+      Back
+    </button>
+
+    <!-- ── Card ── -->
+    <div class="card">
+
+      <!-- Avatar -->
+      <div class="avatar-zone">
+        <div class="avatar-ring">
+          <div class="avatar" id="avatar"></div>
+        </div>
+        <button class="change-photo-btn" id="changePhotoBtn" title="Upload photo">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
+        </button>
+        <input type="file" id="photoInput" accept="image/*" style="display:none">
+      </div>
+
+      <!-- Name & email -->
+      <div class="profile-name" id="profileName">Guest</div>
+      <div class="profile-email" id="profileEmail">—</div>
+
+      <!-- Provider badge -->
+      <div class="provider-badge" id="providerBadge"></div>
+
+      <!-- ── Stats grid ── -->
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-icon">🪙</div>
+          <div class="stat-val" id="statCoins">0</div>
+          <div class="stat-lbl">Coins</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon">🎮</div>
+          <div class="stat-val" id="statGames">0</div>
+          <div class="stat-lbl">Games Played</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon">🏆</div>
+          <div class="stat-val" id="statScore">0</div>
+          <div class="stat-lbl">Best Score</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon">🧊</div>
+          <div class="stat-val" id="statItems">0</div>
+          <div class="stat-lbl">Items Owned</div>
+        </div>
+      </div>
+
+      <div class="section-title">Change Username</div>
+
+      <!-- Name change -->
+      <div class="name-row">
+        <input class="name-input" id="nameInput" type="text" maxlength="20" placeholder="New username…">
+        <button class="name-save-btn" id="nameSaveBtn">Save</button>
+      </div>
+      <div class="name-hint" id="nameHint"></div>
+
+      <div class="divider"></div>
+
+      <!-- Log out -->
+      <button class="logout-btn" id="logoutBtn">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>
+        Log Out
+      </button>
+
+    </div>
+  </div>
+
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+  <script src="./firebase-auth.js"></script>
+  <script src="./profile.js"></script>
+  <script src="./transition.js"></script>
+</body>
+</html>

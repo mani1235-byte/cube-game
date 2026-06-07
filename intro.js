@@ -111,10 +111,8 @@
     if (elapsed >= TOTAL_DURATION && !ended) {
       ended = true;
       endIntro();
-      return; // stop the loop
+      return;
     }
-
-    if (ended) return; // music or skip already triggered end — stop the loop
 
     requestAnimationFrame(mainLoop);
   }
@@ -123,11 +121,17 @@
 
   // ── End → redirect to login ───────────────────────────────────────────────
   function endIntro() {
-    try { introMusic.pause(); introMusic.currentTime = 0; } catch(e) {}
-    document.body.style.transition = "opacity 0.8s ease";
-    document.body.style.opacity = "0";
-    setTimeout(() => { window.location.href = "./login.html"; }, 900);
-    setTimeout(() => { window.location.replace("./login.html"); }, 2500);
+    introMusic.pause();
+    introMusic.currentTime = 0;
+    if (window.CinematicNav) {
+      CinematicNav.cinematic("./login.html");
+    } else {
+      document.body.style.transition = "opacity 1.2s ease";
+      document.body.style.opacity = "0";
+      setTimeout(() => {
+        window.location.href = "./login.html";
+      }, 1300);
+    }
   }
 
   // ════════════════════════════════════════════════════════════════════════
@@ -449,9 +453,9 @@
   }
 
   // ── Intro music ───────────────────────────────────────────────────────
-  const introMusic = new Audio("./intro music_original.mp3");
+  const introMusic = new Audio("./intro music.mp3");
   introMusic.volume = 0.7;
-  introMusic.loop   = true; // keep looping until the 60s timer ends
+  introMusic.loop   = false;
 
   // Try to auto-play immediately
   introMusic.play().catch(() => {
