@@ -135,6 +135,7 @@
   <div class="shop-modal">
     <div class="shop-header">
       <h2 class="shop-title">⚡ CUBE SHOP</h2>
+      <div class="shop-coin-balance">🪙 <span id="shopCoinCount">0</span></div>
       <button class="shop-close" id="closeShop">✕</button>
     </div>
  
@@ -160,40 +161,8 @@
         </button>
       </div>
  
-      <div class="coin-grid">
-        <div class="coin-card" data-coins="200">
-          <div class="coin-icon">🪙</div>
-          <div class="coin-amount">200 Coins</div>
-          <div class="coin-name">Starter Pack</div>
-          <div class="coin-price-usd coin-price">$1.99</div>
-          <div class="coin-price-eth coin-price" style="display:none">Ξ 0.001 ETH</div>
-          <button class="buy-btn" onclick="handleBuy('200 Coins Starter Pack', '1.99', 200)">BUY NOW</button>
-        </div>
-        <div class="coin-card featured" data-coins="600">
-          <div class="badge">BEST VALUE</div>
-          <div class="coin-icon">💰</div>
-          <div class="coin-amount">600 Coins</div>
-          <div class="coin-name">Value Pack</div>
-          <div class="coin-price-usd coin-price">$4.99</div>
-          <div class="coin-price-eth coin-price" style="display:none">Ξ 0.0025 ETH</div>
-          <button class="buy-btn" onclick="handleBuy('600 Coins Value Pack', '4.99', 600)">BUY NOW</button>
-        </div>
-        <div class="coin-card" data-coins="1500">
-          <div class="coin-icon">💎</div>
-          <div class="coin-amount">1500 Coins</div>
-          <div class="coin-name">Pro Pack</div>
-          <div class="coin-price-usd coin-price">$9.99</div>
-          <div class="coin-price-eth coin-price" style="display:none">Ξ 0.005 ETH</div>
-          <button class="buy-btn" onclick="handleBuy('1500 Coins Pro Pack', '9.99', 1500)">BUY NOW</button>
-        </div>
-        <div class="coin-card" data-coins="4000">
-          <div class="coin-icon">👑</div>
-          <div class="coin-amount">4000 Coins</div>
-          <div class="coin-name">Legend Pack</div>
-          <div class="coin-price-usd coin-price">$19.99</div>
-          <div class="coin-price-eth coin-price" style="display:none">Ξ 0.01 ETH</div>
-          <button class="buy-btn" onclick="handleBuy('4000 Coins Legend Pack', '19.99', 4000)">BUY NOW</button>
-        </div>
+      <div class="coin-grid" id="dynamicCoinGrid">
+        <!-- built by shop.js buildCoinGrid() -->
       </div>
  
       <div class="paypal-note" id="paypalNote">
@@ -207,51 +176,9 @@
  
     <!-- Items Tab -->
     <div class="shop-content" id="tab-items">
-      <p class="shop-subtitle">Unlock cool skins & power-ups with your coins!</p>
-      <div class="item-grid">
-        <div class="item-card">
-          <div class="item-preview" style="background: linear-gradient(135deg,#67d7f0,#a6e02c)">🔵</div>
-          <div class="item-name">Neon Blade</div>
-          <div class="item-desc">Glowing cyan slash trail</div>
-          <div class="item-cost">🪙 150</div>
-          <button class="buy-btn item-buy">UNLOCK</button>
-        </div>
-        <div class="item-card">
-          <div class="item-preview" style="background: linear-gradient(135deg,#fa2473,#fe9522)">🔥</div>
-          <div class="item-name">Fire Slash</div>
-          <div class="item-desc">Scorching orange trail</div>
-          <div class="item-cost">🪙 250</div>
-          <button class="buy-btn item-buy">UNLOCK</button>
-        </div>
-        <div class="item-card">
-          <div class="item-preview" style="background: linear-gradient(135deg,#a6e02c,#67d7f0)">⚡</div>
-          <div class="item-name">Thunder Cube</div>
-          <div class="item-desc">Electric cube skin</div>
-          <div class="item-cost">🪙 400</div>
-          <button class="buy-btn item-buy">UNLOCK</button>
-        </div>
-        <div class="item-card featured">
-          <div class="badge">RARE</div>
-          <div class="item-preview" style="background: linear-gradient(135deg,#7b2fff,#fa2473)">👑</div>
-          <div class="item-name">Royal Cube</div>
-          <div class="item-desc">Purple holographic skin + trail</div>
-          <div class="item-cost">🪙 800</div>
-          <button class="buy-btn item-buy">UNLOCK</button>
-        </div>
-        <div class="item-card">
-          <div class="item-preview" style="background: linear-gradient(135deg,#262e36,#67d7f0)">🌊</div>
-          <div class="item-name">Slow-Mo Boost</div>
-          <div class="item-desc">+30s extra slow-mo per game</div>
-          <div class="item-cost">🪙 300</div>
-          <button class="buy-btn item-buy">UNLOCK</button>
-        </div>
-        <div class="item-card">
-          <div class="item-preview" style="background: linear-gradient(135deg,#fe9522,#a6e02c)">💥</div>
-          <div class="item-name">Explosion FX</div>
-          <div class="item-desc">Epic cube-burst particles</div>
-          <div class="item-cost">🪙 500</div>
-          <button class="buy-btn item-buy">UNLOCK</button>
-        </div>
+      <p class="shop-subtitle">Unlock skins, trails, power-ups & badges with your coins!</p>
+      <div id="dynamicItemGrid">
+        <!-- built by shop.js buildItemGrid() -->
       </div>
     </div>
  
@@ -409,6 +336,8 @@
   <script src="./firebase-auth.js"></script>
   <script src="./profile-avatar.js"></script>
   <script src="./transition.js"></script>
+<script src="./translate.js"></script>
+<script src="./cookie.js"></script>
 <script src="./script.js"></script>
 <script src="./sound.js"></script>
 <script src="./mobile.js"></script>
@@ -417,9 +346,8 @@
 <script src="./ads.js"></script>
 <script src="./shop.js"></script>
 <script src="./leaderboard.js"></script>
-<script src="./translate.js"></script>
-<script src="./cookie.js"></script>
 <script src="./particles.js"></script>
+<script src="./items-ingame.js"></script>
 <script src="./audio-reactive.js"></script>
 <script src="./optimizer.js"></script>
 <script src="./mobile-aaa.js"></script>

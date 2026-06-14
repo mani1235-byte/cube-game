@@ -51,23 +51,26 @@
         const result = await auth.signInWithPopup(provider);
         const user   = result.user;
 
+        // Preserve existing coins, items, scores — never reset them on re-login
+        var existing = {};
+        try { existing = JSON.parse(localStorage.getItem("cg_current_user")) || {}; } catch (_) {}
+
         const userData = {
+          // Preserve progression — fall back to 0/[] only for brand new accounts
+          coins:         existing.coins         || 0,
+          highScore:     existing.highScore      || 0,
+          totalGames:    existing.totalGames     || 0,
+          unlockedItems: existing.unlockedItems  || [],
+          settings:      existing.settings       || { soundOn: true, musicOn: true, showFPS: false, colorTheme: "default" },
+          createdAt:     existing.createdAt      || Date.now(),
+          // Always update identity fields from the auth provider
           username:      user.displayName || (user.email ? user.email.split("@")[0] : "Player"),
           email:         user.email,
           uid:           user.uid,
           photoURL:      user.photoURL,
           isGuest:       false,
           provider:      providerName,
-          coins:         0,
-          highScore:     0,
-          totalGames:    0,
-          unlockedItems: [],
-          settings: {
-            soundOn: true, musicOn: true,
-            showFPS: false, colorTheme: "default",
-          },
-          createdAt: Date.now(),
-          lastSeen:  Date.now(),
+          lastSeen:      Date.now(),
         };
 
         localStorage.setItem("cg_current_user", JSON.stringify(userData));

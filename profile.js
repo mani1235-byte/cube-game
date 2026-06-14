@@ -107,9 +107,24 @@
 
     if (badgeEl) {
       const prov = user && user.provider;
-      badgeEl.textContent = prov
+      let badge = prov
         ? { google: "🔵 Signed in with Google", microsoft: "🟦 Signed in with Microsoft", apple: "⚫ Signed in with Apple" }[prov] || ("Signed in via " + prov)
         : user && !user.isGuest ? "📧 Email account" : "👤 Guest";
+
+      // Premium
+      if (user && user.premiumUntil && Date.now() < user.premiumUntil) {
+        const daysLeft = Math.ceil((user.premiumUntil - Date.now()) / (1000*60*60*24));
+        badge = `⭐ Premium — ${daysLeft} day${daysLeft !== 1 ? "s" : ""} left`;
+        badgeEl.style.color = "#ffd700";
+      }
+
+      // Normal mode time limit
+      const limits = { guest: "5 min", account: "30 min", google: "1 hour", premium: "Unlimited" };
+      const tierKey = (user && user.premiumUntil && Date.now() < user.premiumUntil) ? "premium"
+                    : (!user || user.isGuest) ? "guest"
+                    : (user.provider === "google") ? "google" : "account";
+      const limitText = limits[tierKey];
+      badgeEl.innerHTML = badge + `<br><span style="font-size:10px;color:rgba(255,255,255,0.35);font-family:'Rajdhani',sans-serif;letter-spacing:0.05em">Normal mode: ${limitText}/session</span>`;
     }
 
     if (coinsEl) coinsEl.textContent = user ? (user.coins      || 0) : 0;

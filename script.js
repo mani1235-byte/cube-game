@@ -10,18 +10,27 @@ let gameSpeed = 1;
 
 // Colors
 const BLUE = { r: 0x67, g: 0xd7, b: 0xf0 };
-const GREEN = { r: 0xa6, g: 0xe0, b: 0x2c };
-const PINK = { r: 0xfa, g: 0x24, b: 0x73 };
+const GREEN  = { r: 0xa6, g: 0xe0, b: 0x2c };
+const PINK   = { r: 0xfa, g: 0x24, b: 0x73 };
 const ORANGE = { r: 0xfe, g: 0x95, b: 0x22 };
+const RED    = { r: 0xff, g: 0x22, b: 0x22 };
 const allColors = [BLUE, GREEN, PINK, ORANGE];
+
+// Hearts (normal mode only)
+const MAX_HEARTS = 3;
+let hearts       = MAX_HEARTS;
+const BOMB_CHANCE = 0.12; // ~12% chance each spawn cycle
 
 // Gameplay
 const getSpawnDelay = () => {
-  const spawnDelayMax = 1400;
-  const spawnDelayMin = 550;
+  const spawnDelayMax = isAntiLoseGame() ? 1000 : 1400;
+  const spawnDelayMin = isAntiLoseGame() ? 400  : 550;
   const spawnDelay = spawnDelayMax - state.game.cubeCount * 3.1;
   return Math.max(spawnDelay, spawnDelayMin);
 };
+
+// Max cubes on screen at once in anti-lose mode
+const ANTI_LOSE_MAX_TARGETS = 6;
 const doubleStrongEnableScore = 2000;
 // Number of cubes that must be smashed before activating a feature.
 const slowmoThreshold = 10;
@@ -93,8 +102,9 @@ const allShadowPolys = [];
 ///////////
 
 // Game Modes
-const GAME_MODE_RANKED = Symbol("GAME_MODE_RANKED");
-const GAME_MODE_CASUAL = Symbol("GAME_MODE_CASUAL");
+const GAME_MODE_RANKED   = Symbol("GAME_MODE_RANKED");
+const GAME_MODE_CASUAL   = Symbol("GAME_MODE_CASUAL");
+const GAME_MODE_ANTI_LOSE = Symbol("GAME_MODE_ANTI_LOSE");
 
 // Available Menus
 const MENU_MAIN = Symbol("MENU_MAIN");
@@ -127,7 +137,8 @@ const state = {
 
 const isInGame = () => !state.menus.active;
 const isMenuVisible = () => !!state.menus.active;
-const isCasualGame = () => state.game.mode === GAME_MODE_CASUAL;
+const isCasualGame   = () => state.game.mode === GAME_MODE_CASUAL;
+const isAntiLoseGame = () => state.game.mode === GAME_MODE_ANTI_LOSE;
 const isPaused = () => state.menus.active === MENU_PAUSE;
 
 ///////////////////
@@ -883,6 +894,7 @@ const getTarget = (() => {
     let wireframe = false;
     let health = 1;
     let maxHealth = 3;
+    let isBomb = false;
     const spinner =
       state.game.cubeCount >= spinnerThreshold &&
       isInGame() &&
@@ -890,7 +902,12 @@ const getTarget = (() => {
 
     // Target Parameter Overrides
     // --------------------------------
-    if (
+    // Bombs only in normal (ranked) mode
+    if (state.game.mode === GAME_MODE_RANKED && Math.random() < BOMB_CHANCE) {
+      isBomb  = true;
+      color   = RED;
+      health  = 1;
+    } else if (
       state.game.cubeCount >= slowmoThreshold &&
       slowmoSpawner.shouldSpawn()
     ) {
@@ -907,9 +924,10 @@ const getTarget = (() => {
     // Target Creation
     // --------------------------------
     const target = getTargetOfStyle(color, wireframe);
-    target.hit = false;
+    target.hit      = false;
+    target.isBomb   = isBomb;
     target.maxHealth = maxHealth;
-    target.health = health;
+    target.health   = health;
     updateTargetHealth(target, 0);
 
     const spinSpeeds = [Math.random() * 0.1 - 0.05, Math.random() * 0.1 - 0.05];
@@ -1199,11 +1217,11 @@ function renderScoreHud() {
     scoreNode.style.display = "none";
     cubeCountNode.style.opacity = 1;
   } else {
-    scoreNode.innerText = `SCORE: ${state.game.score}`;
+    t("SCORE:").then(s => { scoreNode.innerText = `${s} ${state.game.score}`; });
     scoreNode.style.display = "block";
     cubeCountNode.style.opacity = 0.65;
   }
-  cubeCountNode.innerText = `CUBES SMASHED: ${state.game.cubeCount}`;
+  t("CUBES SMASHED:").then(s => { cubeCountNode.innerText = `${s} ${state.game.cubeCount}`; });
 }
 
 renderScoreHud();
@@ -1262,11 +1280,11 @@ function renderMenus() {
     case MENU_SCORE:
       finalScoreLblNode.textContent = formatNumber(state.game.score);
       if (isNewHighScore()) {
-        highScoreLblNode.textContent = "New High Score!";
+        t("New High Score!").then(s => { highScoreLblNode.textContent = s; });
       } else {
-        highScoreLblNode.textContent = `High Score: ${formatNumber(
-          getHighScore()
-        )}`;
+        t("High Score:").then(s => {
+          highScoreLblNode.textContent = `${s} ${formatNumber(getHighScore())}`;
+        });
       }
       showMenu(menuScoreNode);
       break;
@@ -1286,18 +1304,195 @@ renderMenus();
 // Button Actions //
 ////////////////////
 
+// ── Session time limits (Normal mode only) ───────────────────────────────────
+// Guest       → 5 min  (300s)
+// Account     → 30 min (1800s)
+// Google      → 60 min (3600s)
+// Premium     → unlimited (purchased)
+const SESSION_LIMITS = {
+  guest:     5  * 60,
+  account:   30 * 60,
+  google:    60 * 60,
+  premium:   Infinity,
+};
+
+let sessionStartTime  = null; // Date.now() when normal mode started
+let sessionWarned     = false; // showed 1-min warning
+let sessionTimerEl    = null;
+
+function getSessionLimit() {
+  let user = null;
+  try { user = JSON.parse(localStorage.getItem("cg_current_user")); } catch(_) {}
+  if (!user || user.isGuest)           return SESSION_LIMITS.guest;
+  if (user.premiumUntil && Date.now() < user.premiumUntil) return SESSION_LIMITS.premium;
+  if (user.provider === "google")      return SESSION_LIMITS.google;
+  return SESSION_LIMITS.account;
+}
+
+function getSessionLimitLabel() {
+  const s = getSessionLimit();
+  if (s === Infinity) return "Unlimited";
+  const m = Math.round(s / 60);
+  return m + " min";
+}
+
+function startSessionTimer() {
+  sessionStartTime = Date.now();
+  sessionWarned    = false;
+  renderSessionTimer();
+}
+
+function renderSessionTimer() {
+  if (!sessionTimerEl) {
+    sessionTimerEl = document.createElement("div");
+    sessionTimerEl.id = "session-timer";
+    sessionTimerEl.style.cssText = [
+      "position:fixed","bottom:14px","right:16px",
+      "font-family:'Orbitron',monospace","font-size:11px",
+      "color:rgba(255,255,255,0.4)","letter-spacing:0.08em",
+      "pointer-events:none","z-index:999"
+    ].join(";");
+    document.body.appendChild(sessionTimerEl);
+  }
+  const limit = getSessionLimit();
+  const show  = state.game.mode === GAME_MODE_RANKED && isInGame() && sessionStartTime;
+  sessionTimerEl.style.display = show ? "block" : "none";
+  if (!show) return;
+  if (limit === Infinity) { sessionTimerEl.textContent = "⏱ Unlimited"; return; }
+  const elapsed  = Math.floor((Date.now() - sessionStartTime) / 1000);
+  const remaining = Math.max(0, limit - elapsed);
+  const m = String(Math.floor(remaining / 60)).padStart(2,"0");
+  const s = String(remaining % 60).padStart(2,"0");
+  if (remaining <= 60) {
+    sessionTimerEl.style.color = "rgba(255,80,80,0.9)";
+    sessionTimerEl.textContent = `⏱ ${m}:${s} left`;
+  } else {
+    sessionTimerEl.style.color = "rgba(255,255,255,0.4)";
+    sessionTimerEl.textContent = `⏱ ${m}:${s}`;
+  }
+}
+
+function tickSessionTimer() {
+  if (state.game.mode !== GAME_MODE_RANKED || !isInGame() || !sessionStartTime) return;
+  const limit   = getSessionLimit();
+  if (limit === Infinity) return;
+  const elapsed = (Date.now() - sessionStartTime) / 1000;
+  const remaining = limit - elapsed;
+
+  // 1-minute warning
+  if (!sessionWarned && remaining <= 60 && remaining > 0) {
+    sessionWarned = true;
+    showComboLabel("⏱ 1 MIN LEFT!");
+  }
+
+  // Time's up
+  if (remaining <= 0) {
+    sessionStartTime = null;
+    showSessionExpiredModal();
+    endGame();
+  }
+
+  renderSessionTimer();
+}
+
+function showSessionExpiredModal() {
+  let user = null;
+  try { user = JSON.parse(localStorage.getItem("cg_current_user")); } catch(_) {}
+  const isGuest   = !user || user.isGuest;
+  const isAccount = user && !user.isGuest && user.provider !== "google";
+  const isGoogle  = user && user.provider === "google";
+
+  const overlay = document.createElement("div");
+  overlay.id = "session-modal";
+  overlay.style.cssText = [
+    "position:fixed","inset:0","background:rgba(0,0,0,0.85)",
+    "z-index:99999","display:flex","align-items:center","justify-content:center",
+    "font-family:'Orbitron',monospace","animation:fadeIn 0.3s ease"
+  ].join(";");
+
+  let upgradeMsg = "";
+  if (isGuest)        upgradeMsg = `<p style="font-size:11px;color:rgba(255,255,255,0.5);margin:0 0 16px">Create a free account for <b style="color:#00dcff">30 min</b> or sign in with Google for <b style="color:#00dcff">1 hour</b></p>`;
+  else if (isAccount) upgradeMsg = `<p style="font-size:11px;color:rgba(255,255,255,0.5);margin:0 0 16px">Sign in with Google for <b style="color:#00dcff">1 hour</b> — or get <b style="color:#ffd700">Premium</b> for unlimited time</p>`;
+  else if (isGoogle)  upgradeMsg = `<p style="font-size:11px;color:rgba(255,255,255,0.5);margin:0 0 16px">Get <b style="color:#ffd700">Premium</b> for <b>unlimited</b> Normal mode — just $50/month</p>`;
+
+  overlay.innerHTML = `
+    <div style="background:#040a1c;border:1px solid rgba(0,220,255,0.2);border-radius:16px;padding:32px 28px;text-align:center;max-width:340px;width:90%">
+      <div style="font-size:32px;margin-bottom:12px">⏰</div>
+      <div style="font-size:16px;font-weight:900;color:#fff;letter-spacing:0.1em;margin-bottom:8px">TIME'S UP!</div>
+      <div style="font-size:11px;color:rgba(255,255,255,0.4);margin-bottom:16px;letter-spacing:0.05em">Your Normal mode session has ended</div>
+      ${upgradeMsg}
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <button onclick="document.getElementById('session-modal').remove();window.location.href='./login.html'" style="padding:10px;background:rgba(0,220,255,0.1);border:1px solid rgba(0,220,255,0.3);border-radius:8px;color:#00dcff;font-family:'Orbitron',monospace;font-size:11px;cursor:pointer;letter-spacing:0.08em">
+          ${isGuest ? "CREATE ACCOUNT" : "VIEW PROFILE"}
+        </button>
+        <button onclick="document.getElementById('session-modal').remove();window.open('https://www.paypal.com/paypalme/YOUR_USERNAME/50','_blank')" style="padding:10px;background:rgba(255,215,0,0.1);border:1px solid rgba(255,215,0,0.3);border-radius:8px;color:#ffd700;font-family:'Orbitron',monospace;font-size:11px;cursor:pointer;letter-spacing:0.08em">
+          ⭐ GET PREMIUM — $50/MO
+        </button>
+        <button onclick="document.getElementById('session-modal').remove()" style="padding:8px;background:transparent;border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:rgba(255,255,255,0.4);font-family:'Orbitron',monospace;font-size:10px;cursor:pointer">
+          CLOSE
+        </button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+}
+
 // Main Menu
 handleClick($(".play-normal-btn"), () => {
   setGameMode(GAME_MODE_RANKED);
   setActiveMenu(null);
   resetGame();
+  startSessionTimer();
 });
 
 handleClick($(".play-casual-btn"), () => {
-  setGameMode(GAME_MODE_CASUAL);
+  setGameMode(GAME_MODE_ANTI_LOSE);
   setActiveMenu(null);
   resetGame();
 });
+
+// ── Combo system (anti-lose mode) ───────────────────────────────────────────
+let comboCount    = 0;
+let comboTimer    = null;
+const COMBO_WINDOW = 1800; // ms between cuts to keep combo alive
+
+function triggerCombo() {
+  if (!isAntiLoseGame()) return;
+  comboCount++;
+  clearTimeout(comboTimer);
+  comboTimer = setTimeout(() => { comboCount = 0; }, COMBO_WINDOW);
+
+  if (comboCount >= 2) {
+    showComboLabel(comboCount);
+    incrementScore((comboCount - 1) * 5); // bonus points per combo
+  }
+}
+
+function showComboLabel(count) {
+  let el = document.getElementById("combo-label");
+  if (!el) {
+    el = document.createElement("div");
+    el.id = "combo-label";
+    el.style.cssText = [
+      "position:fixed","top:22%","left:50%","transform:translateX(-50%) scale(0.6)",
+      "font-family:'Orbitron',monospace","font-size:clamp(22px,5vw,42px)","font-weight:900",
+      "color:#ffe000","text-shadow:0 0 20px rgba(255,220,0,0.8),0 0 40px rgba(255,180,0,0.5)",
+      "pointer-events:none","z-index:9999","opacity:0",
+      "transition:opacity 0.15s,transform 0.15s",
+      "letter-spacing:0.1em","white-space:nowrap"
+    ].join(";");
+    document.body.appendChild(el);
+  }
+  const labels = ["","","COMBO!","DOUBLE COMBO!","TRIPLE!","QUAD!","INSANE!","UNSTOPPABLE!"];
+  const rawLabel = labels[count] || `x${count} COMBO!`;
+  t(rawLabel).then(s => { el.textContent = s; });
+  el.style.opacity = "1";
+  el.style.transform = "translateX(-50%) scale(1)";
+  clearTimeout(el._hide);
+  el._hide = setTimeout(() => {
+    el.style.opacity = "0";
+    el.style.transform = "translateX(-50%) scale(0.7)";
+  }, 900);
+}
 
 // Pause Menu
 handleClick($(".resume-btn"), () => resumeGame());
@@ -1321,11 +1516,12 @@ handleClick($(".menu-btn--score"), () => setActiveMenu(MENU_MAIN));
 
 function setActiveMenu(menu) {
   state.menus.active = menu;
-  // Clear all cubes when entering main menu or game over screen
   if (menu === MENU_MAIN || menu === MENU_SCORE) {
     resetAllTargets();
+    if (sessionTimerEl) sessionTimerEl.style.display = "none";
   }
   renderMenus();
+  renderHearts();
 }
 
 /////////////////
@@ -1335,6 +1531,50 @@ function setActiveMenu(menu) {
 function setScore(score) {
   state.game.score = score;
   renderScoreHud();
+}
+
+// ── Hearts UI ────────────────────────────────────────────────────────────────
+function renderHearts() {
+  let el = document.getElementById("hearts-hud");
+  if (!el) {
+    el = document.createElement("div");
+    el.id = "hearts-hud";
+    el.style.cssText = [
+      "position:fixed","top:14px","left:50%","transform:translateX(-50%)",
+      "display:flex","gap:6px","z-index:999","pointer-events:none",
+      "font-size:clamp(20px,4vw,30px)","filter:drop-shadow(0 0 6px rgba(255,60,60,0.7))"
+    ].join(";");
+    document.body.appendChild(el);
+  }
+  // Only show in ranked (normal) mode
+  const show = state.game.mode === GAME_MODE_RANKED && isInGame();
+  el.style.display = show ? "flex" : "none";
+  el.innerHTML = "";
+  for (let i = 0; i < MAX_HEARTS; i++) {
+    const span = document.createElement("span");
+    span.textContent = i < hearts ? "❤️" : "🖤";
+    span.style.transition = "transform 0.2s";
+    if (i === hearts) span.style.transform = "scale(0.7)";
+    el.appendChild(span);
+  }
+}
+
+function loseHeart() {
+  if (!isInGame()) return;
+  hearts = Math.max(0, hearts - 1);
+  renderHearts();
+  // Flash screen red
+  const flash = document.createElement("div");
+  flash.style.cssText = "position:fixed;inset:0;background:rgba(255,0,0,0.25);z-index:9998;pointer-events:none;animation:heartFlash 0.4s ease forwards";
+  document.body.appendChild(flash);
+  if (!document.getElementById("heartFlashStyle")) {
+    const s = document.createElement("style");
+    s.id = "heartFlashStyle";
+    s.textContent = "@keyframes heartFlash{from{opacity:1}to{opacity:0}}";
+    document.head.appendChild(s);
+  }
+  setTimeout(() => flash.remove(), 400);
+  if (hearts <= 0) endGame();
 }
 
 function incrementScore(inc) {
@@ -1374,6 +1614,14 @@ function resetGame() {
   setScore(0);
   setCubeCount(0);
   spawnTime = getSpawnDelay();
+  // Reset combo
+  comboCount = 0;
+  clearTimeout(comboTimer);
+  const comboEl = document.getElementById("combo-label");
+  if (comboEl) comboEl.style.opacity = "0";
+  // Reset hearts
+  hearts = MAX_HEARTS;
+  renderHearts();
 }
 
 function pauseGame() {
@@ -1451,6 +1699,9 @@ function tick(width, height, simTime, simSpeed, lag) {
 
   state.game.time += simTime;
 
+  // Session time limit check (normal mode)
+  tickSessionTimer();
+
   if (slowmoRemaining > 0) {
     slowmoRemaining -= simTime;
     if (slowmoRemaining < 0) {
@@ -1519,20 +1770,29 @@ function tick(width, height, simTime, simSpeed, lag) {
   // Spawn targets
   spawnTime -= simTime;
   if (spawnTime <= 0) {
+    const maxAnti  = window._cgMaxAntiTargets  || 4;
+    const extraMax = window._cgSpawnExtraMax !== undefined ? window._cgSpawnExtraMax : 1;
     if (spawnExtra > 0) {
       spawnExtra--;
       spawnTime = spawnExtraDelay;
     } else {
       spawnTime = getSpawnDelay();
+      if (isAntiLoseGame() && extraMax > 0 && targets.length < maxAnti - 1) {
+        spawnExtra = Math.max(spawnExtra, 1);
+      }
     }
-    const target = getTarget();
-    const spawnRadius = Math.min(centerX * 0.8, maxSpawnX);
-    target.x = Math.random() * spawnRadius * 2 - spawnRadius;
-    target.y = centerY + targetHitRadius * 2;
-    target.z = Math.random() * targetRadius * 2 - targetRadius;
-    target.xD = Math.random() * ((target.x * -2) / 120);
-    target.yD = -20;
-    targets.push(target);
+    // Only spawn if under cap
+    const underCap = !isAntiLoseGame() || targets.length < maxAnti;
+    if (underCap) {
+      const target = getTarget();
+      const spawnRadius = Math.min(centerX * 0.8, maxSpawnX);
+      target.x = Math.random() * spawnRadius * 2 - spawnRadius;
+      target.y = centerY + targetHitRadius * 2;
+      target.z = Math.random() * targetRadius * 2 - targetRadius;
+      target.xD = Math.random() * ((target.x * -2) / 120);
+      target.yD = -20;
+      targets.push(target);
+    } // end underCap
   }
 
   // Animate targets and remove when offscreen
@@ -1576,10 +1836,15 @@ function tick(width, height, simTime, simSpeed, lag) {
       targets.splice(i, 1);
       returnTarget(target);
       if (isInGame()) {
-        if (isCasualGame()) {
+        if (isCasualGame() || isAntiLoseGame()) {
           incrementScore(-25);
         } else {
-          endGame();
+          // Normal mode: missing a cube has a 30% chance to lose a heart
+          if (!target.isBomb && Math.random() < 0.30) {
+            loseHeart();
+          }
+          // Missing a bomb = no penalty (dodged it!)
+          if (!target.isBomb) incrementScore(-10);
         }
       }
       continue;
@@ -1614,19 +1879,34 @@ function tick(width, height, simTime, simSpeed, lag) {
 
           if (pointerSpeedScaled > minPointerSpeed) {
             target.health--;
-            incrementScore(10);
+            if (!target.isBomb) incrementScore(10);
 
             if (target.health <= 0) {
-              incrementCubeCount(1);
-              createBurst(target, forceMultiplier);
-              sparkBurst(hitX, hitY, 8, sparkSpeed);
-              if (target.wireframe) {
-                slowmoRemaining = slowmoDuration;
-                spawnTime = 0;
-                spawnExtra = 2;
+              if (target.isBomb) {
+                // Bomb cut — lose a heart in normal mode
+                sparkBurst(hitX, hitY, 12, sparkSpeed * 1.4);
+                targets.splice(i, 1);
+                returnTarget(target);
+                if (state.game.mode === GAME_MODE_RANKED) loseHeart();
+              } else {
+                incrementCubeCount(1);
+                triggerCombo();
+                createBurst(target, forceMultiplier);
+                sparkBurst(hitX, hitY, 8, sparkSpeed);
+                // Normal mode: 15% chance to gain a heart on cube kill
+                if (state.game.mode === GAME_MODE_RANKED && hearts < MAX_HEARTS && Math.random() < 0.15) {
+                  hearts++;
+                  renderHearts();
+                  showComboLabel("❤️ +1");
+                }
+                if (target.wireframe) {
+                  slowmoRemaining = slowmoDuration;
+                  spawnTime = 0;
+                  spawnExtra = 2;
+                }
+                targets.splice(i, 1);
+                returnTarget(target);
               }
-              targets.splice(i, 1);
-              returnTarget(target);
             } else {
               sparkBurst(hitX, hitY, 8, sparkSpeed);
               glueShedSparks(target);
@@ -1950,37 +2230,76 @@ function draw(ctx, width, height, viewScale) {
 
 function setupCanvases() {
   const ctx = canvas.getContext("2d");
-  // devicePixelRatio alias
   const dpr = window.devicePixelRatio || 1;
-  // View will be scaled so objects appear sized similarly on all screen sizes.
   let viewScale;
-  // Dimensions (taking viewScale into account!)
   let width, height;
 
-  function handleResize() {
-    const w = window.innerWidth;
-    const h = window.innerHeight;
+  function applyResize() {
+    // Use screen dimensions (never changes) instead of window dimensions
+    // This prevents any resize jitter from browser UI, address bar, etc.
+    const w = screen.width  > window.innerWidth  ? window.innerWidth  : screen.width;
+    const h = screen.height > window.innerHeight ? window.innerHeight : screen.height;
     viewScale = h / 1000;
-    width = w / viewScale;
+    width  = w / viewScale;
     height = h / viewScale;
-    canvas.width = w * dpr;
-    canvas.height = h * dpr;
-    canvas.style.width = w + "px";
+    canvas.width        = w * dpr;
+    canvas.height       = h * dpr;
+    canvas.style.width  = w + "px";
     canvas.style.height = h + "px";
   }
 
-  // Set initial size
-  handleResize();
-  // resize fullscreen canvas
-  window.addEventListener("resize", handleResize);
+  // Set size ONCE on load — never touch it again
+  applyResize();
 
   // Expose viewScale for particle system coordinate mapping
   Object.defineProperty(window, "_cgViewScale", { get: () => viewScale });
-  Object.defineProperty(window, "_cgHalfW", { get: () => width / 2 });
-  Object.defineProperty(window, "_cgHalfH", { get: () => height / 2 });
+  Object.defineProperty(window, "_cgHalfW",     { get: () => width  / 2 });
+  Object.defineProperty(window, "_cgHalfH",     { get: () => height / 2 });
 
   // Run game loop
   let lastTimestamp = 0;
+
+  // ── Adaptive performance ─────────────────────────────────────────────────
+  // Measure real FPS over first 90 frames, then lock settings for the session
+  let perfSamples = [];
+  let perfTier = "high"; // "high" | "mid" | "low"
+  let perfLocked = false;
+
+  function applyPerfTier(tier) {
+    perfTier = tier;
+    perfLocked = true;
+    if (tier === "low") {
+      // Weak device — reduce everything
+      window._cgMaxAntiTargets  = 3;
+      window._cgMaxFrags        = 20;
+      window._cgSpawnExtraMax   = 0; // no extra cubes
+    } else if (tier === "mid") {
+      window._cgMaxAntiTargets  = 4;
+      window._cgMaxFrags        = 40;
+      window._cgSpawnExtraMax   = 1;
+    } else {
+      window._cgMaxAntiTargets  = 6;
+      window._cgMaxFrags        = 80;
+      window._cgSpawnExtraMax   = 1;
+    }
+  }
+
+  // Start with mid defaults until measured
+  applyPerfTier("mid");
+  perfLocked = false; // allow re-locking after measurement
+
+  function measurePerf(frameTime) {
+    if (perfLocked) return;
+    if (frameTime > 0 && frameTime < 500) perfSamples.push(frameTime);
+    if (perfSamples.length >= 90) {
+      const avg = perfSamples.reduce((a, b) => a + b, 0) / perfSamples.length;
+      const fps = 1000 / avg;
+      if      (fps >= 50) applyPerfTier("high");
+      else if (fps >= 30) applyPerfTier("mid");
+      else                applyPerfTier("low");
+    }
+  }
+
   function frameHandler(timestamp) {
     let frameTime = timestamp - lastTimestamp;
     lastTimestamp = timestamp;
@@ -1992,11 +2311,14 @@ function setupCanvases() {
     // skip all game logic and drawing.
     if (isPaused() || state.menus.active === MENU_MAIN || state.menus.active === MENU_SCORE) return;
 
+    // Measure device performance during first 90 frames
+    measurePerf(frameTime);
+
     // make sure negative time isn't reported (first frame can be whacky)
     if (frameTime < 0) {
       frameTime = 17;
     }
-    // - cap minimum framerate to 15fps[~68ms] (assuming 60fps[~17ms] as 'normal')
+    // cap minimum framerate to 15fps[~68ms]
     else if (frameTime > 68) {
       frameTime = 68;
     }
@@ -2125,3 +2447,12 @@ if ("PointerEvent" in window) {
 // ============================================================================
 
 setupCanvases();
+// ── Premium activation (call this after payment confirmed) ──────────────────
+window.activatePremium = function() {
+  let user = null;
+  try { user = JSON.parse(localStorage.getItem("cg_current_user")); } catch(_) {}
+  if (!user) return;
+  user.premiumUntil = Date.now() + 30 * 24 * 60 * 60 * 1000; // 30 days
+  localStorage.setItem("cg_current_user", JSON.stringify(user));
+  alert("✅ Premium activated! Enjoy unlimited Normal mode for 30 days.");
+};

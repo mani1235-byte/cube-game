@@ -6,6 +6,14 @@
 (function () {
   "use strict";
 
+  // ── Auto-skip: if language already chosen, go straight to intro ──────────
+  if (localStorage.getItem("cg_lang")) {
+    window.location.replace("./intro.html");
+    // Stop the rest of lang.js from running while redirect happens
+    throw new Error("lang-skip");
+  }
+
+
   // ── All world languages ───────────────────────────────────────────────────
   // Format: { code, name (English), native (in own script), flag emoji }
   const LANGUAGES = [
@@ -215,21 +223,86 @@
     }
   });
 
-  // ── Auto-detect & pre-select browser language ─────────────────────────────
+  // ── Auto-detect & auto-confirm device language ────────────────────────────
   function autoDetect() {
-    const browserLang = (navigator.language || "en").toLowerCase().split("-")[0];
-    const match = LANGUAGES.find(l =>
-      l.code.toLowerCase() === browserLang ||
-      l.code.toLowerCase().startsWith(browserLang)
-    );
-    if (match) {
-      selectLang(match);
-      // Scroll to it
-      setTimeout(() => {
-        const btn = document.getElementById("lang-" + match.code);
-        if (btn) btn.scrollIntoView({ behavior: "smooth", block: "center" });
-      }, 300);
+    // Walk full browser language list (most preferred first)
+    const langs = Array.from(navigator.languages || [navigator.language || "en"]);
+    let match = null;
+    for (const raw of langs) {
+      const code = raw.toLowerCase();
+      // Exact match first (e.g. zh-TW)
+      match = LANGUAGES.find(l => l.code.toLowerCase() === code);
+      if (!match) {
+        // Base language match (e.g. "fr" for "fr-CA")
+        const base = code.split("-")[0];
+        match = LANGUAGES.find(l => l.code.toLowerCase() === base || l.code.toLowerCase().startsWith(base));
+      }
+      if (match) break;
     }
+    if (!match) return;
+
+    selectLang(match);
+    setTimeout(() => {
+      const btn = document.getElementById("lang-" + match.code);
+      if (btn) btn.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 200);
+
+    // If language is non-English, show countdown banner and auto-confirm in 3s
+    if (match.code === "en") return;
+
+    let remaining = 3;
+    const banner = document.createElement("div");
+    banner.id = "autoLangBanner";
+    banner.style.cssText = `
+      position:fixed; top:0; left:0; right:0;
+      background:rgba(10,15,30,0.95); border-bottom:1px solid rgba(103,215,240,0.3);
+      color:#67d7f0; font-family:monospace; font-size:0.78rem; font-weight:bold;
+      padding:10px 16px; text-align:center; z-index:9999; letter-spacing:0.06em;
+      display:flex; align-items:center; justify-content:center; gap:12px;
+    `;
+
+    const msg  = document.createElement("span");
+    const stay = document.createElement("button");
+    stay.textContent = "CHOOSE MANUALLY";
+    stay.style.cssText = `
+      background:transparent; border:1px solid rgba(103,215,240,0.4);
+      color:#67d7f0; font-family:monospace; font-size:0.7rem;
+      padding:4px 10px; border-radius:4px; cursor:pointer; letter-spacing:0.05em;
+    `;
+
+    function updateMsg() {
+      msg.textContent = `🌍 Detected: ${match.flag} ${match.name} — auto-starting in ${remaining}s…`;
+    }
+    updateMsg();
+    banner.appendChild(msg);
+    banner.appendChild(stay);
+    document.body.appendChild(banner);
+
+    let cancelled = false;
+    stay.addEventListener("click", () => {
+      cancelled = true;
+      clearInterval(tick);
+      banner.remove();
+    });
+
+    const tick = setInterval(() => {
+      remaining--;
+      if (cancelled) { clearInterval(tick); return; }
+      if (remaining <= 0) {
+        clearInterval(tick);
+        banner.remove();
+        localStorage.setItem("cg_lang", match.code);
+        if (window.CinematicNav) {
+          CinematicNav.cinematic("./intro.html");
+        } else {
+          document.body.style.transition = "opacity 0.5s";
+          document.body.style.opacity    = "0";
+          setTimeout(() => { window.location.href = "./intro.html"; }, 550);
+        }
+        return;
+      }
+      updateMsg();
+    }, 1000);
   }
 
   // ── Canvas floating particles ─────────────────────────────────────────────
@@ -270,8 +343,36 @@
   drawParticles();
 
   // ── Init ──────────────────────────────────────────────────────────────────
-  renderGrid();
-  autoDetect();
+  // First-time visitor: auto-detect device language and skip the picker
+  (function () {
+    const deviceLangs = Array.from(navigator.languages || [navigator.language || "en"]);
+    let match = null;
+    for (const raw of deviceLangs) {
+      const code = raw.toLowerCase();
+      match = LANGUAGES.find(l => l.code.toLowerCase() === code);
+      if (!match) {
+        const base = code.split("-")[0];
+        match = LANGUAGES.find(l => l.code.toLowerCase() === base || l.code.toLowerCase().startsWith(base));
+      }
+      if (match) break;
+    }
+
+    // Non-English device: save language and go straight to intro
+    if (match && match.code !== "en") {
+      localStorage.setItem("cg_lang", match.code);
+      if (window.CinematicNav) {
+        CinematicNav.cinematic("./intro.html");
+      } else {
+        window.location.replace("./intro.html");
+      }
+      return;
+    }
+
+    // English or unrecognised: show picker with English pre-selected
+    const en = LANGUAGES.find(l => l.code === "en");
+    if (en) selectLang(en);
+    renderGrid();
+  })();
 
   console.log(`🌍 ${LANGUAGES.length} languages loaded`);
 

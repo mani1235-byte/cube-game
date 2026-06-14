@@ -62,8 +62,8 @@
     const canvas = document.getElementById("mobileCanvas");
     if (canvas) {
       const ctx = canvas.getContext("2d");
-      function resize() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
-      resize(); window.addEventListener("resize", resize);
+      function resize() { canvas.width = canvas.offsetWidth; canvas.height = canvas.offsetHeight; }
+      resize(); // size locked — no resize listener
       const particles = Array.from({ length: 40 }, () => ({
         x: Math.random() * window.innerWidth, y: Math.random() * window.innerHeight,
         vx: (Math.random() - 0.5) * 0.3, vy: (Math.random() - 0.5) * 0.3,
@@ -184,13 +184,7 @@
       });
     }
 
-    // Keep canvas filling screen
-    function handleResize() {
-      canvas.style.width  = window.innerWidth + "px";
-      canvas.style.height = window.innerHeight + "px";
-    }
-    window.addEventListener("resize", handleResize);
-    handleResize();
+    // Canvas size is locked at startup — no resize listener needed
   }
 
   // ── Init ───────────────────────────────────────────────────────────────

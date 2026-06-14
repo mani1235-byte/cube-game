@@ -49,16 +49,7 @@
 
     const q = qualityMap[currentQuality];
 
-    // Dynamic canvas resolution
-    const canvas = document.getElementById("c");
-    if (canvas) {
-      const dpr = Math.min(window.devicePixelRatio || 1, 2) * q.dprScale;
-      const w = window.innerWidth, h = window.innerHeight;
-      canvas.width  = Math.round(w * dpr);
-      canvas.height = Math.round(h * dpr);
-      canvas.style.width  = w + "px";
-      canvas.style.height = h + "px";
-    }
+    // Canvas size is locked at startup — do not resize here
 
     // Limit particles
     if (window.CubeParticles) {

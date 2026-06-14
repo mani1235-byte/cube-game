@@ -1,75 +1,100 @@
-// translate.js — Auto Google Translate using saved language choice
-// Add <script src="./translate.js"></script> to ALL html pages
-// ============================================================================
+// translate.js — CUBE GAME i18n
+// Provides: getLang(), t(text), translatePage()
 
-(function () {
-  "use strict";
+function getLang() {
+  return localStorage.getItem("cg_lang") || navigator.language.slice(0, 2) || "en";
+}
 
-  const savedLang = localStorage.getItem("cg_lang") || "en";
-  if (savedLang === "en") return; // English = default, no translation needed
+// In-memory cache: { lang: { originalText: translatedText } }
+const _tCache = {};
 
-  // ── Map our codes to Google Translate codes ───────────────────────────────
-  const codeMap = {
-    "zh":    "zh-CN",
-    "zh-TW": "zh-TW",
-    "pt-BR": "pt",
-  };
-  const gtCode = codeMap[savedLang] || savedLang;
-
-  // ── Set Google Translate cookie ───────────────────────────────────────────
-  function setGTCookie() {
-    document.cookie = `googtrans=/en/${gtCode}; path=/`;
-    document.cookie = `googtrans=/en/${gtCode}; path=/; domain=${location.hostname}`;
-  }
-
-  // ── Check if already translated (avoid infinite reload) ───────────────────
-  const alreadyTranslated = document.cookie.includes(`googtrans=/en/${gtCode}`);
-
-  if (!alreadyTranslated) {
-    setGTCookie();
-    // Reload once so Google Translate picks up the cookie
-    location.reload();
-    return;
-  }
-
-  // ── Hide Google Translate toolbar ─────────────────────────────────────────
-  const hideStyle = document.createElement("style");
-  hideStyle.textContent = `
-    .goog-te-banner-frame { display: none !important; }
-    .goog-te-gadget       { display: none !important; }
-    #goog-gt-tt           { display: none !important; }
-    .goog-tooltip         { display: none !important; }
-    .goog-text-highlight  { background: none !important; box-shadow: none !important; }
-    body                  { top: 0 !important; }
-  `;
-  document.head.appendChild(hideStyle);
-
-  // ── Hidden GT element ──────────────────────────────────────────────────────
-  const el = document.createElement("div");
-  el.id = "google_translate_element";
-  el.style.display = "none";
-  document.body.appendChild(el);
-
-  // ── Init callback ──────────────────────────────────────────────────────────
-  window.googleTranslateElementInit = function () {
-    new google.translate.TranslateElement(
-      { pageLanguage: "en", autoDisplay: false },
-      "google_translate_element"
+// Translate a single string — returns a Promise<string>
+// Used by JS files for dynamic strings: el.textContent = await t("Game Over");
+async function t(text) {
+  const lang = getLang();
+  if (lang === "en") return text;
+  if (!_tCache[lang]) _tCache[lang] = {};
+  if (_tCache[lang][text] !== undefined) return _tCache[lang][text];
+  try {
+    const res = await fetch(
+      "https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=" +
+      lang + "&dt=t&q=" + encodeURIComponent(text)
     );
-    // Force the language select to the right value
-    setTimeout(() => {
-      const select = document.querySelector(".goog-te-combo");
-      if (select) {
-        select.value = gtCode;
-        select.dispatchEvent(new Event("change"));
+    const data = await res.json();
+    const result = data[0][0][0];
+    _tCache[lang][text] = result;
+    return result;
+  } catch {
+    return text;
+  }
+}
+
+async function translateTextBatch(texts, lang) {
+  if (!_tCache[lang]) _tCache[lang] = {};
+
+  // Deduplicate and filter already-cached
+  const unique = [...new Set(texts)].filter(tx => _tCache[lang][tx] === undefined);
+
+  const CHUNK = 20;
+  for (let i = 0; i < unique.length; i += CHUNK) {
+    const chunk = unique.slice(i, i + CHUNK);
+    try {
+      const q = chunk.map(tx => "q=" + encodeURIComponent(tx)).join("&");
+      const res = await fetch(
+        "https://translate.googleapis.com/translate_a/t?client=gtx&sl=auto&tl=" + lang + "&" + q
+      );
+      const data = await res.json();
+      const translations = Array.isArray(data[0]) ? data.map(d => d[0]) : data;
+      chunk.forEach((orig, idx) => {
+        _tCache[lang][orig] = translations[idx] || orig;
+      });
+    } catch {
+      chunk.forEach(orig => { _tCache[lang][orig] = orig; });
+    }
+  }
+
+  return texts.map(tx => _tCache[lang][tx] || tx);
+}
+
+async function translatePage() {
+  const lang = getLang();
+  document.documentElement.lang = lang;
+  if (lang === "en") return;
+
+  const nodes = [];
+  const walker = document.createTreeWalker(
+    document.body,
+    NodeFilter.SHOW_TEXT,
+    {
+      acceptNode(node) {
+        const parent = node.parentElement;
+        if (!parent) return NodeFilter.FILTER_REJECT;
+        const tag = parent.tagName;
+        if (tag === "SCRIPT" || tag === "STYLE" || tag === "CODE" || tag === "PRE") {
+          return NodeFilter.FILTER_REJECT;
+        }
+        if (parent.closest("[data-notranslate]")) return NodeFilter.FILTER_REJECT;
+        return NodeFilter.FILTER_ACCEPT;
       }
-    }, 500);
-  };
+    }
+  );
 
-  // ── Load Google Translate ──────────────────────────────────────────────────
-  const script = document.createElement("script");
-  script.src = "https://translate.google.com/translate_a/element.js?cb=googleTranslateElementInit";
-  script.async = true;
-  document.head.appendChild(script);
+  let node;
+  while ((node = walker.nextNode())) {
+    const text = node.nodeValue.trim();
+    if (text.length > 2 && !/^\d+$/.test(text)) {
+      nodes.push({ node, text });
+    }
+  }
 
-})();
+  if (!nodes.length) return;
+
+  const texts = nodes.map(n => n.text);
+  const translated = await translateTextBatch(texts, lang);
+
+  nodes.forEach((n, i) => {
+    n.node.nodeValue = translated[i];
+  });
+}
+
+window.addEventListener("load", translatePage);
