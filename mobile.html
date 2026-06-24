@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>CUBE GAME — Mobile</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700;900&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./mobile.css">
+</head>
+<body>
+  <canvas id="mobileCanvas"></canvas>
+
+  <div class="mobile-wrap">
+
+    <div class="mobile-header">
+      <a href="./index.html" class="back-btn">← BACK</a>
+      <img src="./cube_game_logo.png" alt="CUBE GAME" class="mobile-logo">
+      <span></span>
+    </div>
+
+    <h1 class="mobile-title">📱 MOBILE SETTINGS</h1>
+
+    <div class="mobile-card">
+
+      <!-- Touch controls -->
+      <div class="mobile-section">
+        <div class="mobile-section-header">
+          <span class="mobile-section-icon">👆</span>
+          <span class="mobile-section-label">TOUCH CONTROLS</span>
+        </div>
+        <div class="mobile-section-body">
+          <div class="control-row">
+            <span class="control-icon">🗡️</span>
+            <div class="control-info">
+              <span class="control-name">Swipe to Slash</span>
+              <span class="control-desc">Drag your finger across cubes to slash them</span>
+            </div>
+            <label class="toggle">
+              <input type="checkbox" id="swipeToggle" checked>
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+          <div class="control-row">
+            <span class="control-icon">💥</span>
+            <div class="control-info">
+              <span class="control-name">Tap to Slash</span>
+              <span class="control-desc">Tap directly on cubes to slash them</span>
+            </div>
+            <label class="toggle">
+              <input type="checkbox" id="tapToggle" checked>
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+          <div class="control-row">
+            <span class="control-icon">✨</span>
+            <div class="control-info">
+              <span class="control-name">Touch Trail</span>
+              <span class="control-desc">Show visual trail where your finger moves</span>
+            </div>
+            <label class="toggle">
+              <input type="checkbox" id="trailToggle" checked>
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <!-- Display -->
+      <div class="mobile-section">
+        <div class="mobile-section-header">
+          <span class="mobile-section-icon">🖥️</span>
+          <span class="mobile-section-label">DISPLAY</span>
+        </div>
+        <div class="mobile-section-body">
+          <div class="control-row">
+            <span class="control-icon">📐</span>
+            <div class="control-info">
+              <span class="control-name">Fullscreen Mode</span>
+              <span class="control-desc">Play in fullscreen for best experience</span>
+            </div>
+            <label class="toggle">
+              <input type="checkbox" id="fullscreenToggle">
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+          <div class="control-row">
+            <span class="control-icon">🔄</span>
+            <div class="control-info">
+              <span class="control-name">Orientation Lock</span>
+              <span class="control-desc">Lock to landscape for wider play area</span>
+            </div>
+            <label class="toggle">
+              <input type="checkbox" id="orientToggle">
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <!-- How to play -->
+      <div class="mobile-section">
+        <div class="mobile-section-header">
+          <span class="mobile-section-icon">📖</span>
+          <span class="mobile-section-label">HOW TO PLAY ON MOBILE</span>
+        </div>
+        <div class="mobile-section-body">
+          <div class="how-grid">
+            <div class="how-card">
+              <div class="how-icon">👆</div>
+              <div class="how-text">Swipe fast to slash cubes</div>
+            </div>
+            <div class="how-card">
+              <div class="how-icon">💣</div>
+              <div class="how-text">Avoid red bomb cubes</div>
+            </div>
+            <div class="how-card">
+              <div class="how-icon">❤️</div>
+              <div class="how-text">Keep your 3 hearts</div>
+            </div>
+            <div class="how-card">
+              <div class="how-icon">🌈</div>
+              <div class="how-text">Reach 10k for rainbow mode</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <button class="save-btn" id="mobileSaveBtn">✓ SAVE SETTINGS</button>
+
+    </div>
+
+  </div>
+
+  <div id="mobileToast">✅ Settings saved!</div>
+
+  <script src="./transition.js"></script>
+<script src="./mobile.js"></script>
+  <script src="./translate.js"></script>
+  <script src="./cookie.js"></script>
+</body>
+</html>

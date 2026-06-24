@@ -1,0 +1,305 @@
+/* mobile.css — CUBE GAME Mobile Settings & Optimization */
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --cyan:   #67d7f0;
+  --green:  #a6e02c;
+  --orange: #fe9522;
+  --muted:  rgba(255,255,255,0.35);
+  --border: rgba(103,215,240,0.15);
+}
+
+html, body {
+  min-height: 100vh;
+  background: radial-gradient(ellipse at top, #1a3a52 0%, #0d1b26 60%);
+  font-family: 'Share Tech Mono', monospace;
+  color: #fff;
+  overflow-x: hidden;
+}
+
+#mobileCanvas {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+
+/* ── Layout ────────────────────────────────────────────────────────────── */
+.mobile-wrap {
+  position: relative;
+  z-index: 1;
+  max-width: 500px;
+  margin: 0 auto;
+  padding: 0 16px 40px;
+  animation: wrapIn 0.5s cubic-bezier(0.16,1,0.3,1) both;
+}
+@keyframes wrapIn {
+  from { opacity: 0; transform: translateY(20px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Header ────────────────────────────────────────────────────────────── */
+.mobile-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 0;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 24px;
+}
+.back-btn {
+  color: var(--muted);
+  text-decoration: none;
+  font-size: 0.78rem;
+  letter-spacing: 0.1em;
+  transition: color 0.2s;
+}
+.back-btn:hover { color: var(--cyan); }
+.mobile-logo { width: 100px; height: auto; }
+
+/* ── Title ─────────────────────────────────────────────────────────────── */
+.mobile-title {
+  font-family: 'Orbitron', monospace;
+  font-size: clamp(1.4rem, 5vw, 2rem);
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  color: var(--cyan);
+  text-shadow: 0 0 30px rgba(103,215,240,0.5);
+  text-align: center;
+  margin-bottom: 24px;
+  position: static;
+  top: auto;
+}
+
+/* ── Card ──────────────────────────────────────────────────────────────── */
+.mobile-card {
+  background: linear-gradient(160deg, #112233, #0a1820);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.4);
+}
+
+/* ── Sections ──────────────────────────────────────────────────────────── */
+.mobile-section {
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+.mobile-section:last-of-type { border-bottom: none; }
+
+.mobile-section-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 16px 20px 12px;
+}
+.mobile-section-icon { font-size: 1.1rem; }
+.mobile-section-label {
+  font-size: 0.72rem;
+  letter-spacing: 0.15em;
+  color: var(--muted);
+}
+
+.mobile-section-body {
+  padding: 0 20px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* ── Control rows ──────────────────────────────────────────────────────── */
+.control-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+}
+.control-row:last-child { border-bottom: none; }
+.control-icon { font-size: 1.2rem; flex-shrink: 0; }
+.control-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.control-name {
+  font-size: 0.82rem;
+  color: rgba(255,255,255,0.85);
+  letter-spacing: 0.05em;
+}
+.control-desc {
+  font-size: 0.65rem;
+  color: var(--muted);
+  letter-spacing: 0.03em;
+  line-height: 1.4;
+}
+
+/* ── Toggle ────────────────────────────────────────────────────────────── */
+.toggle {
+  position: relative;
+  width: 48px; height: 26px;
+  flex-shrink: 0;
+}
+.toggle input { opacity: 0; width: 0; height: 0; }
+.toggle-slider {
+  position: absolute;
+  inset: 0;
+  background: rgba(255,255,255,0.1);
+  border: 1px solid rgba(255,255,255,0.2);
+  border-radius: 26px;
+  cursor: pointer;
+  transition: all 0.25s;
+}
+.toggle-slider::before {
+  content: "";
+  position: absolute;
+  left: 4px; top: 4px;
+  width: 16px; height: 16px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.4);
+  transition: all 0.25s;
+}
+.toggle input:checked + .toggle-slider {
+  background: rgba(103,215,240,0.25);
+  border-color: rgba(103,215,240,0.6);
+}
+.toggle input:checked + .toggle-slider::before {
+  transform: translateX(22px);
+  background: var(--cyan);
+  box-shadow: 0 0 8px rgba(103,215,240,0.5);
+}
+
+/* ── How to play grid ──────────────────────────────────────────────────── */
+.how-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.how-card {
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 10px;
+  padding: 14px 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  text-align: center;
+  transition: border-color 0.2s;
+}
+.how-card:hover { border-color: rgba(103,215,240,0.25); }
+.how-icon { font-size: 1.8rem; }
+.how-text {
+  font-size: 0.68rem;
+  color: rgba(255,255,255,0.55);
+  letter-spacing: 0.04em;
+  line-height: 1.4;
+}
+
+/* ── Save button ───────────────────────────────────────────────────────── */
+.save-btn {
+  display: block;
+  width: calc(100% - 40px);
+  margin: 20px;
+  padding: 13px;
+  background: linear-gradient(135deg, rgba(103,215,240,0.25), rgba(166,224,44,0.2));
+  border: 1px solid rgba(103,215,240,0.5);
+  border-radius: 10px;
+  color: #fff;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.9rem;
+  font-weight: bold;
+  letter-spacing: 0.1em;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.save-btn:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(103,215,240,0.25); }
+.save-btn::before { display: none; }
+
+/* ── Toast ─────────────────────────────────────────────────────────────── */
+#mobileToast {
+  position: fixed;
+  bottom: 30px;
+  left: 50%;
+  transform: translateX(-50%) translateY(10px);
+  background: linear-gradient(135deg, #1e3a4a, #0f2230);
+  border: 1px solid rgba(103,215,240,0.4);
+  border-radius: 10px;
+  padding: 10px 22px;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.82rem;
+  color: var(--cyan);
+  letter-spacing: 0.06em;
+  z-index: 10000;
+  opacity: 0;
+  visibility: hidden;
+  transition: all 0.3s;
+  white-space: nowrap;
+}
+#mobileToast.show {
+  opacity: 1;
+  visibility: visible;
+  transform: translateX(-50%) translateY(0);
+}
+
+/* ── Game-side mobile styles (applied on index.html) ───────────────────── */
+.touch-trail {
+  position: fixed;
+  pointer-events: none;
+  z-index: 9998;
+  border-radius: 50%;
+  background: rgba(103,215,240,0.6);
+  transform: translate(-50%, -50%);
+  animation: trailFade 0.3s ease forwards;
+}
+@keyframes trailFade {
+  from { opacity: 0.8; width: 12px; height: 12px; }
+  to   { opacity: 0;   width: 4px;  height: 4px;  }
+}
+
+#orientWarning {
+  position: fixed;
+  inset: 0;
+  z-index: 999999;
+  background: rgba(0,0,0,0.92);
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  font-family: 'Share Tech Mono', monospace;
+  text-align: center;
+  padding: 20px;
+}
+#orientWarning.show { display: flex; }
+#orientWarning .orient-icon {
+  font-size: 4rem;
+  animation: rotatePulse 1.5s ease-in-out infinite;
+}
+@keyframes rotatePulse {
+  0%   { transform: rotate(0deg);  }
+  50%  { transform: rotate(90deg); }
+  100% { transform: rotate(0deg);  }
+}
+#orientWarning p {
+  font-size: 1rem;
+  color: rgba(255,255,255,0.7);
+  letter-spacing: 0.08em;
+  line-height: 1.6;
+}
+
+@media (max-width: 768px) {
+  .hud__score { font-size: calc(18px + 3vw) !important; }
+  .cube-count-lbl { font-size: 0.5em !important; }
+  .yt-btn, .shop-btn, .sound-hud-btn { font-size: calc(14px + 2vw) !important; }
+  .pause-btn { font-size: calc(18px + 3vw) !important; }
+  button { font-size: 1.6rem !important; padding: 14px 24px !important; width: 240px !important; }
+  h1 { font-size: 3rem !important; }
+  .heart { font-size: clamp(24px, 6vw, 36px) !important; }
+  #compTimerEl { font-size: clamp(1.8rem, 6vw, 2.5rem) !important; }
+  #compScores  { font-size: clamp(0.85rem, 3vw, 1.1rem) !important; }
+  .hud__actions { padding-right: max(0.65em, env(safe-area-inset-right)) !important; }
+  .hud__score   { padding-left:  max(0.65em, env(safe-area-inset-left))  !important; }
+}

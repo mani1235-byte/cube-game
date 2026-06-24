@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CUBE GAME — The Story</title>
+        <link rel="icon" type="logo" href="cube_game_logo.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./intro.css">
+</head>
+<body>
+
+  <canvas id="introCanvas"></canvas>
+
+  <!-- Logo top left -->
+  <img src="cube_game_logo.png" alt="CUBE GAME" class="page-logo">
+
+  <div class="scenes" id="scenes">
+
+    <!-- SCENE 1: void -->
+    <div class="scene active" id="scene1">
+      <div class="scene__bg bg--void"></div>
+      <div class="cube-wrap">
+        <div class="cube-3d" id="cube1">
+          <div class="face front"></div><div class="face back"></div>
+          <div class="face left"></div><div class="face right"></div>
+          <div class="face top"></div><div class="face bottom"></div>
+        </div>
+      </div>
+      <div class="scene__text">
+        <div class="line line--small" data-delay="400">IN THE BEGINNING</div>
+        <div class="line line--big"   data-delay="1200">THERE WAS NOTHING.</div>
+        <div class="line line--sub"   data-delay="2400">Then a single cube appeared from the dark.</div>
+      </div>
+    </div>
+
+    <!-- SCENE 2: multiplication -->
+    <div class="scene" id="scene2">
+      <div class="scene__bg bg--deep"></div>
+      <div class="cubes-burst" id="cubesBurst"></div>
+      <div class="scene__text">
+        <div class="line line--small" data-delay="400">AND THEN</div>
+        <div class="line line--big"   data-delay="1000">IT MULTIPLIED.</div>
+        <div class="line line--sub"   data-delay="2200">Hundreds of cubes — each one alive, wild, unpredictable.</div>
+      </div>
+    </div>
+
+    <!-- SCENE 3: chaos -->
+    <div class="scene" id="scene3">
+      <div class="scene__bg bg--fire"></div>
+      <div class="scene__text">
+        <div class="line line--small" data-delay="300">BUT SOON</div>
+        <div class="line line--big line--fire" data-delay="900">CHAOS BROKE OUT.</div>
+        <div class="line line--sub" data-delay="2000">The cubes turned hostile. Fast. Dangerous.<br>The world trembled.</div>
+      </div>
+      <div class="fire-cubes" id="fireCubes"></div>
+    </div>
+
+    <!-- SCENE 4: hero rises -->
+    <div class="scene" id="scene4">
+      <div class="scene__bg bg--electric"></div>
+      <div class="hero-cube" id="heroCube">
+        <div class="face front"></div><div class="face back"></div>
+        <div class="face left"></div><div class="face right"></div>
+        <div class="face top"></div><div class="face bottom"></div>
+      </div>
+      <div class="scene__text">
+        <div class="line line--small" data-delay="400">UNTIL ONE PLAYER</div>
+        <div class="line line--big line--cyan" data-delay="1100">STOOD UP.</div>
+        <div class="line line--sub" data-delay="2300">Armed with reflexes, courage, and a blade.<br>Ready to face them all.</div>
+      </div>
+    </div>
+
+    <!-- SCENE 5: evolution -->
+    <div class="scene" id="scene5">
+      <div class="scene__bg bg--void"></div>
+      <div class="evo-cubes" id="evoCubes"></div>
+      <div class="scene__text">
+        <div class="line line--small" data-delay="300">AS THE BATTLE RAGED</div>
+        <div class="line line--big line--rainbow" data-delay="900">THE CUBES EVOLVED.</div>
+        <div class="line line--sub" data-delay="2100">
+          Normal → Heated → Electric → Inferno → Void → Rainbow.<br>
+          Each level harder than the last.
+        </div>
+      </div>
+    </div>
+
+    <!-- SCENE 6: call to action -->
+    <div class="scene" id="scene6">
+      <div class="scene__bg bg--final"></div>
+      <div class="final-cube" id="finalCube">
+        <div class="face front"></div><div class="face back"></div>
+        <div class="face left"></div><div class="face right"></div>
+        <div class="face top"></div><div class="face bottom"></div>
+      </div>
+      <div class="scene__text scene__text--center">
+        <div class="line line--big line--glow" data-delay="400">ARE YOU READY?</div>
+        <div class="line line--sub" data-delay="1400">The cubes are waiting.<br>The legend starts now.</div>
+        <div class="line line--brand" data-delay="2400">CUBE GAME</div>
+        <div class="line line--yt" data-delay="3000">
+          <a href="https://www.youtube.com/@cubegame2026" target="_blank">▶ cubegame on YouTube</a>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Progress bar -->
+  <div class="progress-bar" id="progressBar">
+    <div class="progress-fill" id="progressFill"></div>
+  </div>
+
+  <!-- Scene indicator dots -->
+  <div class="scene-dots" id="sceneDots"></div>
+
+  <!-- Skip button -->
+  <button id="btn-skip">SKIP INTRO ⏭</button>
+
+  <!-- Next scene button -->
+  <button id="btn-next">NEXT ▶</button>
+
+  <script src="./transition.js"></script>
+<script src="./intro.js"></script>
+<script src="./cookie.js"></script>
+<script src="./translate.js"></script>
+</body>
+</html>
