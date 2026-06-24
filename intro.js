@@ -121,6 +121,7 @@
 
   // ── End → redirect to login ───────────────────────────────────────────────
   function endIntro() {
+    localStorage.setItem("introSeen", "true");
     introMusic.pause();
     introMusic.currentTime = 0;
     if (window.CinematicNav) {
