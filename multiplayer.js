@@ -1,5 +1,5 @@
 // ⬇️ Replace with your Railway URL (only need to do this once!)
-window.CUBE_SERVER = 'https://cube-game-production.up.railway.app';
+window.CUBE_SERVER = 'https://cube-game-production-e946.up.railway.app/';
 
 /**
  * multiplayer.js
