@@ -21,6 +21,7 @@ window.ProgressionManager = (function () {
     window.ChestSystem.init(state);
     window.WorldSystem.init(state);
     window.DifficultySystem.init(state);
+    window.PassSystem.init(state);
 
     wireAchievements();
     wireRecheck();

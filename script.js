@@ -1853,20 +1853,16 @@ function tick(width, height, simTime, simSpeed, lag) {
       targets.splice(i, 1);
       returnTarget(target);
       if (isInGame()) {
-        if (isCasualGame() || isAntiLoseGame()) {
-          incrementScore(-25);
-        } else {
-          // Normal mode: a cube falling off-screen = instant game over (like Brawl Stars)
-          if (!target.isBomb) {
-            // Flash red, then end game
-            const flash = document.createElement("div");
-            flash.style.cssText = "position:fixed;inset:0;background:rgba(255,30,30,0.38);z-index:9999;pointer-events:none;animation:heartFlash 0.45s ease forwards";
-            document.body.appendChild(flash);
-            setTimeout(() => flash.remove(), 600);
-            endGame();
-          }
-          // Missing a bomb = no penalty (dodged it!)
+        // Every mode: a cube falling off-screen = instant game over (like Brawl Stars)
+        if (!target.isBomb) {
+          // Flash red, then end game
+          const flash = document.createElement("div");
+          flash.style.cssText = "position:fixed;inset:0;background:rgba(255,30,30,0.38);z-index:9999;pointer-events:none;animation:heartFlash 0.45s ease forwards";
+          document.body.appendChild(flash);
+          setTimeout(() => flash.remove(), 600);
+          endGame();
         }
+        // Missing a bomb = no penalty (dodged it!)
       }
       continue;
     }

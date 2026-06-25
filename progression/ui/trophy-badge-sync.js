@@ -1,70 +1,65 @@
 // progression/ui/trophy-badge-sync.js
 //
-// Two unrelated bugs in the pre-existing HUD markup, fixed here:
+// Wires up the pre-existing HUD markup that had zero JS behind it:
 //
-// 1. The "Brawl Pass" modal (#passOverlay) existed in index.html but had
-//    zero JS wiring anywhere — clicking the trophy-badge (title="Open
-//    Brawl Pass") or either "🎫 BRAWL PASS" button did nothing. This adds
-//    open/close behavior, mirroring shop.js's openShop()/closeShop().
-//
-// 2. Every trophy-count readout outside the progression system's own
-//    widget (#trophyHud .th-count in the gameplay HUD, and .tb-trophy-count
-//    inside both .trophy-badge instances) was hardcoded to "0" in the HTML
-//    and never updated. This keeps them all live.
-//
-// NOTE: the league name ("Bronze I"), progress bar, and "to next" text in
-// .trophy-badge are still static placeholders — there's no league/ladder
-// system in this codebase yet, just the raw trophy count. Say the word if
-// you want an actual Bronze→Masters league ladder built out; this file
-// only fixes the open/close + live-count wiring.
+// 1. The main-menu trophy badge (.trophy-badge[data-open-pass], the one
+//    NOT inside #passOverlay) now opens the 3D Trophy Hall — it shows
+//    trophies/league, so it should connect to the trophy room, not the
+//    pass.
+// 2. Both "🎫 BRAWL PASS" buttons (#openPassMenu, #openPassPause) now open
+//    the 3D Brawl Pass Room (progression/three/scene-brawl-pass.js)
+//    instead of the old flat #passOverlay modal.
+// 3. Every trophy-count readout (#trophyHud .th-count, both
+//    .tb-trophy-count) and now every league readout (.tb-league-name,
+//    .tb-progress-fill, .tb-to-next, .tb-rank-icon / .th-icon) stay live,
+//    driven by league-system.js. They were all hardcoded placeholders.
 (function () {
-  function openPass() {
-    const overlay = document.getElementById("passOverlay");
-    if (overlay) overlay.classList.add("open");
-  }
-  function closePass() {
-    const overlay = document.getElementById("passOverlay");
-    if (overlay) overlay.classList.remove("open");
+  function shieldIconSvg(color) {
+    return `<svg viewBox="0 0 24 24" fill="${color}"><path d="M12 2 L21 6 V12 C21 17 17 21 12 22 C7 21 3 17 3 12 V6 Z"/></svg>`;
   }
 
-  function wireOpenClose() {
+  function wireOpenButtons() {
+    document.querySelectorAll("[data-open-pass]").forEach((el) => {
+      if (el.closest("#passOverlay")) return; // static readout inside the (now-unused) flat modal
+      el.addEventListener("click", () => { if (window.TrophyHall3D) window.TrophyHall3D.open(); });
+    });
     ["openPassMenu", "openPassPause"].forEach((id) => {
       const el = document.getElementById(id);
-      if (el) el.addEventListener("click", openPass);
+      if (el) el.addEventListener("click", () => { if (window.BrawlPassRoom3D) window.BrawlPassRoom3D.open(); });
     });
-
-    // [data-open-pass] appears twice: once as the clickable main-menu badge,
-    // and once as a static (cursor:default) readout *inside* the pass modal
-    // itself — only wire the one that isn't already inside the modal.
-    document.querySelectorAll("[data-open-pass]").forEach((el) => {
-      if (!el.closest("#passOverlay")) el.addEventListener("click", openPass);
-    });
-
-    const closeBtn = document.getElementById("closePass");
-    if (closeBtn) closeBtn.addEventListener("click", closePass);
-
-    const overlay = document.getElementById("passOverlay");
-    if (overlay) overlay.addEventListener("click", (e) => { if (e.target === e.currentTarget) closePass(); });
-
-    document.addEventListener("keydown", (e) => { if (e.key === "Escape") closePass(); });
   }
 
   function refreshTrophyDisplays() {
     const state = window.ProgressionManager.getState();
     const trophies = state.trophies || 0;
+    const info = window.LeagueSystem.getProgress(trophies);
 
     const hudCount = document.querySelector("#trophyHud .th-count");
     if (hudCount) hudCount.textContent = trophies;
 
-    document.querySelectorAll(".tb-trophy-count").forEach((el) => {
-      el.textContent = "🏆 " + trophies;
+    document.querySelectorAll(".tb-trophy-count").forEach((el) => { el.textContent = "🏆 " + trophies; });
+    document.querySelectorAll(".tb-league-name").forEach((el) => { el.textContent = info.league.name; });
+    document.querySelectorAll(".tb-progress-fill").forEach((el) => { el.style.width = Math.round(info.progress * 100) + "%"; });
+    document.querySelectorAll(".tb-to-next").forEach((el) => {
+      el.textContent = info.isMaxed ? "Top league reached!" : `${info.toNext} 🏆 to ${info.next.name}`;
+    });
+    document.querySelectorAll(".tb-rank-icon").forEach((el) => { el.innerHTML = shieldIconSvg(info.league.color); });
+    const hudIcon = document.querySelector("#trophyHud .th-icon");
+    if (hudIcon) hudIcon.innerHTML = shieldIconSvg(info.league.color);
+
+    [".trophy-badge", "#trophyHud"].forEach((sel) => {
+      document.querySelectorAll(sel).forEach((el) => {
+        el.style.setProperty("--lc", info.league.color);
+        el.style.setProperty("--lbg", info.league.bg);
+        el.style.setProperty("--lglow", info.league.color + "55");
+      });
     });
   }
 
   if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", wireOpenClose);
+    document.addEventListener("DOMContentLoaded", wireOpenButtons);
   } else {
-    wireOpenClose();
+    wireOpenButtons();
   }
 
   window.ProgressionEvents.on("progression:ready", refreshTrophyDisplays);

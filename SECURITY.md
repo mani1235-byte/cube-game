@@ -46,7 +46,7 @@
 ```bash
 # متغیرهای محیطی که باید در Railway تنظیم کنی:
 PORT=3000
-ALLOWED_ORIGINS=https://cube-game-production-9d45.up.railway.app
+ALLOWED_ORIGINS=https://cube-game-production-e946.up.railway.app/
 ADMIN_SECRET=یک-رشته-تصادفی-قوی
 FIREBASE_API_KEY=...
 FIREBASE_PROJECT_ID=...

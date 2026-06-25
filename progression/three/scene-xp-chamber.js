@@ -15,7 +15,7 @@ window.XPChamber3D = (function () {
   }
 
   function buildStatic() {
-    const faces = E.room(ROOM.w, ROOM.d, ROOM.h, { floor: "#161226", wallA: "#1d1733", wallB: "#241b3d", ceil: "#0d0a18" });
+    const faces = E.room(ROOM.w, ROOM.d, ROOM.h, { floor: "#081c3a", wallA: "#0f3d7a", wallB: "#1a5fb4", ceil: "#04101f" });
     const solids = [{ x: CENTER.x, z: CENTER.z, r: 1.5 }];
     const interactives = [];
 

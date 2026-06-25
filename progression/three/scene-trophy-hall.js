@@ -22,12 +22,12 @@ window.TrophyHall3D = (function () {
   }
 
   function buildStatic() {
-    const faces = E.room(ROOM.w, ROOM.d, ROOM.h, { floor: "#2a1410", wallA: "#3a2418", wallB: "#4a3020", ceil: "#160d08" });
+    const faces = E.room(ROOM.w, ROOM.d, ROOM.h, { floor: "#0b1f3a", wallA: "#154c79", wallB: "#1f6aa5", ceil: "#06101f" });
     const solids = [];
     const interactives = [];
 
     milestoneNodes().forEach((node) => {
-      faces.push(...E.box(node.x, 0.4, node.z, 0.5, 0.4, 0.5, "#3a2818"));
+      faces.push(...E.box(node.x, 0.4, node.z, 0.5, 0.4, 0.5, "#1e3d34"));
       faces.push(...E.box(node.x, 0.84, node.z, 0.34, 0.06, 0.34, "#caa14a"));
       solids.push({ x: node.x, z: node.z, r: 0.62 });
       interactives.push({ id: "ms:" + node.m.id, pos: { x: node.x, y: 1.35, z: node.z }, hitRadiusPx: 56, kind: "milestone", node });
@@ -38,7 +38,7 @@ window.TrophyHall3D = (function () {
     achievements.forEach((a, i) => {
       const side = i % 2 === 0 ? leftX : rightX;
       const z = 2.6 + Math.floor(i / 2) * 2.6;
-      faces.push(...E.box(side, 0.32, z, 0.42, 0.32, 0.42, "#3a2818"));
+      faces.push(...E.box(side, 0.32, z, 0.42, 0.32, 0.42, "#1e3d34"));
       solids.push({ x: side, z, r: 0.6 });
       interactives.push({ id: "ach:" + a.id, pos: { x: side, y: 1.25, z }, hitRadiusPx: 50, kind: "achievement", achievement: a });
     });
@@ -142,7 +142,7 @@ window.TrophyHall3D = (function () {
       hint: "WASD/drag to look · click any trophy to see what it rewards",
       roomSize: ROOM,
       spawn: { x: ROOM.w / 2, z: 1.4, yaw: 0 },
-      voidColor: "#0a0603",
+      voidColor: "#040d0a",
       buildStatic,
       buildDynamic,
       onInteract

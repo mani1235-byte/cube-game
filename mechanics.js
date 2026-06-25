@@ -473,26 +473,35 @@
     _origResetGame();
   };
 
-  // Stop competition if player quits to menu
-  document.querySelector(".menu-btn--pause")?.addEventListener("click", () => {
-    if (compMode) {
+  // ── Mode-switch / leave-match handling ──────────────────────────────────────
+  // These must run BEFORE script.js's own click handlers on the same buttons
+  // (which call the patched resetGame()), or resetGame() sees a stale
+  // lastPlayedMode === "competition" and silently restarts competition
+  // instead of starting normal/casual mode. Same-element listeners fire in
+  // attachment order regardless of capture flag, but a capture-phase
+  // listener on an ANCESTOR (document) is guaranteed to run before any
+  // listener on the target itself — so we delegate from document instead of
+  // attaching directly to the buttons.
+  document.addEventListener("click", (e) => {
+    if (e.target.closest(".play-normal-btn")) {
+      lastPlayedMode = "normal";
+      stopCompetition();
+      compResult.classList.remove("show");
+      resetHearts(); lastTargetsLen = 0;
+    } else if (e.target.closest(".play-casual-btn")) {
+      lastPlayedMode = "casual";
+      stopCompetition();
+      compResult.classList.remove("show");
+      resetHearts(); lastTargetsLen = 0;
+    } else if (e.target.closest(".menu-btn--pause") || e.target.closest(".menu-btn--score")) {
+      // leaving to the main menu mid-match (or from the score screen) should
+      // never leave competition state armed for the next "play again"
+      lastPlayedMode = "normal";
       stopCompetition();
       compResult.classList.remove("show");
       resetHearts();
     }
-  });
-
-  document.querySelector(".play-normal-btn")?.addEventListener("click", () => {
-    lastPlayedMode = "normal";
-    if (compMode) { stopCompetition(); compResult.classList.remove("show"); }
-    resetHearts(); lastTargetsLen = 0;
-  });
-
-  document.querySelector(".play-casual-btn")?.addEventListener("click", () => {
-    lastPlayedMode = "casual";
-    if (compMode) { stopCompetition(); compResult.classList.remove("show"); }
-    resetHearts(); lastTargetsLen = 0;
-  });
+  }, true);
 
   // Play again — restarts competition if that was last mode
   document.querySelector(".play-again-btn")?.addEventListener("click", () => {

@@ -22,7 +22,7 @@ window.RewardRoom3D = (function () {
     let api;
 
     function buildStatic() {
-      const faces = E.room(ROOM.w, ROOM.d, ROOM.h, { floor: "#1a140f", wallA: "#241c14", wallB: "#2a2018", ceil: "#120e0a" });
+      const faces = E.room(ROOM.w, ROOM.d, ROOM.h, { floor: "#2b1248", wallA: "#4c1d7a", wallB: "#6b2fb0", ceil: "#12071f" });
       faces.push(...E.box(ROOM.w / 2, 0.32, CHEST_POS.z, 0.55, 0.32, 0.4, "#3a2a18"));
       const solids = [{ x: CHEST_POS.x, z: CHEST_POS.z, r: 0.7 }];
       const interactives = [{ id: "chest", pos: { x: CHEST_POS.x, y: 0.95, z: CHEST_POS.z }, hitRadiusPx: 58, kind: "chest" }];
@@ -125,7 +125,7 @@ window.RewardRoom3D = (function () {
       hint: "Click the chest to open it",
       roomSize: ROOM,
       spawn: { x: ROOM.w / 2, z: 1.3, yaw: 0 },
-      voidColor: "#06040a",
+      voidColor: "#0a0502",
       buildStatic,
       buildDynamic,
       onInteract,

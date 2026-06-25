@@ -24,7 +24,7 @@ window.WorldPortals3D = (function () {
       const p1 = { x: cx + Math.cos(a1) * r, y: cy + Math.sin(a1) * r, z: cz };
       const center = { x: cx, y: cy, z: cz };
       const hue = locked ? 0 : (baseHue + i * (360 / seg) + t * 50) % 360;
-      const color = locked ? "#2a2a32" : `hsl(${hue},75%,60%)`;
+      const color = locked ? "#102a5c" : `hsl(${hue},75%,60%)`;
       faces.push({ verts: [center, p0, p1], normal: { x: 0, y: 0, z: 1 }, color, emissive: !locked, doubleSided: true, alpha: alpha != null ? alpha : 1 });
     }
     return faces;
@@ -45,7 +45,7 @@ window.WorldPortals3D = (function () {
     let travelling = false;
 
     function buildStatic() {
-      const faces = E.room(ROOM.w, ROOM.d, ROOM.h, { floor: "#10131c", wallA: "#161a28", wallB: "#1b2032", ceil: "#0a0c14" });
+      const faces = E.room(ROOM.w, ROOM.d, ROOM.h, { floor: "#11142b", wallA: "#181c3c", wallB: "#1f2449", ceil: "#070815" });
       const interactives = [];
       // no solids here — portals are meant to be walked *through* to travel,
       // so they must never block the player from reaching their exact position

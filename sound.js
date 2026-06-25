@@ -286,11 +286,16 @@
 
     // Score increase = cube sliced
     const _origTick = tick;
-    let prevScore = 0;
+    let prevScore = state.game.score;
     window.tick = function(w, h, st, ss, lag) {
       _origTick(w, h, st, ss, lag);
-      if (state.game.score > prevScore && isInGame()) {
-        playSlice();
+      if (isInGame()) {
+        if (state.game.score > prevScore) {
+          playSlice();
+        }
+        // Always re-sync, so a score drop (penalty) or a fresh game's
+        // reset to 0 doesn't leave prevScore stuck high and silently
+        // block the next kill's sound from firing.
         prevScore = state.game.score;
       }
     };
