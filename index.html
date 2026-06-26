@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>3d game</title>
+   <link rel="icon" type="logo" href="cube_game_logo.png">
+    <link rel="stylesheet" href="./style.css">
+  <link rel="stylesheet" href="./sound.css">
+  <link rel="stylesheet" href="./mobile.css">
+  <link rel="stylesheet" href="./settings.css">
+  <link rel="stylesheet" href="./profile-avatar.css">
+  <link rel="stylesheet" href="./trophies.css">
+  <link rel="stylesheet" href="./progression/ui/progression.css">
+  <link rel="stylesheet" href="./progression/three/scene3d.css">
+</head>
+<body>
+
+<!-- ── Profile Avatar (top-right corner, menu only) ── -->
+<div id="profileWrap" class="pa-wrap">
+  <div id="avatarCircle" class="pa-circle" title="Profile"></div>
+  <div id="profileDropdown" class="pa-panel">
+    <div class="pa-header">
+      <div class="pa-avatar-lg" id="avatarCircleLg"></div>
+      <div class="pa-name" id="profileName">Guest</div>
+      <div class="pa-email" id="profileEmail"></div>
+    </div>
+    <div class="pa-stats">
+      <div class="pa-stat">
+        <span class="pa-stat-val" id="paCoins">0</span>
+        <span class="pa-stat-lbl">Coins</span>
+      </div>
+      <div class="pa-stat-sep"></div>
+      <div class="pa-stat">
+        <span class="pa-stat-val" id="paGames">0</span>
+        <span class="pa-stat-lbl">Games</span>
+      </div>
+      <div class="pa-stat-sep"></div>
+      <div class="pa-stat">
+        <span class="pa-stat-val" id="paTrophies">0</span>
+        <span class="pa-stat-lbl">Trophies</span>
+      </div>
+      <div class="pa-stat-sep"></div>
+      <div class="pa-stat">
+        <span class="pa-stat-val" id="paScore">0</span>
+        <span class="pa-stat-lbl">Best Score</span>
+      </div>
+    </div>
+    <div class="pa-divider"></div>
+    <input type="file" id="paImgInput" accept="image/*" style="display:none">
+    <button class="pa-btn pa-btn-img" id="paUploadBtn">
+      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
+      Upload Photo
+    </button>
+    <button class="pa-btn pa-btn-out" id="profileLogout">
+      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>
+      Log Out
+    </button>
+  </div>
+</div>
+ 
+<!-- Game canvas -->
+<canvas id="c"></canvas>
+ 
+<!-- Logo top left -->
+<img src="./cube_game_logo.png" alt="CUBE GAME" class="page-logo">
+
+<!-- Trophy mini-badge (gameplay HUD) -->
+<div class="trophy-hud" id="trophyHud">
+  <div class="th-icon"></div>
+  <div class="th-count">0</div>
+</div>
+ 
+<!-- Gameplay HUD -->
+<div class="hud">
+  <div class="hud__score">
+    <div class="score-lbl"></div>
+    <div class="cube-count-lbl"></div>
+  </div>
+  <div class="hud__actions">
+    <a class="yt-btn" href="https://www.youtube.com/@cubegame2026" target="_blank" title="YouTube Channel">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M23.5 6.2a3 3 0 0 0-2.1-2.1C19.5 3.5 12 3.5 12 3.5s-7.5 0-9.4.6A3 3 0 0 0 .5 6.2 31 31 0 0 0 0 12a31 31 0 0 0 .5 5.8 3 3 0 0 0 2.1 2.1c1.9.6 9.4.6 9.4.6s7.5 0 9.4-.6a3 3 0 0 0 2.1-2.1A31 31 0 0 0 24 12a31 31 0 0 0-.5-5.8zM9.75 15.5v-7l6.25 3.5-6.25 3.5z"/></svg>
+    </a>
+    <button class="shop-btn" id="openShop" title="Shop">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4zM3.8 6h16.4M16 10a4 4 0 0 1-8 0" stroke="currentColor" stroke-width="1.5" fill="none"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
+    </button>
+    <a class="sound-hud-btn" href="./sound.html" title="Sound Settings">🔊</a>
+    <a class="sound-hud-btn" href="./settings.html" title="Settings">⚙️</a>
+    <div class="pause-btn">
+      <div></div>
+    </div>
+  </div>
+  <div class="slowmo">
+    <div class="slowmo__bar"></div>
+  </div>
+</div>
+ 
+<!-- Menu System -->
+<div class="menus">
+  <div class="menu menu--main">
+    <h1>CUBE GAME</h1>
+    <div class="trophy-badge" data-open-pass title="Open Brawl Pass">
+      <div class="tb-rank-icon"></div>
+      <div class="tb-info">
+        <div class="tb-league-name">Bronze I</div>
+        <div class="tb-trophy-count">🏆 0</div>
+        <div class="tb-progress-track"><div class="tb-progress-fill"></div></div>
+        <div class="tb-to-next"></div>
+      </div>
+    </div>
+    <button type="button" class="play-normal-btn">Normal mod</button>
+    <button type="button" class="play-casual-btn">Anti lose mod</button>
+    <div class="main-menu-links">
+      <a class="yt-link" href="https://www.youtube.com/@cubegame2026" target="_blank">
+        <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18"><path d="M23.5 6.2a3 3 0 0 0-2.1-2.1C19.5 3.5 12 3.5 12 3.5s-7.5 0-9.4.6A3 3 0 0 0 .5 6.2 31 31 0 0 0 0 12a31 31 0 0 0 .5 5.8 3 3 0 0 0 2.1 2.1c1.9.6 9.4.6 9.4.6s7.5 0 9.4-.6a3 3 0 0 0 2.1-2.1A31 31 0 0 0 24 12a31 31 0 0 0-.5-5.8zM9.75 15.5v-7l6.25 3.5-6.25 3.5z"/></svg>
+        CUBEGAME
+      </a>
+      <button type="button" class="shop-link-btn" id="openShopMenu">🛒 SHOP</button>
+      <button type="button" class="shop-link-btn" id="openPassMenu">🎫 BRAWL PASS</button>
+      <button type="button" class="shop-link-btn" onclick="window.location.href='./leaderboard.html'">🏆 LEADERBOARD</button>
+      <button type="button" class="shop-link-btn" onclick="window.location.href='./settings.html'">⚙️ SETTINGS</button>
+      <button type="button" class="shop-link-btn" onclick="window.location.href='./mobile.html'">📱 MOBILE</button>
+      <button type="button" class="multiplayer-server-btn" onclick="window.location.href='./lobby.html'">
+        <span class="mp-btn-icon">🌐</span>
+        <span class="mp-btn-text">MULTIPLAYER SERVER</span>
+        <span class="mp-btn-ping"></span>
+      </button>
+      <!-- Quick sound toggles -->
+      <div class="quick-sound">
+        <button type="button" class="quick-sound-btn" id="quickMusicBtn" title="Toggle Music">🎵 MUSIC</button>
+        <button type="button" class="quick-sound-btn" id="quickSfxBtn"   title="Toggle SFX">🔊 SFX</button>
+      </div>
+    </div>
+  </div>
+ 
+  <div class="menu menu--pause">
+    <h1>Paused</h1>
+    <button type="button" class="resume-btn">RESUME GAME</button>
+    <button type="button" class="menu-btn--pause">MAIN MENU</button>
+    <button type="button" class="shop-link-btn" id="openShopPause">🛒 SHOP</button>
+    <button type="button" class="shop-link-btn" id="openPassPause">🎫 BRAWL PASS</button>
+    <!-- Quick sound toggles in pause menu -->
+    <div class="quick-sound">
+      <button type="button" class="quick-sound-btn" id="pauseMusicBtn" title="Toggle Music">🎵 MUSIC</button>
+      <button type="button" class="quick-sound-btn" id="pauseSfxBtn"   title="Toggle SFX">🔊 SFX</button>
+    </div>
+  </div>
+  <div class="menu menu--score">
+    <h1>Game Over</h1>
+    <h2>Your Score:</h2>
+    <div class="final-score-lbl"></div>
+    <div class="high-score-lbl"></div>
+    <div id="trophyResult"></div>
+    <button type="button" class="play-again-btn">PLAY AGAIN</button>
+    <button type="button" class="menu-btn--score">MAIN MENU</button>
+    <button type="button" class="shop-link-btn" onclick="window.location.href='./leaderboard.html'">🏆 VIEW LEADERBOARD</button>
+  </div>
+</div>
+ 
+<!-- ===== SHOP MODAL ===== -->
+<div class="shop-overlay" id="shopOverlay">
+  <div class="shop-modal">
+    <div class="shop-header">
+      <h2 class="shop-title">⚡ CUBE SHOP</h2>
+      <div class="shop-coin-balance">🪙 <span id="shopCoinCount">0</span></div>
+      <button class="shop-close" id="closeShop">✕</button>
+    </div>
+ 
+    <!-- Tabs -->
+    <div class="shop-tabs">
+      <button class="shop-tab active" data-tab="coins">💰 BUY COINS</button>
+      <button class="shop-tab" data-tab="items">🎮 ITEMS</button>
+      <button class="shop-tab" data-tab="evolution">🌈 EVOLUTION</button>
+    </div>
+ 
+    <!-- Coins Tab -->
+    <div class="shop-content active" id="tab-coins">
+      <p class="shop-subtitle">Choose how you want to pay — PayPal or direct crypto to MetaMask!</p>
+ 
+      <!-- Payment method switcher -->
+      <div class="pay-method-switcher">
+        <button class="pay-method-btn active" data-method="paypal">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M20.1 7.4c.1-.5.1-1 0-1.5C19.5 3 17.2 2 14.4 2H6.5C6 2 5.5 2.4 5.4 2.9L2 19.7c-.1.4.2.8.6.8H7l1.2-7.5-.1.4c.1-.5.6-.9 1.1-.9h2.3c4.3 0 7.6-1.7 8.6-6.7v-.4z"/><path d="M20.1 7.4c-.9 4.9-4.3 6.7-8.6 6.7H9.2c-.5 0-1 .4-1.1.9L6.8 22.3c-.1.4.2.7.6.7h3.7c.5 0 .9-.3 1-.8v-.2l.8-4.9v-.3c.1-.4.5-.8 1-.8h.6c4 0 7.1-1.6 8-6.4.4-1.9.2-3.5-.4-4.2z"/></svg>
+          PayPal (USD)
+        </button>
+        <button class="pay-method-btn" data-method="metamask">
+          🦊 MetaMask (ETH)
+        </button>
+      </div>
+ 
+      <div class="coin-grid" id="dynamicCoinGrid">
+        <!-- built by shop.js buildCoinGrid() -->
+      </div>
+ 
+      <div class="paypal-note" id="paypalNote">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="#009cde"><path d="M20.1 7.4c.1-.5.1-1 0-1.5C19.5 3 17.2 2 14.4 2H6.5C6 2 5.5 2.4 5.4 2.9L2 19.7c-.1.4.2.8.6.8H7l1.2-7.5-.1.4c.1-.5.6-.9 1.1-.9h2.3c4.3 0 7.6-1.7 8.6-6.7v-.4z"/><path d="M20.1 7.4c-.9 4.9-4.3 6.7-8.6 6.7H9.2c-.5 0-1 .4-1.1.9L6.8 22.3c-.1.4.2.7.6.7h3.7c.5 0 .9-.3 1-.8v-.2l.8-4.9v-.3c.1-.4.5-.8 1-.8h.6c4 0 7.1-1.6 8-6.4.4-1.9.2-3.5-.4-4.2z"/></svg>
+        Secured by PayPal
+      </div>
+      <div class="paypal-note" id="metamaskNote" style="display:none">
+        🦊 ETH sent directly to creator's MetaMask wallet
+      </div>
+    </div>
+ 
+    <!-- Items Tab -->
+    <div class="shop-content" id="tab-items">
+      <p class="shop-subtitle">Unlock skins, trails, power-ups & badges with your coins!</p>
+      <div id="dynamicItemGrid">
+        <!-- built by shop.js buildItemGrid() -->
+      </div>
+    </div>
+ 
+    <!-- Evolution Tab -->
+    <div class="shop-content" id="tab-evolution">
+      <p class="shop-subtitle">As your score grows, the cubes transform — here's what to expect!</p>
+      <div class="evo-timeline">
+ 
+        <div class="evo-stage" data-stage="0">
+          <div class="evo-score">0</div>
+          <div class="evo-line">
+            <div class="evo-dot" style="background:#67d7f0"></div>
+          </div>
+          <div class="evo-info">
+            <div class="evo-name">Normal</div>
+            <div class="evo-colors">
+              <span class="evo-swatch" style="background:#67d7f0"></span>
+              <span class="evo-swatch" style="background:#a6e02c"></span>
+              <span class="evo-swatch" style="background:#fa2473"></span>
+              <span class="evo-swatch" style="background:#fe9522"></span>
+            </div>
+            <ul class="evo-changes">
+              <li>🎮 Standard cube colors</li>
+              <li>🔵 Cyan slash trail</li>
+              <li>No glow effect</li>
+            </ul>
+          </div>
+        </div>
+ 
+        <div class="evo-stage" data-stage="500">
+          <div class="evo-score">500</div>
+          <div class="evo-line">
+            <div class="evo-dot" style="background:#fe9522"></div>
+          </div>
+          <div class="evo-info">
+            <div class="evo-name" style="color:#fe9522">🔥 Heated</div>
+            <div class="evo-colors">
+              <span class="evo-swatch" style="background:#fe9522"></span>
+              <span class="evo-swatch" style="background:#fa2473"></span>
+              <span class="evo-swatch" style="background:#ffcc00"></span>
+              <span class="evo-swatch" style="background:#ff5500"></span>
+            </div>
+            <ul class="evo-changes">
+              <li>🟠 Warm orange & red cubes</li>
+              <li>🔶 Orange slash trail</li>
+              <li>✨ Warm glow appears</li>
+            </ul>
+          </div>
+        </div>
+ 
+        <div class="evo-stage" data-stage="1500">
+          <div class="evo-score">1,500</div>
+          <div class="evo-line">
+            <div class="evo-dot" style="background:#00ffff"></div>
+          </div>
+          <div class="evo-info">
+            <div class="evo-name" style="color:#00ffff">⚡ Electric</div>
+            <div class="evo-colors">
+              <span class="evo-swatch" style="background:#00ffff"></span>
+              <span class="evo-swatch" style="background:#67d7f0"></span>
+              <span class="evo-swatch" style="background:#00ccff"></span>
+              <span class="evo-swatch" style="background:#a6e02c"></span>
+            </div>
+            <ul class="evo-changes">
+              <li>🔵 Cyan lightning cubes</li>
+              <li>⚡ Electric blue trail</li>
+              <li>💡 Stronger glow + cubes grow slightly</li>
+            </ul>
+          </div>
+        </div>
+ 
+        <div class="evo-stage" data-stage="3000">
+          <div class="evo-score">3,000</div>
+          <div class="evo-line">
+            <div class="evo-dot" style="background:#ff2200"></div>
+          </div>
+          <div class="evo-info">
+            <div class="evo-name" style="color:#ff4400">🔥 Inferno</div>
+            <div class="evo-colors">
+              <span class="evo-swatch" style="background:#ff2200"></span>
+              <span class="evo-swatch" style="background:#ff7700"></span>
+              <span class="evo-swatch" style="background:#ffdd00"></span>
+              <span class="evo-swatch" style="background:#ff4444"></span>
+            </div>
+            <ul class="evo-changes">
+              <li>🔴 Fire-red burning cubes</li>
+              <li>🔥 Scorching orange trail</li>
+              <li>💥 Intense fire glow, cubes grow more</li>
+            </ul>
+          </div>
+        </div>
+ 
+        <div class="evo-stage" data-stage="6000">
+          <div class="evo-score">6,000</div>
+          <div class="evo-line">
+            <div class="evo-dot" style="background:#cc00ff"></div>
+          </div>
+          <div class="evo-info">
+            <div class="evo-name" style="color:#cc00ff">🌌 Void</div>
+            <div class="evo-colors">
+              <span class="evo-swatch" style="background:#8800ff"></span>
+              <span class="evo-swatch" style="background:#cc00ff"></span>
+              <span class="evo-swatch" style="background:#ff00cc"></span>
+              <span class="evo-swatch" style="background:#4400cc"></span>
+            </div>
+            <ul class="evo-changes">
+              <li>🟣 Deep purple & violet cubes</li>
+              <li>💜 Purple void trail</li>
+              <li>🌑 Dark matter glow, cubes grow even more</li>
+            </ul>
+          </div>
+        </div>
+ 
+        <div class="evo-stage evo-stage--final" data-stage="10000">
+          <div class="evo-score">10,000</div>
+          <div class="evo-line">
+            <div class="evo-dot evo-dot--rainbow"></div>
+          </div>
+          <div class="evo-info">
+            <div class="evo-name evo-name--rainbow">🌈 RAINBOW</div>
+            <div class="evo-colors">
+              <span class="evo-swatch" style="background:#ff0000"></span>
+              <span class="evo-swatch" style="background:#ffaa00"></span>
+              <span class="evo-swatch" style="background:#00ff88"></span>
+              <span class="evo-swatch" style="background:#00aaff"></span>
+              <span class="evo-swatch" style="background:#cc00ff"></span>
+            </div>
+            <ul class="evo-changes">
+              <li>🌈 Every face cycles the full spectrum</li>
+              <li>✨ Rainbow trail & sparks</li>
+              <li>🔆 Max glow, max size — pure chaos!</li>
+            </ul>
+          </div>
+        </div>
+ 
+      </div>
+    </div>
+ 
+    <div class="shop-footer">
+      <a href="https://www.youtube.com/@cubegame2026" target="_blank" class="yt-footer-link">
+        <svg viewBox="0 0 24 24" fill="#ff0000" width="16" height="16"><path d="M23.5 6.2a3 3 0 0 0-2.1-2.1C19.5 3.5 12 3.5 12 3.5s-7.5 0-9.4.6A3 3 0 0 0 .5 6.2 31 31 0 0 0 0 12a31 31 0 0 0 .5 5.8 3 3 0 0 0 2.1 2.1c1.9.6 9.4.6 9.4.6s7.5 0 9.4-.6a3 3 0 0 0 2.1-2.1A31 31 0 0 0 24 12a31 31 0 0 0-.5-5.8zM9.75 15.5v-7l6.25 3.5-6.25 3.5z"/></svg>
+        Watch CUBEGAME on YouTube
+      </a>
+    </div>
+  </div>
+</div>
+
+<!-- ===== BRAWL PASS MODAL ===== -->
+<div class="shop-overlay" id="passOverlay">
+  <div class="shop-modal">
+    <div class="shop-header">
+      <h2 class="shop-title">🎫 BRAWL PASS</h2>
+      <button class="shop-close" id="closePass">✕</button>
+    </div>
+
+    <div class="shop-content active" style="padding-top:16px;">
+
+      <div class="pass-xp-header">
+        <div class="pass-xp-header-top">
+          <span class="pxh-title">⭐ BRAWL PASS</span>
+          <span class="pxh-tier" id="passCurrentTier">Tier 0 / 70</span>
+        </div>
+        <div class="pass-xp-track-wrap"><div class="pxh-fill" id="passXpFill"></div></div>
+        <div class="pxh-label" id="passXpLabel">0 / 200 XP</div>
+      </div>
+
+      <div class="trophy-badge" data-open-pass style="cursor:default;margin-bottom:14px;">
+        <div class="tb-rank-icon"></div>
+        <div class="tb-info">
+          <div class="tb-league-name">Bronze I</div>
+          <div class="tb-trophy-count">🏆 0</div>
+          <div class="tb-progress-track"><div class="tb-progress-fill"></div></div>
+          <div class="tb-to-next"></div>
+        </div>
+      </div>
+
+      <div class="pass-premium-cta" id="passPremiumCta">
+        <div class="ppc-text">Unlock the <b>Brawl Pass</b> for exclusive skins, trails &amp; premium coins!</div>
+        <div class="pass-premium-cta__btns">
+          <button class="buy-btn pass-pay-paypal">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M20.1 7.4c.1-.5.1-1 0-1.5C19.5 3 17.2 2 14.4 2H6.5C6 2 5.5 2.4 5.4 2.9L2 19.7c-.1.4.2.8.6.8H7l1.2-7.5-.1.4c.1-.5.6-.9 1.1-.9h2.3c4.3 0 7.6-1.7 8.6-6.7v-.4z"/><path d="M20.1 7.4c-.9 4.9-4.3 6.7-8.6 6.7H9.2c-.5 0-1 .4-1.1.9L6.8 22.3c-.1.4.2.7.6.7h3.7c.5 0 .9-.3 1-.8v-.2l.8-4.9v-.3c.1-.4.5-.8 1-.8h.6c4 0 7.1-1.6 8-6.4.4-1.9.2-3.5-.4-4.2z"/></svg>
+            $4.99 PayPal
+          </button>
+          <button class="buy-btn pass-pay-metamask">🦊 0.0025 ETH</button>
+        </div>
+      </div>
+
+      <div class="pass-track-scroll">
+        <div class="pass-track" id="passTrack"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- PayPal Toast -->
+<div class="paypal-toast" id="paypalToast"></div>
+ 
+<!-- Session check — redirect to lang picker if no user found -->
+
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+  <script src="./firebase-auth.js"></script>
+  <script src="./profile-avatar.js"></script>
+  <script src="./transition.js"></script>
+<script src="./translate.js"></script>
+<script src="./cookie.js"></script>
+<script src="./script.js"></script>
+<script src="./sound.js"></script>
+<script src="./mobile.js"></script>
+<script src="./cube-evolution.js"></script>
+<script src="./mechanics.js"></script>
+<script src="./ads.js"></script>
+<script src="./shop.js"></script>
+<script src="./trophies.js"></script>
+<script src="./leaderboard.js"></script>
+<script src="./particles.js"></script>
+<script src="./items-ingame.js"></script>
+<script src="./audio-reactive.js"></script>
+<script src="./optimizer.js"></script>
+<script src="./mobile-aaa.js"></script>
+<script src="xp.js"></script>
+<script src="trophies.js"></script>
+
+<!-- ===== Progression System (Part 2) ===== -->
+<!-- math/config/events/data first — everything else depends on them -->
+<script src="progression/math3d.js"></script>
+<script src="progression/progression-math.js"></script>
+<script src="progression/progression-config.js"></script>
+<script src="progression/progression-events.js"></script>
+
+<script src="progression/data/xp-levels.js"></script>
+<script src="progression/data/trophy-milestones.js"></script>
+<script src="progression/data/level-milestones.js"></script>
+<script src="progression/data/reward-table.js"></script>
+<script src="progression/data/chest-table.js"></script>
+<script src="progression/data/worlds.js"></script>
+<script src="progression/data/difficulties.js"></script>
+<script src="progression/data/achievements.js"></script>
+<script src="progression/data/leagues.js"></script>
+<script src="progression/data/pass-track.js"></script>
+<script src="progression/data/missions.js"></script>
+
+<!-- core systems -->
+<script src="progression/save-system.js"></script>
+<script src="progression/xp-system.js"></script>
+<script src="progression/trophy-system.js"></script>
+<script src="progression/level-milestone-system.js"></script>
+<script src="progression/coin-system.js"></script>
+<script src="progression/reward-system.js"></script>
+<script src="progression/chest-loot.js"></script>
+<script src="progression/chest-animation.js"></script>
+<script src="progression/chest-system.js"></script>
+<script src="progression/world-system.js"></script>
+<script src="progression/difficulty-system.js"></script>
+<script src="progression/league-system.js"></script>
+<script src="progression/pass-system.js"></script>
+<script src="progression/mission-system.js"></script>
+<script src="progression/progression-manager.js"></script>
+
+<!-- visuals (canvas pseudo-3D layer, see three/progression-scene.js) -->
+<script src="progression/three/progression-scene.js"></script>
+<script src="progression/three/portals.js"></script>
+<script src="progression/three/world-portals.js"></script>
+<script src="progression/three/trophy-models.js"></script>
+<script src="progression/three/trophy-hall.js"></script>
+<script src="progression/three/xp-crystal.js"></script>
+<script src="progression/three/coin-particles.js"></script>
+<script src="progression/three/reward-room.js"></script>
+<script src="progression/three/reward-effects.js"></script>
+
+<!-- real raw-math 3D rooms: walk-in Trophy Hall / XP Crystal Chamber /
+     Reward Room / World Portal Room. engine3d.js must load first. -->
+<script src="progression/three/engine3d.js"></script>
+<script src="progression/three/scene-trophy-hall.js"></script>
+<script src="progression/three/scene-xp-chamber.js"></script>
+<script src="progression/three/scene-reward-room.js"></script>
+<script src="progression/three/scene-world-portals.js"></script>
+<script src="progression/three/scene-brawl-pass.js"></script>
+
+<!-- UI overlay -->
+<script src="progression/ui/reward-popup.js"></script>
+<script src="progression/ui/xp-ui.js"></script>
+<script src="progression/ui/trophy-ui.js"></script>
+<script src="progression/ui/coin-ui.js"></script>
+<script src="progression/ui/world-ui.js"></script>
+<script src="progression/ui/difficulty-ui.js"></script>
+<script src="progression/ui/chest-ui.js"></script>
+<script src="progression/ui/mission-ui.js"></script>
+<script src="progression/ui/progression-menu.js"></script>
+<script src="progression/ui/trophy-badge-sync.js"></script>
+
+<!-- bridges script.js's existing endGame() hooks into the progression systems -->
+<script src="progression/progression-game-bridge.js"></script>
+
+<!-- boot last -->
+<script src="progression/progression-init.js"></script>
+</body>
+</html>
