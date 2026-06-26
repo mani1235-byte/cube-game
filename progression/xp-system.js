@@ -21,6 +21,12 @@ window.XPSystem = (function () {
     if (after.level > before.level) {
       for (let lvl = before.level + 1; lvl <= after.level; lvl++) {
         Events.emit("xp:levelup", { level: lvl });
+        // Grant chest reward if this level has one
+        const levelDef = (window.XP_LEVELS || []).find(l => l.level === lvl);
+        if (levelDef && levelDef.chest && window.ChestSystem) {
+          window.ChestSystem.addToInventory(levelDef.chest);
+          Events.emit("chest:levelup_grant", { level: lvl, chestId: levelDef.chest });
+        }
       }
     }
     Events.emit("progression:dirty");
@@ -30,5 +36,5 @@ window.XPSystem = (function () {
     return window.ProgressionMath.levelForXP(state ? state.xp : 0);
   }
 
-  return { init, add, getProgress };
+  return { init, add, earn: add, getProgress };
 })();

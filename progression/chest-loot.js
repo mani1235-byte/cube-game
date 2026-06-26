@@ -21,7 +21,7 @@ window.ChestLoot = (function () {
       }
       case "chestUpgrade": {
         const upgraded = (window.CHEST_TABLE || {})[entry.to];
-        return { type: "chestUpgrade", chestId: entry.to, label: `Upgraded to ${upgraded ? upgraded.name : entry.to}!`, icon: "✨" };
+        return { type: "chestUpgrade", chestId: entry.to, label: `✨ Upgraded to ${upgraded ? upgraded.name : entry.to}!`, icon: "✨" };
       }
       default:
         return { type: "unknown", label: "???", icon: "❓" };

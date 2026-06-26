@@ -412,9 +412,10 @@
       coinsEl.textContent = "No coins lost or gained.";
     }
 
-    // Trophies & XP — same independent pattern as the main endGame() bridge
-    // (progression/progression-game-bridge.js): both fire off the match
-    // result, neither system talks to the other.
+    // Trophies, XP & Missions — same independent pattern as the main
+    // endGame() bridge (progression/progression-game-bridge.js): each
+    // fires off the match result, none of these systems talk to each
+    // other.
     try {
       if (window.CGTrophies) {
         const trophyInfo = window.CGTrophies.applyMatchResult(yourScore);
@@ -425,6 +426,12 @@
       if (window.CGXP) {
         const xpInfo = window.CGXP.applyMatchResult(yourScore);
         window.CGXP.renderMatchResult(xpInfo);
+      }
+    } catch (e) {}
+    try {
+      if (window.CGMissions) {
+        const missionInfo = window.CGMissions.applyMatchResult(yourScore);
+        window.CGMissions.renderMatchResult(missionInfo);
       }
     } catch (e) {}
 

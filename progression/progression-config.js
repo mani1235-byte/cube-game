@@ -21,9 +21,9 @@ window.ProgressionConfig = {
   },
 
   chests: {
-    // how many in-game minutes between a free chest spawning in the world
-    spawnIntervalMs: 4 * 60 * 1000,
-    maxQueued: 5
+    // Free chest every 90 seconds of play (was 4 minutes — too long)
+    spawnIntervalMs: 90 * 1000,
+    maxQueued: 8
   },
 
   ui: {

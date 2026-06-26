@@ -65,4 +65,23 @@
       // CGTrophies.
     }
   };
+
+  // ---- Missions (also independent, same match-end trigger) -------------
+  // This is what feeds mission-system.js: every match reports its score
+  // here, which updates lifetime mission stats (games played, best score,
+  // lifetime score) and grants any mission rewards that just became met.
+  window.CGMissions = {
+    applyMatchResult(score) {
+      const completedBefore = Object.keys(window.ProgressionManager.getState().missionsClaimed || {}).length;
+      window.MissionSystem.recordMatch(score);
+      const completedAfter = Object.keys(window.ProgressionManager.getState().missionsClaimed || {}).length;
+      return { newlyCompleted: completedAfter - completedBefore };
+    },
+
+    renderMatchResult() {
+      // Mission completion toasts already fire live via the
+      // "mission:completed" event (see ui/mission-ui.js) — nothing extra
+      // to render on the game-over screen. Kept as a no-op for symmetry.
+    }
+  };
 })();

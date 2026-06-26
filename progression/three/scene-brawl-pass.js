@@ -21,15 +21,39 @@ window.BrawlPassRoom3D = (function () {
     let api;
 
     function buildStatic() {
-      const faces = E.room(ROOM.w, ROOM.d, ROOM.h, { floor: "#24103d", wallA: "#5c2d91", wallB: "#7c4dbe", ceil: "#12081f" });
+      // 🎫 Brawl Pass — neon cyberpunk purple corridor
+      const faces = E.room(ROOM.w, ROOM.d, ROOM.h, {
+        floor: "#0d0018",   // near-black purple floor
+        wallA: "#150026",   // deep violet back/front
+        wallB: "#100020",   // side walls slightly darker purple
+        ceil:  "#070010"    // void-purple ceiling
+      });
+      // ── Neon floor center strip glow ──────────────────────────────────────
+      faces.push(...E.box(CENTER_X, 0.008, ROOM.d/2, 0.12, 0.01, ROOM.d - 0.4, "#cc00ff", { emissive: true, glow: "#dd44ff", alpha: 0.55 }));
+      // ── Side wall neon trim lines ─────────────────────────────────────────
+      [0.06, ROOM.w - 0.06].forEach(wx => {
+        faces.push(...E.box(wx, ROOM.h*0.25, ROOM.d/2, 0.05, ROOM.h*0.25, ROOM.d - 0.5, "#6600cc", { emissive: true, glow: "#aa00ff", alpha: 0.45 }));
+        faces.push(...E.box(wx, ROOM.h*0.75, ROOM.d/2, 0.05, ROOM.h*0.12, ROOM.d - 0.5, "#ff0099", { emissive: true, glow: "#ff44cc", alpha: 0.35 }));
+      });
+      // ── Ceiling chevron glow arches every 8 units ─────────────────────────
+      for (let z = 4; z < ROOM.d - 3; z += 8) {
+        faces.push(...E.box(CENTER_X, ROOM.h - 0.06, z, ROOM.w * 0.55, 0.07, 0.14, "#8800ff", { emissive: true, glow: "#cc44ff", alpha: 0.45 }));
+        faces.push(...E.box(CENTER_X, ROOM.h - 0.06, z, ROOM.w * 0.25, 0.07, 0.14, "#ff0088", { emissive: true, glow: "#ff44cc", alpha: 0.4 }));
+      }
+      // ── Floor edge pink lines ─────────────────────────────────────────────
+      [0.1, ROOM.w - 0.1].forEach(fx => {
+        faces.push(...E.box(fx, 0.01, ROOM.d/2, 0.06, 0.01, ROOM.d - 0.3, "#ff0077", { emissive: true, glow: "#ff44bb", alpha: 0.5 }));
+      });
+
       const solids = [];
       const interactives = [];
-
       track.forEach((t) => {
         const x = nodeX(t.tier), z = nodeZ(t.tier);
         const big = t.tier % 10 === 0;
         const half = big ? 0.42 : 0.3;
-        faces.push(...E.box(x, half, z, half, half, half, "#2a1d3a"));
+        const boxColor = big ? "#3a0a5a" : "#250840";
+        const glowColor = big ? "#cc44ff" : "#8822cc";
+        faces.push(...E.box(x, half, z, half, half, half, boxColor, { emissive: true, glow: glowColor, alpha: 0.7 }));
         solids.push({ x, z, r: half + 0.2 });
         interactives.push({ id: "tier:" + t.tier, pos: { x, y: half * 2 + 0.35, z }, hitRadiusPx: big ? 60 : 52, kind: "tier", t });
       });
@@ -128,7 +152,7 @@ window.BrawlPassRoom3D = (function () {
       hint: "WASD to walk · click a tier to inspect it",
       roomSize: ROOM,
       spawn: { x: CENTER_X, z: spawnZ, yaw: 0 },
-      voidColor: "#08050c",
+      voidColor: "#04000c",
       buildStatic,
       buildDynamic,
       onInteract

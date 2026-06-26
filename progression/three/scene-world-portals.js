@@ -24,7 +24,7 @@ window.WorldPortals3D = (function () {
       const p1 = { x: cx + Math.cos(a1) * r, y: cy + Math.sin(a1) * r, z: cz };
       const center = { x: cx, y: cy, z: cz };
       const hue = locked ? 0 : (baseHue + i * (360 / seg) + t * 50) % 360;
-      const color = locked ? "#102a5c" : `hsl(${hue},75%,60%)`;
+      const color = locked ? "#2a2a32" : `hsl(${hue},75%,60%)`;
       faces.push({ verts: [center, p0, p1], normal: { x: 0, y: 0, z: 1 }, color, emissive: !locked, doubleSided: true, alpha: alpha != null ? alpha : 1 });
     }
     return faces;
@@ -45,7 +45,32 @@ window.WorldPortals3D = (function () {
     let travelling = false;
 
     function buildStatic() {
-      const faces = E.room(ROOM.w, ROOM.d, ROOM.h, { floor: "#11142b", wallA: "#181c3c", wallB: "#1f2449", ceil: "#070815" });
+      // 🌍 World Portal Room — deep space nebula chamber
+      const faces = E.room(ROOM.w, ROOM.d, ROOM.h, {
+        floor: "#04060f",   // near-black starfield floor
+        wallA: "#070d20",   // deep space-blue back/front walls
+        wallB: "#060b1c",   // slightly cooler side walls
+        ceil:  "#020308"    // void ceiling
+      });
+      // ── Star-field floor dots ─────────────────────────────────────────────
+      for (let i = 0; i < 28; i++) {
+        const sx = 0.5 + ((i * 137.5) % (ROOM.w - 1));
+        const sz = 0.5 + ((i * 97.3) % (ROOM.d - 1));
+        const brightness = i % 3 === 0 ? "#c8e8ff" : i % 3 === 1 ? "#a0c4ff" : "#7b9cff";
+        faces.push(...E.box(sx, 0.005, sz, 0.04, 0.005, 0.04, brightness, { emissive: true, glow: "#aaccff", alpha: 0.8 }));
+      }
+      // ── Nebula ceiling glow clouds ────────────────────────────────────────
+      [[ROOM.w*0.25, ROOM.d*0.4],[ROOM.w*0.75, ROOM.d*0.6],[ROOM.w*0.5, ROOM.d*0.25]].forEach(([cx,cz], i) => {
+        const hue = [200, 260, 180][i];
+        faces.push(...E.box(cx, ROOM.h-0.08, cz, 2.2, 0.1, 1.8, `hsl(${hue},80%,35%)`, { emissive: true, glow: `hsl(${hue},100%,65%)`, alpha: 0.3 }));
+      });
+      // ── Glowing floor border in portal-blue ───────────────────────────────
+      faces.push(...E.box(ROOM.w/2, 0.008, ROOM.d/2, ROOM.w-0.15, 0.01, ROOM.d-0.15, "#1a3070", { emissive: true, glow: "#4466ff", alpha: 0.12 }));
+      // ── Wall accent lines ─────────────────────────────────────────────────
+      for (let z = 1.5; z < ROOM.d - 0.5; z += 2.5) {
+        faces.push(...E.box(0.05,       ROOM.h*0.5, z, 0.08, ROOM.h*0.5, 0.08, "#1a3880", { emissive: true, glow: "#3366ff", alpha: 0.45 }));
+        faces.push(...E.box(ROOM.w-0.05, ROOM.h*0.5, z, 0.08, ROOM.h*0.5, 0.08, "#1a3880", { emissive: true, glow: "#3366ff", alpha: 0.45 }));
+      }
       const interactives = [];
       // no solids here — portals are meant to be walked *through* to travel,
       // so they must never block the player from reaching their exact position
@@ -106,7 +131,7 @@ window.WorldPortals3D = (function () {
       hint: "WASD to walk · click a glowing portal to travel",
       roomSize: ROOM,
       spawn: { x: ROOM.w / 2, z: 1.2, yaw: 0 },
-      voidColor: "#05060a",
+      voidColor: "#01010a",
       buildStatic,
       buildDynamic,
       onInteract

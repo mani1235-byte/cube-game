@@ -1286,6 +1286,45 @@ function renderMenus() {
           highScoreLblNode.textContent = `${s} ${formatNumber(getHighScore())}`;
         });
       }
+      // Show hearts lost on game over screen
+      (function() {
+        let goHearts = document.getElementById('go-hearts-display');
+        if (!goHearts) {
+          goHearts = document.createElement('div');
+          goHearts.id = 'go-hearts-display';
+          goHearts.style.cssText = [
+            'font-size:2rem','margin:0.3em 0 0.8em','text-align:center',
+            'filter:drop-shadow(0 0 8px rgba(255,50,50,0.9))',
+            'animation:goHeartsPop 0.5s ease'
+          ].join(';');
+          // Insert before trophyResult or before play-again button
+          const anchor = document.getElementById('trophyResult') || menuScoreNode.querySelector('.play-again-btn');
+          if (anchor) menuScoreNode.insertBefore(goHearts, anchor);
+        }
+        // Build hearts display
+        let html = '';
+        for (let i = 0; i < MAX_HEARTS; i++) {
+          html += `<span style="opacity:${i < hearts ? 1 : 0.2}">${i < hearts ? '❤️' : '🖤'}</span> `;
+        }
+        if (hearts <= 0) html = '<span style="font-size:1.2rem;color:#ff4444;letter-spacing:0.1em">💔 NO HEARTS LEFT</span>';
+        goHearts.innerHTML = html;
+        if (!document.getElementById('goHeartStyle')) {
+          const s = document.createElement('style');
+          s.id = 'goHeartStyle';
+          s.textContent = '@keyframes goHeartsPop{from{transform:scale(0.5);opacity:0}to{transform:scale(1);opacity:1}}';
+          document.head.appendChild(s);
+        }
+        // Mode label
+        let modeLabel = document.getElementById('go-mode-label');
+        if (!modeLabel) {
+          modeLabel = document.createElement('div');
+          modeLabel.id = 'go-mode-label';
+          modeLabel.style.cssText = 'font-size:0.7rem;letter-spacing:0.15em;opacity:0.5;margin-bottom:0.5em;text-align:center';
+          menuScoreNode.querySelector('h1').insertAdjacentElement('afterend', modeLabel);
+        }
+        modeLabel.textContent = state.game.mode === GAME_MODE_RANKED ? '⚔️ NORMAL MODE' :
+                                state.game.mode === GAME_MODE_ANTI_LOSE ? '🛡️ ANTI-LOSE MODE' : 'CASUAL MODE';
+      })();
       showMenu(menuScoreNode);
       break;
   }
@@ -1520,6 +1559,15 @@ function setActiveMenu(menu) {
     resetAllTargets();
     if (sessionTimerEl) sessionTimerEl.style.display = "none";
   }
+  // Update room theme
+  if (menu === MENU_MAIN) {
+    updateRoomTheme('menu');
+  } else if (menu === MENU_SCORE) {
+    updateRoomTheme('gameover');
+  } else if (!menu) {
+    // entering game — theme already set by setGameMode
+    updateRoomTheme(state.game.mode);
+  }
   renderMenus();
   renderHearts();
 }
@@ -1546,8 +1594,8 @@ function renderHearts() {
     ].join(";");
     document.body.appendChild(el);
   }
-  // Only show in ranked (normal) mode
-  const show = state.game.mode === GAME_MODE_RANKED && isInGame();
+  // Show in all modes when in game
+  const show = isInGame();
   el.style.display = show ? "flex" : "none";
   el.innerHTML = "";
   for (let i = 0; i < MAX_HEARTS; i++) {
@@ -1563,7 +1611,7 @@ function loseHeart() {
   if (!isInGame()) return;
   hearts = Math.max(0, hearts - 1);
   renderHearts();
-  // Flash screen red
+  // Flash screen red + bomb room warning pulse
   const flash = document.createElement("div");
   flash.style.cssText = "position:fixed;inset:0;background:rgba(255,0,0,0.25);z-index:9998;pointer-events:none;animation:heartFlash 0.4s ease forwards";
   document.body.appendChild(flash);
@@ -1573,7 +1621,12 @@ function loseHeart() {
     s.textContent = "@keyframes heartFlash{from{opacity:1}to{opacity:0}}";
     document.head.appendChild(s);
   }
+  // Bomb warning: briefly override body border glow
+  document.body.classList.remove('bomb-warning');
+  void document.body.offsetWidth;
+  document.body.classList.add('bomb-warning');
   setTimeout(() => flash.remove(), 400);
+  setTimeout(() => document.body.classList.remove('bomb-warning'), 600);
   if (hearts <= 0) endGame();
 }
 
@@ -1603,8 +1656,27 @@ function incrementCubeCount(inc) {
 // GAME ACTIONS //
 //////////////////
 
+// ── Room / Hall Color Themes ─────────────────────────────────────────────────
+function updateRoomTheme(mode) {
+  document.body.classList.remove('room-menu','room-ranked','room-casual','room-gameover');
+  if (mode === 'gameover') {
+    document.body.classList.add('room-gameover');
+  } else if (mode === GAME_MODE_RANKED) {
+    document.body.classList.add('room-ranked');
+  } else if (mode === GAME_MODE_ANTI_LOSE || mode === GAME_MODE_CASUAL) {
+    document.body.classList.add('room-casual');
+  } else {
+    // main menu / default
+    document.body.classList.add('room-menu');
+  }
+}
+
+// Initialise to menu theme
+updateRoomTheme('menu');
+
 function setGameMode(mode) {
   state.game.mode = mode;
+  updateRoomTheme(mode);
 }
 
 function resetGame() {
@@ -1677,6 +1749,15 @@ function endGame() {
     if (window.CGXP) {
       const xpInfo = window.CGXP.applyMatchResult(state.game.score);
       window.CGXP.renderMatchResult(xpInfo);
+    }
+  } catch(e) {}
+  // Mission progress update (games played / best score / lifetime score —
+  // see progression-game-bridge.js). Chests now come from missions instead
+  // of the old passive spawn timer.
+  try {
+    if (window.CGMissions) {
+      const missionInfo = window.CGMissions.applyMatchResult(state.game.score);
+      window.CGMissions.renderMatchResult(missionInfo);
     }
   } catch(e) {}
   setActiveMenu(MENU_SCORE);
@@ -1904,7 +1985,7 @@ function tick(width, height, simTime, simSpeed, lag) {
                 sparkBurst(hitX, hitY, 12, sparkSpeed * 1.4);
                 targets.splice(i, 1);
                 returnTarget(target);
-                if (state.game.mode === GAME_MODE_RANKED) loseHeart();
+                if (state.game.mode === GAME_MODE_RANKED || state.game.mode === GAME_MODE_ANTI_LOSE || state.game.mode === GAME_MODE_CASUAL) loseHeart();
               } else {
                 incrementCubeCount(1);
                 triggerCombo();

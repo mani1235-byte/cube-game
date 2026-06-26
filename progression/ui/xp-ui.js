@@ -41,4 +41,7 @@
   window.ProgressionEvents.on("progression:ready", () => { build(); refresh(); });
   window.ProgressionEvents.on("xp:gained", refresh);
   window.ProgressionEvents.on("xp:levelup", ({ level }) => pulseLevelUp(level));
+  window.ProgressionEvents.on("level:milestone", (m) => {
+    if (window.RewardPopup) window.RewardPopup.show({ icon: "🎚️", label: `Milestone: Level ${m.level}!` });
+  });
 })();

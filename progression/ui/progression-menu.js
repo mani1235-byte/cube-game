@@ -26,6 +26,8 @@
   }
 
   function relocatePanels() {
+    // Mission panel is intentionally excluded here — it now lives in its own
+    // standalone toggle/menu built by mission-ui.js, to the right of this one.
     ["prog-world-panel", "prog-difficulty-panel", "prog-chest-panel"].forEach(id => {
       const el = document.getElementById(id);
       if (el && el.parentElement !== menuEl) menuEl.appendChild(el);

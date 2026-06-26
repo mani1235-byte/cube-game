@@ -1,11 +1,12 @@
 // chest-system.js
-// Owns chest inventory (chests the player has earned but not opened yet)
-// and world-spawn timing. Visual spawning/physics live in three/chest-model.js,
-// opening animation timing lives in chest-animation.js.
+// Owns chest inventory (chests the player has earned but not opened yet).
+// Chests are earned by completing missions (see mission-system.js), not by
+// a passive world-spawn timer — that auto-grant system has been removed.
+// Opening visuals live entirely in three/scene-reward-room.js; opening
+// timing lives in chest-animation.js.
 window.ChestSystem = (function () {
   const Events = window.ProgressionEvents;
   let state = null;
-  let spawnTimer = null;
 
   function init(sharedState) {
     state = sharedState;
@@ -54,21 +55,5 @@ window.ChestSystem = (function () {
     Events.emit("chest:opened", { chestId, loot });
   }
 
-  // World-spawn loop: every spawnIntervalMs, drop a free wooden chest into
-  // inventory as a passive trickle. Call startSpawnLoop() once at game start.
-  function startSpawnLoop() {
-    stopSpawnLoop();
-    const interval = window.ProgressionConfig.chests.spawnIntervalMs;
-    spawnTimer = setInterval(() => {
-      addToInventory("wooden");
-      Events.emit("chest:world_spawn", { chestId: "wooden" });
-    }, interval);
-  }
-
-  function stopSpawnLoop() {
-    if (spawnTimer) clearInterval(spawnTimer);
-    spawnTimer = null;
-  }
-
-  return { init, addToInventory, open, startSpawnLoop, stopSpawnLoop };
+  return { init, addToInventory, open };
 })();

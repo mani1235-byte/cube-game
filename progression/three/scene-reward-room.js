@@ -7,7 +7,22 @@ window.RewardRoom3D = (function () {
   const E = window.Engine3D;
   const ROOM = { w: 8, d: 9.5, h: 4.6 };
   const CHEST_POS = { x: ROOM.w / 2, z: ROOM.d - 2.2 };
-  const REWARD_ICON = { coins: "🪙", chest: "📦", trophyCase: "🏆", world: "🌍", difficulty: "🔥", buff: "⚡" };
+  const REWARD_ICON = {
+    coins:      "🪙",
+    chest:      "📦",
+    trophyCase: "🏆",
+    world:      "🌍",
+    difficulty: "🔥",
+    buff:       "⚡",
+    xp:         "✨",
+    multiplier: "💥",
+    heartRefill:"❤️",
+    skin:       "🎨",
+    trail:      "🌀",
+    powerup:    "🛡️",
+    title:      "👑",
+    emote:      "🎉",
+  };
 
   function open(chestId) {
     const def = window.CHEST_TABLE[chestId];
@@ -22,7 +37,24 @@ window.RewardRoom3D = (function () {
     let api;
 
     function buildStatic() {
-      const faces = E.room(ROOM.w, ROOM.d, ROOM.h, { floor: "#2b1248", wallA: "#4c1d7a", wallB: "#6b2fb0", ceil: "#12071f" });
+      // 📦 Reward Room — volcanic amber treasure vault
+      const faces = E.room(ROOM.w, ROOM.d, ROOM.h, {
+        floor: "#1a0900",   // charred obsidian floor
+        wallA: "#2a1200",   // deep amber-brown back walls
+        wallB: "#331800",   // side walls warm dark red-brown
+        ceil:  "#0d0400"    // near-black ceiling
+      });
+      // ── Lava-crack floor glow veins ───────────────────────────────────────
+      [[ROOM.w*0.25, ROOM.d*0.5],[ROOM.w*0.75, ROOM.d*0.4],[ROOM.w*0.5, ROOM.d*0.7]].forEach(([vx,vz]) => {
+        faces.push(...E.box(vx, 0.01, vz, 0.06, 0.02, 0.8, "#ff6600", { emissive: true, glow: "#ff9900", alpha: 0.7 }));
+        faces.push(...E.box(vx, 0.01, vz, 0.8, 0.02, 0.06, "#ff4400", { emissive: true, glow: "#ff8800", alpha: 0.6 }));
+      });
+      // ── Wall torch sconces ────────────────────────────────────────────────
+      [[0.3, ROOM.d*0.35],[0.3, ROOM.d*0.65],[ROOM.w-0.3, ROOM.d*0.35],[ROOM.w-0.3, ROOM.d*0.65]].forEach(([tx,tz]) => {
+        faces.push(...E.box(tx, ROOM.h*0.6, tz, 0.12, 0.25, 0.12, "#ff8800", { emissive: true, glow: "#ffcc00", alpha: 0.9 }));
+      });
+      // ── Glowing gold floor border ─────────────────────────────────────────
+      faces.push(...E.box(ROOM.w/2, 0.01, ROOM.d/2, ROOM.w-0.2, 0.02, ROOM.d-0.2, "#3a1f00", { emissive: true, glow: "#ff6600", alpha: 0.15 }));
       faces.push(...E.box(ROOM.w / 2, 0.32, CHEST_POS.z, 0.55, 0.32, 0.4, "#3a2a18"));
       const solids = [{ x: CHEST_POS.x, z: CHEST_POS.z, r: 0.7 }];
       const interactives = [{ id: "chest", pos: { x: CHEST_POS.x, y: 0.95, z: CHEST_POS.z }, hitRadiusPx: 58, kind: "chest" }];
@@ -125,7 +157,7 @@ window.RewardRoom3D = (function () {
       hint: "Click the chest to open it",
       roomSize: ROOM,
       spawn: { x: ROOM.w / 2, z: 1.3, yaw: 0 },
-      voidColor: "#0a0502",
+      voidColor: "#060200",
       buildStatic,
       buildDynamic,
       onInteract,

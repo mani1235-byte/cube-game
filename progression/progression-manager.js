@@ -16,17 +16,24 @@ window.ProgressionManager = (function () {
     // every subsystem shares the same state object reference
     window.XPSystem.init(state);
     window.TrophySystem.init(state);
+    window.LevelMilestoneSystem.init(state);
     window.CoinSystem.init(state);
     window.RewardSystem.init(state);
     window.ChestSystem.init(state);
     window.WorldSystem.init(state);
     window.DifficultySystem.init(state);
     window.PassSystem.init(state);
+    window.MissionSystem.init(state);
 
     wireAchievements();
     wireRecheck();
 
-    window.ChestSystem.startSpawnLoop();
+    // Chests no longer spawn passively on a timer — they're earned by
+    // completing missions (see mission-system.js / data/missions.js),
+    // same as XP/trophy/level rewards. ChestSystem.startSpawnLoop() is
+    // intentionally not called.
+    window.LevelMilestoneSystem.checkMilestones(); // claims level 1 immediately on first load
+    window.MissionSystem.checkMissions(); // claims any already-met missions on first load
     Events.emit("progression:ready", state);
   }
 
@@ -59,6 +66,7 @@ window.ProgressionManager = (function () {
       window.WorldSystem.recheck();
       window.DifficultySystem.recheck();
     });
+    Events.on("xp:levelup", () => window.LevelMilestoneSystem.checkMilestones());
   }
 
   // ---- public convenience API -------------------------------------------

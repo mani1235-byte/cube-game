@@ -69,6 +69,13 @@
   bottom: 14px; left: 14px; padding: 10px 16px; cursor: pointer;
   font-weight: 700; font-size: 13px;
 }
+/* ---- Standalone Missions toggle (sits to the right of #prog-menu-toggle,
+   exact left is set in JS once the Progress button's width is known) ---- */
+#prog-mission-toggle {
+  bottom: 14px; left: 150px; padding: 10px 16px; cursor: pointer;
+  font-weight: 700; font-size: 13px; z-index: 9001;
+}
+.prog-mission-menu { left: 150px; z-index: 9001; }
 .prog-menu {
   position: fixed; bottom: 60px; left: 14px; z-index: 9000;
   display: flex; flex-direction: column; gap: 10px;
@@ -100,6 +107,19 @@
   box-shadow: 0 0 10px var(--chest-glow, transparent);
 }
 .prog-empty { font-size: 12px; opacity: 0.6; }
+
+/* ---- Missions panel ---- */
+.prog-mission-panel { max-width: 280px; max-height: 50vh; overflow-y: auto; }
+.prog-mission-row { padding: 8px 0; border-top: 1px solid rgba(255,255,255,0.08); }
+.prog-mission-row:first-of-type { border-top: none; }
+.prog-mission-top { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; font-weight: 600; }
+.prog-mission-label { flex: 1; }
+.prog-mission-reward { opacity: 0.65; font-weight: 400; white-space: nowrap; }
+.prog-mission-track { height: 6px; border-radius: 4px; background: rgba(255,255,255,0.12); overflow: hidden; margin-top: 5px; }
+.prog-mission-fill { height: 100%; background: linear-gradient(90deg,#ffd060,#ff9a3c); border-radius: 4px; transition: width 0.4s ease-out; }
+.prog-mission-progress { font-size: 10px; opacity: 0.55; margin-top: 3px; }
+.prog-mission-done { opacity: 0.55; }
+.prog-mission-done .prog-mission-fill { background: linear-gradient(90deg,#1fcc7a,#40ffaa); }
 
 /* ---- Game-over screen trophy result (filled by CGTrophies.renderMatchResult) ---- */
 .prog-match-trophies {

@@ -22,13 +22,34 @@ window.TrophyHall3D = (function () {
   }
 
   function buildStatic() {
-    const faces = E.room(ROOM.w, ROOM.d, ROOM.h, { floor: "#0b1f3a", wallA: "#154c79", wallB: "#1f6aa5", ceil: "#06101f" });
+    // 🏛️ Trophy Hall — deep jade & burnished gold palace
+    const faces = E.room(ROOM.w, ROOM.d, ROOM.h, {
+      floor: "#091a12",   // deep obsidian-jade floor
+      wallA: "#0e2d1e",   // rich dark forest back/front walls
+      wallB: "#0c2419",   // side walls slightly darker
+      ceil:  "#040e09"    // nearly-black ceiling
+    });
+
+    // ── Glowing gold floor trim strips along side walls ──────────────────
+    const trimY = 0.01, trimH = 0.05, trimD = 0.18;
+    for (let z = 0.5; z < ROOM.d - 0.4; z += 1.6) {
+      faces.push(...E.box(0.09,          trimY, z, trimD, trimH, 0.12, "#c8922a", { emissive: true, glow: "#ffd060", alpha: 0.9 }));
+      faces.push(...E.box(ROOM.w - 0.09, trimY, z, trimD, trimH, 0.12, "#c8922a", { emissive: true, glow: "#ffd060", alpha: 0.9 }));
+    }
+    // ── Ceiling corner glow pillars ───────────────────────────────────────
+    const pillarColor = "#14503a", pillarGlow = "#1fcc7a";
+    [[0.5, 2.5],[ROOM.w-0.5, 2.5],[0.5, ROOM.d-2.5],[ROOM.w-0.5, ROOM.d-2.5]].forEach(([px, pz]) => {
+      faces.push(...E.box(px, ROOM.h/2, pz, 0.18, ROOM.h/2, 0.18, pillarColor, { emissive: true, glow: pillarGlow, alpha: 0.55 }));
+    });
+    // ── Emerald ceiling glow band ─────────────────────────────────────────
+    faces.push(...E.box(ROOM.w/2, ROOM.h - 0.04, ROOM.d/2, ROOM.w * 0.6, 0.06, ROOM.d * 0.5, "#0f6644", { emissive: true, glow: "#1fff99", alpha: 0.35 }));
     const solids = [];
     const interactives = [];
 
     milestoneNodes().forEach((node) => {
-      faces.push(...E.box(node.x, 0.4, node.z, 0.5, 0.4, 0.5, "#1e3d34"));
-      faces.push(...E.box(node.x, 0.84, node.z, 0.34, 0.06, 0.34, "#caa14a"));
+      // glowing gold pedestal
+      faces.push(...E.box(node.x, 0.4, node.z, 0.5, 0.4, 0.5, "#1e3d34", { emissive: true, glow: "#1fcc7a", alpha: 0.5 }));
+      faces.push(...E.box(node.x, 0.84, node.z, 0.34, 0.06, 0.34, "#caa14a", { emissive: true, glow: "#ffd060", alpha: 0.9 }));
       solids.push({ x: node.x, z: node.z, r: 0.62 });
       interactives.push({ id: "ms:" + node.m.id, pos: { x: node.x, y: 1.35, z: node.z }, hitRadiusPx: 56, kind: "milestone", node });
     });
@@ -38,7 +59,9 @@ window.TrophyHall3D = (function () {
     achievements.forEach((a, i) => {
       const side = i % 2 === 0 ? leftX : rightX;
       const z = 2.6 + Math.floor(i / 2) * 2.6;
-      faces.push(...E.box(side, 0.32, z, 0.42, 0.32, 0.42, "#1e3d34"));
+      // glowing teal achievement stand
+      faces.push(...E.box(side, 0.32, z, 0.42, 0.32, 0.42, "#0d3828", { emissive: true, glow: "#18cc88", alpha: 0.5 }));
+      faces.push(...E.box(side, 0.65, z, 0.3, 0.04, 0.3, "#20bb80", { emissive: true, glow: "#40ffaa", alpha: 0.85 }));
       solids.push({ x: side, z, r: 0.6 });
       interactives.push({ id: "ach:" + a.id, pos: { x: side, y: 1.25, z }, hitRadiusPx: 50, kind: "achievement", achievement: a });
     });
@@ -142,7 +165,7 @@ window.TrophyHall3D = (function () {
       hint: "WASD/drag to look · click any trophy to see what it rewards",
       roomSize: ROOM,
       spawn: { x: ROOM.w / 2, z: 1.4, yaw: 0 },
-      voidColor: "#040d0a",
+      voidColor: "#020a05",
       buildStatic,
       buildDynamic,
       onInteract
