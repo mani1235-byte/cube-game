@@ -1,0 +1,57 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── Users: only owner can read/write ─────────────────────────
+    match /users/{userId} {
+      allow read:   if request.auth != null && request.auth.uid == userId;
+      allow create: if request.auth != null && request.auth.uid == userId
+                    && validUserCreate(request.resource.data);
+      allow update: if request.auth != null && request.auth.uid == userId
+                    && validUserUpdate(request.resource.data, resource.data);
+      allow delete: if false; // never allow client-side delete
+    }
+
+    // ── Leaderboard: read-only for authenticated users ────────────
+    match /leaderboard/{entry} {
+      allow read:  if request.auth != null;
+      allow write: if false; // server-side only via Admin SDK
+    }
+
+    // ── Scores: server-side only ──────────────────────────────────
+    match /scores/{scoreId} {
+      allow read:  if request.auth != null;
+      allow write: if false; // server writes via Admin SDK
+    }
+
+    // ── Block everything else ─────────────────────────────────────
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // ── Validation functions ──────────────────────────────────────
+    function validUserCreate(data) {
+      return data.keys().hasAll(['username', 'email', 'createdAt'])
+        && data.username is string && data.username.size() <= 24
+        && data.email    is string
+        && data.createdAt is timestamp
+        // Prevent inflated starting values
+        && (!('coins'    in data) || data.coins    == 0)
+        && (!('trophies' in data) || data.trophies == 0)
+        && (!('rank'     in data) || data.rank     == 'bronze');
+    }
+
+    function validUserUpdate(newData, oldData) {
+      // Clients cannot change coins, trophies, rank, inventory — server only
+      return newData.coins    == oldData.coins
+          && newData.trophies == oldData.trophies
+          && newData.rank     == oldData.rank
+          && newData.inventory == oldData.inventory
+          // Only allow updating display preferences
+          && newData.keys().hasOnly([
+               'username', 'photoURL', 'settings', 'lastSeen',
+               'coins', 'trophies', 'rank', 'inventory' // present but locked
+             ]);
+    }
+  }
+}
