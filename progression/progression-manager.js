@@ -24,6 +24,7 @@ window.ProgressionManager = (function () {
     window.DifficultySystem.init(state);
     window.PassSystem.init(state);
     window.MissionSystem.init(state);
+    window.WeeklyMissionSystem.init(state);
 
     wireAchievements();
     wireRecheck();
@@ -34,6 +35,8 @@ window.ProgressionManager = (function () {
     // intentionally not called.
     window.LevelMilestoneSystem.checkMilestones(); // claims level 1 immediately on first load
     window.MissionSystem.checkMissions(); // claims any already-met missions on first load
+    window.WeeklyMissionSystem.ensureCurrentWeek(); // rolls a fresh weekly set if the stored one is from a past week
+    window.WeeklyMissionSystem.checkMissions();
     Events.emit("progression:ready", state);
   }
 

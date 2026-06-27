@@ -18,7 +18,9 @@
         ? inv.map((id, i) => {
             const def = window.CHEST_TABLE[id];
             return `<button class="prog-chest-icon" data-idx="${i}" data-chest="${id}"
-                      style="--chest-color:${def.color};--chest-glow:${def.glow}" title="${def.name}">📦</button>`;
+                      style="--chest-color:${def.color};--chest-glow:${def.glow}" title="${def.name}">
+                      <img src="${def.image}" alt="${def.name}" class="prog-chest-img" />
+                    </button>`;
           }).join("")
         : `<span class="prog-empty">No chests yet — keep playing!</span>`) +
       `</div>`;

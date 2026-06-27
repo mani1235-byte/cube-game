@@ -74,6 +74,7 @@
     applyMatchResult(score) {
       const completedBefore = Object.keys(window.ProgressionManager.getState().missionsClaimed || {}).length;
       window.MissionSystem.recordMatch(score);
+      window.WeeklyMissionSystem.recordMatch(score);
       const completedAfter = Object.keys(window.ProgressionManager.getState().missionsClaimed || {}).length;
       return { newlyCompleted: completedAfter - completedBefore };
     },

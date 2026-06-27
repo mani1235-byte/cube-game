@@ -64,18 +64,11 @@
 .prog-reward-toast-out { opacity: 0; transform: translateY(-12px) scale(0.9); }
 .prog-reward-icon { font-size: 18px; }
 
-/* ---- Menu toggle + slide-out panel ---- */
+/* ---- Menu toggle + slide-out panel (Progress / World / Difficulty / Chest) ---- */
 #prog-menu-toggle {
   bottom: 14px; left: 14px; padding: 10px 16px; cursor: pointer;
   font-weight: 700; font-size: 13px;
 }
-/* ---- Standalone Missions toggle (sits to the right of #prog-menu-toggle,
-   exact left is set in JS once the Progress button's width is known) ---- */
-#prog-mission-toggle {
-  bottom: 14px; left: 150px; padding: 10px 16px; cursor: pointer;
-  font-weight: 700; font-size: 13px; z-index: 9001;
-}
-.prog-mission-menu { left: 150px; z-index: 9001; }
 .prog-menu {
   position: fixed; bottom: 60px; left: 14px; z-index: 9000;
   display: flex; flex-direction: column; gap: 10px;
@@ -100,26 +93,79 @@
 .prog-world-btn.prog-active, .prog-difficulty-btn.prog-active { background: rgba(255,255,255,0.18); }
 .prog-locked { opacity: 0.45; cursor: not-allowed; }
 
+/* ---- Standalone Missions toggle (sits to the right of #prog-menu-toggle,
+   exact left is set in JS once the Progress button's width is known) ---- */
+#prog-mission-toggle {
+  bottom: 14px; left: 150px; padding: 10px 16px; cursor: pointer;
+  font-weight: 700; font-size: 13px; z-index: 9001;
+}
+
+/* ---- Missions: full-screen page (Brawl-Stars-style), not a small panel ---- */
+.prog-mission-page {
+  position: fixed; inset: 0; z-index: 9800;
+  background: rgba(8, 9, 16, 0.96);
+  color: #fff; display: flex; flex-direction: column;
+  transition: opacity 0.2s ease;
+}
+.prog-mission-page-closed { opacity: 0; pointer-events: none; visibility: hidden; }
+.prog-mission-page-open { opacity: 1; pointer-events: auto; visibility: visible; }
+.prog-mission-page-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 16px 20px; border-bottom: 1px solid rgba(255,255,255,0.12);
+  flex: 0 0 auto;
+}
+.prog-mission-page-title { font-size: 20px; font-weight: 800; }
+.prog-mission-page-close {
+  background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.18);
+  color: #fff; border-radius: 8px; width: 36px; height: 36px; font-size: 16px;
+  cursor: pointer;
+}
+.prog-mission-page-content { flex: 1 1 auto; overflow-y: auto; padding: 20px; }
+
+.prog-mission-section-title {
+  font-size: 15px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em;
+  margin: 4px 0 14px; display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;
+}
+.prog-weekly-countdown { font-size: 11px; font-weight: 500; text-transform: none; letter-spacing: normal; opacity: 0.6; }
+
+.prog-mission-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 14px; margin-bottom: 30px;
+}
+.prog-mission-card {
+  position: relative; background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.12); border-radius: 12px;
+  padding: 16px 14px; display: flex; flex-direction: column; align-items: center;
+  text-align: center; gap: 6px;
+}
+.prog-mission-card-img { width: 64px; height: 64px; object-fit: contain; margin-bottom: 4px; }
+.prog-mission-card-icon { font-size: 44px; line-height: 1; margin-bottom: 4px; }
+.prog-mission-card-label { font-size: 13px; font-weight: 700; }
+.prog-mission-card-reward { font-size: 11px; opacity: 0.65; }
+.prog-mission-card-badge {
+  position: absolute; top: 8px; right: 8px; font-size: 16px;
+}
+.prog-mission-card-done { opacity: 0.55; }
+.prog-mission-card-done .prog-mission-fill { background: linear-gradient(90deg,#1fcc7a,#40ffaa); }
+
+.prog-mission-track {
+  width: 100%; height: 6px; border-radius: 4px; background: rgba(255,255,255,0.12);
+  overflow: hidden; margin-top: 6px;
+}
+.prog-mission-fill { height: 100%; background: linear-gradient(90deg,#ffd060,#ff9a3c); border-radius: 4px; transition: width 0.4s ease-out; }
+.prog-mission-progress { font-size: 10px; opacity: 0.6; margin-top: 2px; }
+
 .prog-chest-row { display: flex; flex-wrap: wrap; gap: 8px; }
 .prog-chest-icon {
-  width: 42px; height: 42px; border-radius: 8px; font-size: 20px; cursor: pointer;
+  width: 48px; height: 48px; border-radius: 8px; font-size: 20px; cursor: pointer;
   background: var(--chest-color, #8b5a2b); border: 1px solid var(--chest-glow, #c98a4b);
   box-shadow: 0 0 10px var(--chest-glow, transparent);
+  display: flex; align-items: center; justify-content: center; padding: 4px;
+  transition: transform 0.15s ease;
 }
+.prog-chest-icon:hover { transform: scale(1.08); }
+.prog-chest-img { width: 100%; height: 100%; object-fit: contain; pointer-events: none; }
 .prog-empty { font-size: 12px; opacity: 0.6; }
-
-/* ---- Missions panel ---- */
-.prog-mission-panel { max-width: 280px; max-height: 50vh; overflow-y: auto; }
-.prog-mission-row { padding: 8px 0; border-top: 1px solid rgba(255,255,255,0.08); }
-.prog-mission-row:first-of-type { border-top: none; }
-.prog-mission-top { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; font-weight: 600; }
-.prog-mission-label { flex: 1; }
-.prog-mission-reward { opacity: 0.65; font-weight: 400; white-space: nowrap; }
-.prog-mission-track { height: 6px; border-radius: 4px; background: rgba(255,255,255,0.12); overflow: hidden; margin-top: 5px; }
-.prog-mission-fill { height: 100%; background: linear-gradient(90deg,#ffd060,#ff9a3c); border-radius: 4px; transition: width 0.4s ease-out; }
-.prog-mission-progress { font-size: 10px; opacity: 0.55; margin-top: 3px; }
-.prog-mission-done { opacity: 0.55; }
-.prog-mission-done .prog-mission-fill { background: linear-gradient(90deg,#1fcc7a,#40ffaa); }
 
 /* ---- Game-over screen trophy result (filled by CGTrophies.renderMatchResult) ---- */
 .prog-match-trophies {

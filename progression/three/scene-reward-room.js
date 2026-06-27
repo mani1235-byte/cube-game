@@ -7,6 +7,17 @@ window.RewardRoom3D = (function () {
   const E = window.Engine3D;
   const ROOM = { w: 8, d: 9.5, h: 4.6 };
   const CHEST_POS = { x: ROOM.w / 2, z: ROOM.d - 2.2 };
+  const CHEST_IMAGES = {};
+  function getChestImage(chestId) {
+    const def = window.CHEST_TABLE[chestId];
+    if (!def || !def.image) return null;
+    if (!CHEST_IMAGES[chestId]) {
+      const img = new Image();
+      img.src = def.image;
+      CHEST_IMAGES[chestId] = img;
+    }
+    return CHEST_IMAGES[chestId];
+  }
   const REWARD_ICON = {
     coins:      "🪙",
     chest:      "📦",
@@ -88,12 +99,32 @@ window.RewardRoom3D = (function () {
       const faces = [];
       const sprites = [];
 
-      // chest body, shaking while opening
+      // chest visual, shaking while opening
       const shakeX = phase === "opening" ? Math.sin(t * 30) * 0.04 : 0;
-      const lit = phase === "closed" ? def.color : def.glow;
-      faces.push(...E.box(ROOM.w / 2 + shakeX, 0.62, CHEST_POS.z, 0.5, 0.3, 0.36, lit, phase !== "closed" ? { emissive: true, glow: def.glow } : {}));
-      if (phase === "closed" || phase === "opening") {
-        faces.push(...E.box(ROOM.w / 2 + shakeX, 0.98, CHEST_POS.z, 0.36, 0.08, 0.3, def.glow, phase === "opening" ? { emissive: true, glow: def.glow } : {}));
+      const chestImg = getChestImage(chestId);
+      if ((phase === "closed" || phase === "opening") && chestImg) {
+        // Real chest artwork — shown before/while opening so the player
+        // sees exactly which chest (wooden/silver/gold/crystal/legendary) it is.
+        sprites.push({
+          pos: { x: CHEST_POS.x + shakeX, y: 0.85, z: CHEST_POS.z },
+          draw(ctx, sx, sy, scale) {
+            if (!chestImg.complete || !chestImg.naturalWidth) return;
+            const size = 150 * scale;
+            const ratio = chestImg.naturalHeight / chestImg.naturalWidth || 1;
+            ctx.save();
+            ctx.shadowColor = def.glow;
+            ctx.shadowBlur = (phase === "opening" ? 30 : 16) * scale;
+            ctx.drawImage(chestImg, sx - size / 2, sy - (size * ratio) / 2, size, size * ratio);
+            ctx.restore();
+          }
+        });
+      } else {
+        // Fallback if no artwork is available for this chest
+        const lit = phase === "closed" ? def.color : def.glow;
+        faces.push(...E.box(ROOM.w / 2 + shakeX, 0.62, CHEST_POS.z, 0.5, 0.3, 0.36, lit, phase !== "closed" ? { emissive: true, glow: def.glow } : {}));
+        if (phase === "closed" || phase === "opening") {
+          faces.push(...E.box(ROOM.w / 2 + shakeX, 0.98, CHEST_POS.z, 0.36, 0.08, 0.3, def.glow, phase === "opening" ? { emissive: true, glow: def.glow } : {}));
+        }
       }
 
       if (phase === "revealed" || phase === "collected") {

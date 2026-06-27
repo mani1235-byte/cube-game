@@ -4,6 +4,7 @@ window.CHEST_TABLE = {
   wooden: {
     id: "wooden", name: "Wooden Chest", rarity: 1,
     color: "#8b5a2b", glow: "#c98a4b",
+    image: "progression/assets/images/wooden chest.png",
     modelPath: "progression/assets/models/chests/wooden.glb",
     openTimeMs: 1200,
     loot: [
@@ -20,6 +21,7 @@ window.CHEST_TABLE = {
   silver: {
     id: "silver", name: "Silver Chest", rarity: 2,
     color: "#b9c2cc", glow: "#e3eaf2",
+    image: "progression/assets/images/silver chest.png",
     modelPath: "progression/assets/models/chests/silver.glb",
     openTimeMs: 1600,
     loot: [
@@ -39,6 +41,7 @@ window.CHEST_TABLE = {
   gold: {
     id: "gold", name: "Gold Chest", rarity: 3,
     color: "#ffd24a", glow: "#fff3b0",
+    image: "progression/assets/images/golden chest.png",
     modelPath: "progression/assets/models/chests/gold.glb",
     openTimeMs: 2000,
     loot: [
@@ -61,6 +64,7 @@ window.CHEST_TABLE = {
   crystal: {
     id: "crystal", name: "Crystal Chest", rarity: 4,
     color: "#7ad8ff", glow: "#d8f6ff",
+    image: "progression/assets/images/crystal chest.png",
     modelPath: "progression/assets/models/chests/crystal.glb",
     openTimeMs: 2400,
     loot: [
@@ -84,6 +88,7 @@ window.CHEST_TABLE = {
   legendary: {
     id: "legendary", name: "Legendary Chest", rarity: 5,
     color: "#ff5fd1", glow: "#ffe0fa",
+    image: "progression/assets/images/legendray chest.png",
     modelPath: "progression/assets/models/chests/legendary.glb",
     openTimeMs: 3000,
     loot: [

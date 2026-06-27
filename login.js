@@ -214,7 +214,7 @@ function checkAlreadyLoggedIn() {
 // ── Init ───────────────────────────────────────────────────────────────────
 spawnBgCubes();
 // Uncomment the line below to auto-skip login if already logged in:
-// checkAlreadyLoggedIn();
+checkAlreadyLoggedIn();
 
 // Enter key support
 document.addEventListener("keydown", e => {
