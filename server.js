@@ -8,6 +8,7 @@ const http     = require('http');
 const { Server } = require('socket.io');
 const path     = require('path');
 const crypto   = require('crypto');
+const admin    = require('firebase-admin');
 
 const app    = express();
 const server = http.createServer(app);
@@ -23,6 +24,27 @@ const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS
       'http://localhost:3000',
       'http://127.0.0.1:3000',
     ];
+
+// ─── Firebase Admin SDK (leaderboard backend) ─────────────────────────────────
+// FIREBASE_SERVICE_ACCOUNT_KEY = the full JSON from Firebase Console →
+// Project Settings → Service Accounts → Generate new private key, pasted as
+// a single-line env var. Never commit the key file itself.
+let db = null; // stays null (leaderboard routes return 503) until this succeeds
+(function initFirebaseAdmin() {
+  const raw = process.env.FIREBASE_SERVICE_ACCOUNT_KEY;
+  if (!raw) {
+    console.warn('⚠️  FIREBASE_SERVICE_ACCOUNT_KEY not set — /api/leaderboard and /api/score are disabled.');
+    return;
+  }
+  try {
+    const serviceAccount = JSON.parse(raw);
+    admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
+    db = admin.firestore();
+    console.log('🔥 Firebase Admin SDK initialized — leaderboard backend live.');
+  } catch (e) {
+    console.error('❌ Failed to initialize Firebase Admin SDK:', e.message);
+  }
+})();
 
 // ─── Security: Helmet headers ─────────────────────────────────────────────────
 // Manually set headers without requiring the helmet package
@@ -705,6 +727,170 @@ io.on('connection', (socket) => {
 // ─── Static files ─────────────────────────────────────────────────────────────
 app.use(express.static(__dirname, { index: false }));
 app.get('/', (_, res) => res.sendFile(path.join(__dirname, 'intro.html')));
+
+// ─── Leaderboard — server-authoritative, Firestore-backed ────────────────────
+// Replaces the old client-only localStorage board. Every player reads/writes
+// through these two routes; raw Firestore access from the browser stays
+// locked down by firestore.rules exactly as it already was.
+const RANK_CHEST_IDS = { 1: 'legendary', 2: 'crystal', 3: 'gold', 4: 'silver', 5: 'wooden' };
+const SEASON_DAY_MS  = 24 * 60 * 60 * 1000;
+const MAX_LEADERBOARD_ROWS = 100; // shown/searchable on the page
+const SEASON_LENGTH_OPTIONS = [   // mostly 3-4 days, "sometimes" 2
+  { days: 2, weight: 1 },
+  { days: 3, weight: 2 },
+  { days: 4, weight: 2 },
+];
+
+function pickSeasonDurationMs() {
+  const total = SEASON_LENGTH_OPTIONS.reduce((s, o) => s + o.weight, 0);
+  let r = Math.random() * total;
+  for (const o of SEASON_LENGTH_OPTIONS) {
+    if (r < o.weight) return o.days * SEASON_DAY_MS;
+    r -= o.weight;
+  }
+  return SEASON_LENGTH_OPTIONS[SEASON_LENGTH_OPTIONS.length - 1].days * SEASON_DAY_MS;
+}
+
+function isValidCount(n) {
+  return typeof n === 'number' && isFinite(n) && n >= 0 && n < 1_000_000;
+}
+
+// Ensures a season doc exists and rolls it over if its timer has run out.
+// The transaction on the season doc itself is what prevents two simultaneous
+// requests from both finalizing/double-granting chests — whichever commits
+// first "wins"; the other re-reads and sees the new season already started.
+async function ensureSeason() {
+  const seasonRef = db.collection('leaderboard_meta').doc('season');
+  let justEnded = null;
+  let season    = null;
+
+  await db.runTransaction(async (tx) => {
+    const snap = await tx.get(seasonRef);
+    if (!snap.exists) {
+      season = { index: 0, startTime: Date.now(), durationMs: pickSeasonDurationMs() };
+      tx.set(seasonRef, season);
+      return;
+    }
+    const current = snap.data();
+    if (Date.now() < current.startTime + current.durationMs) {
+      season = current;
+      return;
+    }
+    justEnded = current;
+    season = { index: current.index + 1, startTime: Date.now(), durationMs: pickSeasonDurationMs() };
+    tx.set(seasonRef, season);
+  });
+
+  if (justEnded) await finalizeSeason(justEnded);
+  return season;
+}
+
+// Locks in the top 5 from the season that just ended, archives them, and
+// wipes the board for the fresh season. Only runs once per season — for
+// whichever request won the rollover race in ensureSeason() above.
+async function finalizeSeason(endedSeason) {
+  const topSnap = await db.collection('leaderboard').orderBy('score', 'desc').limit(5).get();
+  const top5 = topSnap.docs.map((doc, i) => {
+    const d = doc.data();
+    return { rank: i + 1, username: d.username, score: d.score, chestId: RANK_CHEST_IDS[i + 1] };
+  });
+
+  await db.collection('leaderboard_meta').doc('lastSeason').set({
+    index: endedSeason.index, endedAt: Date.now(), top5,
+  });
+
+  // Wipe the board (chunked — Firestore batches cap at 500 ops).
+  const allDocs = await db.collection('leaderboard').get();
+  for (let i = 0; i < allDocs.docs.length; i += 400) {
+    const batch = db.batch();
+    allDocs.docs.slice(i, i + 400).forEach(doc => batch.delete(doc.ref));
+    await batch.commit();
+  }
+}
+
+// If `username` placed top-5 last season and hasn't claimed their chest yet,
+// marks the claim atomically (so two devices on the same account can't
+// double-claim) and returns the chest id. Otherwise returns null.
+async function claimSeasonChest(username, lastSeason) {
+  if (!lastSeason || !username) return null;
+  const key = username.toLowerCase();
+  const placed = lastSeason.top5.find(t => t.username.toLowerCase() === key);
+  if (!placed) return null;
+
+  const claimRef = db.collection('leaderboard_claims').doc(key);
+  let granted = null;
+  await db.runTransaction(async (tx) => {
+    const snap = await tx.get(claimRef);
+    if (snap.exists && snap.data().seasonIndex === lastSeason.index) return; // already claimed
+    tx.set(claimRef, { seasonIndex: lastSeason.index, claimedAt: Date.now() });
+    granted = placed.chestId;
+  });
+  return granted;
+}
+
+// GET /api/leaderboard?username=foo — board + season info + (maybe) a chest
+app.get('/api/leaderboard', async (req, res) => {
+  if (!db) return res.status(503).json({ error: 'leaderboard_unavailable' });
+  try {
+    const season = await ensureSeason();
+
+    const lastSnap   = await db.collection('leaderboard_meta').doc('lastSeason').get();
+    const lastSeason = lastSnap.exists ? lastSnap.data() : null;
+
+    const scoresSnap = await db.collection('leaderboard')
+      .orderBy('score', 'desc').limit(MAX_LEADERBOARD_ROWS).get();
+    const scores = scoresSnap.docs.map(d => d.data());
+
+    const username = typeof req.query.username === 'string' ? req.query.username.slice(0, 24) : null;
+    const earnedChestId = username ? await claimSeasonChest(username, lastSeason) : null;
+
+    res.json({ season, lastSeason, scores, earnedChestId });
+  } catch (e) {
+    console.error('[leaderboard] GET failed:', e);
+    res.status(500).json({ error: 'internal_error' });
+  }
+});
+
+// POST /api/score  { username, score, games, badgeIcon } — called after every match
+app.post('/api/score', async (req, res) => {
+  if (!db) return res.status(503).json({ error: 'leaderboard_unavailable' });
+  const { username, score, games, badgeIcon } = req.body || {};
+
+  if (!isValidName(username))  return res.status(400).json({ error: 'invalid_username' });
+  if (!isValidScore(score))    return res.status(400).json({ error: 'invalid_score' });
+
+  const key       = username.toLowerCase();
+  const ref       = db.collection('leaderboard').doc(key);
+  const safeBadge = badgeIcon ? sanitizeText(badgeIcon, 8) : null;
+
+  try {
+    await db.runTransaction(async (tx) => {
+      const snap = await tx.get(ref);
+      if (snap.exists) {
+        const d = snap.data();
+        tx.update(ref, {
+          username,                                 // keep latest display-case spelling
+          score:     Math.max(d.score, score),
+          games:     (d.games || 0) + 1,
+          lastSeen:  Date.now(),
+          badgeIcon: safeBadge,
+        });
+      } else {
+        tx.set(ref, {
+          username, score,
+          games:     isValidCount(games) ? games : 1,
+          lastSeen:  Date.now(),
+          avatar:    Math.floor(Math.random() * 10),
+          badgeIcon: safeBadge,
+        });
+      }
+    });
+    res.json({ ok: true });
+  } catch (e) {
+    console.error('[score] POST failed:', e);
+    res.status(500).json({ error: 'internal_error' });
+  }
+});
 
 // ─── Health / stats ───────────────────────────────────────────────────────────
 app.get('/health', (_, res) => res.json({
