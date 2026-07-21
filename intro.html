@@ -1,6 +1,19 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+<!-- Google AdSense -->
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-2256005749629612" crossorigin="anonymous"></script>
+<meta name="google-adsense-account" content="ca-pub-2256005749629612">
+<!-- Google tag (gtag.js) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-F09Z1V2L7J"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', 'G-F09Z1V2L7J');
+</script>
+
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>CUBE GAME — The Story</title>
@@ -9,9 +22,22 @@
   <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Share+Tech+Mono&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="./intro.css">
 <script>
-if (localStorage.getItem("introSeen") === "true") {
+(function() {
+  var seen   = localStorage.getItem("introSeen") === "true";
+  var user   = null;
+  try { user = JSON.parse(localStorage.getItem("cg_current_user")); } catch(e) {}
+  var signedIn = user && !user.isGuest && user.username;
+
+  if (!seen) {
+    // First ever visit — let intro play, nothing to do here
+  } else if (signedIn) {
+    // Returning + already logged in → straight to the game
+    window.location.replace("./index.html");
+  } else {
+    // Returning + not logged in → straight to login
     window.location.replace("./login.html");
-}
+  }
+})();
 </script>
 </head>
 <body>

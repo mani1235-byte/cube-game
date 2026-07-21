@@ -303,3 +303,107 @@ html, body {
   .hud__actions { padding-right: max(0.65em, env(safe-area-inset-right)) !important; }
   .hud__score   { padding-left:  max(0.65em, env(safe-area-inset-left))  !important; }
 }
+
+/* ══════════════════════════════════════
+   SAFE AREA — notches & home indicator
+══════════════════════════════════════ */
+.mobile-wrap {
+  padding-left:  max(16px, env(safe-area-inset-left,  16px));
+  padding-right: max(16px, env(safe-area-inset-right, 16px));
+  padding-bottom:max(40px, env(safe-area-inset-bottom,40px));
+}
+.mobile-header {
+  padding-top: max(16px, env(safe-area-inset-top, 16px));
+}
+
+/* ══════════════════════════════════════
+   TOUCH TARGETS — min 44×44px
+══════════════════════════════════════ */
+.control-row { min-height: 52px; }
+.toggle      { min-width: 48px; min-height: 32px; }
+.save-btn    { min-height: 52px; }
+
+/* Larger tap area without changing visual size */
+.toggle input {
+  position: absolute;
+  inset: -8px;
+  width: calc(100% + 16px);
+  height: calc(100% + 16px);
+  cursor: pointer;
+}
+
+/* ══════════════════════════════════════
+   GAME CANVAS — prevent stretching
+══════════════════════════════════════ */
+canvas {
+  image-rendering: pixelated;
+  touch-action: none; /* prevent scroll-while-playing */
+}
+
+/* ══════════════════════════════════════
+   ORIENTATION WARNING
+══════════════════════════════════════ */
+#orientWarning {
+  padding-top:    max(20px, env(safe-area-inset-top,    20px));
+  padding-bottom: max(20px, env(safe-area-inset-bottom, 20px));
+}
+
+/* ══════════════════════════════════════
+   RESPONSIVE — small phones (≤380px)
+══════════════════════════════════════ */
+@media (max-width: 380px) {
+  .how-grid { grid-template-columns: 1fr; }
+  .mobile-section-body { gap: 8px; }
+  .control-name  { font-size: 0.78rem; }
+  .control-desc  { font-size: 0.62rem; }
+}
+
+/* ══════════════════════════════════════
+   GAME HUD — mobile safe area
+══════════════════════════════════════ */
+@media (max-width: 768px) {
+  /* Push top HUD below notch */
+  .hud__score {
+    padding-top: max(8px, env(safe-area-inset-top, 8px)) !important;
+  }
+  /* Push right-side buttons away from edge */
+  .hud__actions {
+    padding-right: max(0.65em, env(safe-area-inset-right, 0.65em)) !important;
+  }
+  /* Keep bottom UI above home indicator */
+  .hud__bottom,
+  .pause-screen,
+  .game-over-screen {
+    padding-bottom: max(16px, env(safe-area-inset-bottom, 16px)) !important;
+  }
+
+  /* Prevent accidental scroll during gameplay */
+  body.game-active {
+    overflow: hidden;
+    position: fixed;
+    width: 100%;
+  }
+
+  /* Buttons: large enough to tap reliably */
+  .hud__actions button,
+  .pause-btn,
+  .shop-btn,
+  .sound-hud-btn,
+  .yt-btn {
+    min-width:  44px !important;
+    min-height: 44px !important;
+  }
+
+  /* Performance: disable particle blur on mobile */
+  .touch-trail { filter: none; }
+}
+
+/* ══════════════════════════════════════
+   PERFORMANCE — reduce motion if user prefers
+══════════════════════════════════════ */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

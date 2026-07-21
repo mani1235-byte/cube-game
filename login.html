@@ -1,11 +1,25 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+<!-- Google AdSense -->
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-2256005749629612" crossorigin="anonymous"></script>
+<meta name="google-adsense-account" content="ca-pub-2256005749629612">
+<!-- Google tag (gtag.js) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-F09Z1V2L7J"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', 'G-F09Z1V2L7J');
+</script>
+
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>CUBE GAME — Login</title>
   <link rel="icon" type="logo" href="cube_game_logo.png">
   <link rel="stylesheet" href="./login.css">
+  <!-- Google AdSense -->
 </head>
 <body>
  
@@ -63,8 +77,8 @@
       <div class="panel" id="panelLogin">
         <form id="loginForm" action="#" onsubmit="doLogin(); return false;">
         <div class="input-group">
-          <label>USERNAME</label>
-          <input type="text" id="loginUser" name="username" placeholder="Your username…" autocomplete="username">
+          <label>EMAIL</label>
+          <input type="email" id="loginEmail" name="email" placeholder="your@email.com…" autocomplete="email">
         </div>
         <div class="input-group">
           <label>PASSWORD</label>
@@ -91,7 +105,11 @@
       <div class="panel" id="panelSignup">
         <div class="input-group">
           <label>USERNAME</label>
-          <input type="text" id="signupUser" placeholder="Choose a username…" maxlength="20" autocomplete="username">
+          <input type="text" id="signupUser" placeholder="Choose a display name…" maxlength="20" autocomplete="username">
+        </div>
+        <div class="input-group">
+          <label>EMAIL</label>
+          <input type="email" id="signupEmail" placeholder="your@email.com…" autocomplete="email">
         </div>
         <div class="input-group">
           <label>PASSWORD</label>

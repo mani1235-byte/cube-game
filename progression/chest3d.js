@@ -1,0 +1,1 @@
+window.Chest3D={spawn:(x=0,y=3,z=0)=>({x,y,z,vy:-4,rot:0,open:false}),update(c,dt){c.vy-=9.8*dt;c.y+=c.vy*dt;if(c.y<0){c.y=0;c.vy*=-0.35;if(Math.abs(c.vy)<0.4)c.open=true;}c.rot+=dt*1.5;return c;}};

@@ -169,6 +169,54 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: var(--bg);
 .btn-host-start:hover { opacity: .9; }
 .btn-host-start.hidden, .hidden { display: none !important; }
 
+/* ─── Size picker (1v1 / 2v2 / 3v3 / 4v4) ──────────────────────────────────── */
+.size-picker { display: flex; gap: .4rem; }
+.btn-size {
+  flex: 1; padding: .5rem .4rem; border: 1px solid var(--border2); border-radius: var(--r2);
+  background: var(--bg2); color: var(--text);
+  font-family: var(--font); font-weight: 700; font-size: .75rem;
+  letter-spacing: .1em; cursor: pointer; transition: all .15s;
+}
+.btn-size:hover { border-color: var(--versus); color: var(--versus); }
+.btn-size.selected { background: var(--versus); border-color: var(--versus); color: #fff; box-shadow: var(--glow-r); }
+
+/* ─── Team columns (room screen) ─────────────────────────────────────────── */
+.team-columns { flex: 1; display: flex; overflow: hidden; }
+.team-column {
+  flex: 1; display: flex; flex-direction: column; min-width: 0;
+  border-right: 1px solid var(--border);
+}
+.team-column.team-b { border-right: none; }
+.team-col-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: .5rem .75rem; border-bottom: 1px solid var(--border);
+}
+.team-column.team-a .team-label { color: var(--accent); }
+.team-column.team-b .team-label { color: var(--versus); }
+.team-label { font-weight: 700; font-size: .8rem; letter-spacing: .1em; }
+.team-count { font-size: .7rem; color: var(--muted); font-family: var(--font-mono); }
+.team-column .player-list { flex: 1; }
+.team-vs-divider {
+  display: flex; align-items: center; justify-content: center;
+  width: 32px; flex-shrink: 0; color: var(--muted);
+  font-size: .75rem; font-weight: 700; letter-spacing: .1em;
+  background: var(--bg2); border-left: 1px solid var(--border); border-right: 1px solid var(--border);
+}
+.btn-join-team {
+  margin: .5rem; padding: .4rem; border: 1px dashed var(--border2); border-radius: var(--r2);
+  background: transparent; color: var(--muted);
+  font-family: var(--font); font-size: .7rem; letter-spacing: .08em; cursor: pointer;
+  transition: color .15s, border-color .15s;
+}
+.btn-join-team:hover:not(:disabled) { color: var(--text); border-color: var(--accent); border-style: solid; }
+.btn-join-team:disabled { opacity: .4; cursor: not-allowed; }
+.btn-join-team.hidden { display: none; }
+@media (max-width: 640px) {
+  .team-columns { flex-direction: column; overflow-y: auto; }
+  .team-column { border-right: none; border-bottom: 1px solid var(--border); }
+  .team-vs-divider { width: 100%; height: 22px; border-left: none; border-right: none; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+}
+
 /* ─── Join input ──────────────────────────────────────────────────────────── */
 .join-input-wrap { display: flex; gap: .5rem; }
 #join-code-input {

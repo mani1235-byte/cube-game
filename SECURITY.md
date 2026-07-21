@@ -1,72 +1,72 @@
 # CUBE GAME — Security Changelog
 
-## تغییرات امنیتی اعمال‌شده
+## Security Changes Applied
 
-### 🔴 بحرانی — server.js
+### 🔴 Critical — server.js
 
-| # | مشکل | راه‌حل |
-|---|------|--------|
-| 1 | `origin: '*'` — همه دامنه‌ها مجاز بودن | CORS محدود به `ALLOWED_ORIGINS` در env |
-| 2 | Score از client دریافت می‌شد | `cubeSliced` event → server score calc |
-| 3 | هیچ rate limiting نداشت | 25 event/sec per socket + 120 req/min HTTP |
-| 4 | evoStage از client دریافت می‌شد | Server کنترل می‌کنه با `getEvoStage(score)` |
-| 5 | position بدون validation | `checkMovement()` → speed hack + teleport detect |
-| 6 | Coin/trophy reward از client | `gameReward` فقط server emit می‌کنه |
-| 7 | `/stats` بدون auth | `X-Admin-Secret` header لازمه |
-| 8 | هیچ audit log نداشت | تمام events مهم log می‌شن |
-| 9 | هیچ security header نداشت | CSP, X-Frame-Options, X-XSS-Protection |
-| 10 | Error/crash handling نداشت | `uncaughtException` + `unhandledRejection` |
+| # | Problem | Fix |
+|---|---------|-----|
+| 1 | `origin: '*'` — all domains were allowed | CORS restricted to `ALLOWED_ORIGINS` from env |
+| 2 | Score was received from the client | `cubeSliced` event → server calculates score |
+| 3 | No rate limiting at all | 25 events/sec per socket + 120 req/min HTTP |
+| 4 | evoStage was received from the client | Server controls it via `getEvoStage(score)` |
+| 5 | Position had no validation | `checkMovement()` → speed hack + teleport detection |
+| 6 | Coin/trophy rewards came from the client | `gameReward` is now only emitted by the server |
+| 7 | `/stats` had no auth | Now requires `X-Admin-Secret` header |
+| 8 | No audit log existed | All important events are now logged |
+| 9 | No security headers existed | CSP, X-Frame-Options, X-XSS-Protection added |
+| 10 | No error/crash handling | `uncaughtException` + `unhandledRejection` handlers added |
 
-### 🔴 بحرانی — firebase-auth.js
+### 🔴 Critical — firebase-auth.js
 
-| # | مشکل | راه‌حل |
-|---|------|--------|
-| 11 | Firebase API key داخل کد بود | از `window.__FIREBASE_CONFIG__` یا meta tag |
-| 12 | coins/trophies در localStorage ذخیره می‌شد | فقط identity ذخیره می‌شه، progression server-side |
+| # | Problem | Fix |
+|---|---------|-----|
+| 11 | Firebase API key was hardcoded in the code | Now loaded from `window.__FIREBASE_CONFIG__` or a meta tag |
+| 12 | Coins/trophies were stored in localStorage | Only identity is stored client-side; progression is server-side |
 
-### 🟡 مهم — firestore.rules
+### 🟡 Important — firestore.rules
 
-| # | مشکل | راه‌حل |
-|---|------|--------|
-| 13 | هیچ Firestore rule نداشت | فایل `firestore.rules` اضافه شد |
-| 14 | کاربر می‌تونست coins/trophies خودش رو تغییر بده | `validUserUpdate()` این فیلدها رو lock می‌کنه |
-| 15 | leaderboard قابل write بود | `allow write: if false` — فقط Admin SDK |
+| # | Problem | Fix |
+|---|---------|-----|
+| 13 | No Firestore rules existed | `firestore.rules` file added |
+| 14 | A user could modify their own coins/trophies | `validUserUpdate()` locks these fields |
+| 15 | The leaderboard was writable by clients | `allow write: if false` — Admin SDK only |
 
-### 🟢 محیطی
+### 🟢 Environment
 
-| # | مشکل | راه‌حل |
-|---|------|--------|
-| 16 | هیچ `.env.example` نداشت | فایل اضافه شد |
-| 17 | `node_modules` و secrets در git | `.gitignore` اضافه شد |
+| # | Problem | Fix |
+|---|---------|-----|
+| 16 | No `.env.example` existed | File added |
+| 17 | `node_modules` and secrets were tracked in git | `.gitignore` added |
 
 ---
 
-## راه‌اندازی در Railway
+## Setting Up on Railway
 
 ```bash
-# متغیرهای محیطی که باید در Railway تنظیم کنی:
+# Environment variables to set in Railway:
 PORT=3000
-ALLOWED_ORIGINS=https://cube-game-production-e946.up.railway.app/
-ADMIN_SECRET=یک-رشته-تصادفی-قوی
+ALLOWED_ORIGINS=https://cube-game-production-26c5.up.railway.app/
+ADMIN_SECRET=a-strong-random-string
 FIREBASE_API_KEY=...
 FIREBASE_PROJECT_ID=...
 ```
 
 ## Firebase Console
 
-1. **Authentication → Settings**: فعال‌کن Email Verification
-2. **Firestore → Rules**: محتوای `firestore.rules` رو paste کن
-3. **Project Settings**: API key رو فقط به domain اصلی محدود کن
+1. **Authentication → Settings**: enable Email Verification
+2. **Firestore → Rules**: paste the contents of `firestore.rules`
+3. **Project Settings**: restrict the API key to your main domain only
 
-## تست امنیت
+## Security Testing
 
 ```bash
-# بررسی dependency های آسیب‌پذیر
+# Check for vulnerable dependencies
 npm audit
 
-# تست rate limiting
+# Test rate limiting
 for i in $(seq 1 30); do curl http://localhost:3000/health; done
 
-# تست /stats بدون secret (باید 403 بگیری)
+# Test /stats without a secret (should return 403)
 curl http://localhost:3000/stats
 ```

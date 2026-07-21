@@ -1,9 +1,20 @@
-// ⬇️ Replace with your Railway URL (only need to do this once!)
-window.CUBE_SERVER = 'https://cube-game-production-e946.up.railway.app/';
+// Backend URL now lives in one place: server-config.js (loaded before this
+// file). Falls back here only if that script wasn't included on this page.
+window.CUBE_SERVER = window.CUBE_SERVER || 'https://cube-game-production-26c5.up.railway.app/';
 
 /**
  * multiplayer.js
- * Client-side multiplayer bridge for Cube Evolution.
+ * Client-side multiplayer bridge for Cube Evolution — Team Versus.
+ *
+ * Every match is Team A vs Team B, 1-4 players per side (players choose
+ * their own team). There is no co-op mode anymore.
+ *
+ * Two ways to play:
+ *   - Room code: create a room (pick a team size 1-4), share the code,
+ *     friends join and freely pick Team A or Team B.
+ *   - Quick play: pick a size (1v1 / 2v2 / 3v3 / 4v4) and the server
+ *     auto-matches you against another team of the same size.
+ *
  * Drop this into your existing game — it hooks into script.js, mechanics.js,
  * cube-evolution.js without modifying them directly.
  *
@@ -29,9 +40,9 @@ window.CUBE_SERVER = 'https://cube-game-production-e946.up.railway.app/';
     connected: false,
     inRoom: false,
     roomCode: null,
-    roomMode: null,     // 'coop' | 'versus'
-    roomState: null,
+    roomState: null,   // { code, teamSize, state, hostId, quickPlay, teams: {A:[...], B:[...]}, gameData }
     myId: null,
+    myTeam: null,       // 'A' | 'B'
     isHost: false,
     remotePlayers: new Map(),   // id → { state, element, lastSeen }
     callbacks: {},
@@ -80,12 +91,14 @@ window.CUBE_SERVER = 'https://cube-game-production-e946.up.railway.app/';
     s.on('playerJoined',  d => { MP._applyRoomState(d.roomState); MP._emit('playerJoined', d); });
     s.on('playerLeft',    d => { MP._removeRemotePlayer(d.playerId); MP._applyRoomState(d.roomState); MP._emit('playerLeft', d); });
     s.on('playerReady',   d => { MP._applyRoomState(d.roomState); MP._emit('playerReady', d); });
+    s.on('teamChanged',   d => { MP._applyRoomState(d.roomState); MP._emit('teamChanged', d); });
     s.on('hostChanged',   d => { MP.isHost = d.newHostId === MP.myId; MP._emit('hostChanged', d); });
     s.on('matchFound',    d => { MP._emit('matchFound', d); });
     s.on('queueStatus',   d => { MP._emit('queueStatus', d); });
     s.on('countdown',     d => { MP._emit('countdown', d); });
     s.on('chat',          d => { MP._emit('chat', d); });
     s.on('error',         d => { MP._emit('serverError', d); });
+    s.on('kicked',        d => { MP._emit('kicked', d); });
 
     // ── Game events ─────────────────────────────────────────────────────────
 
@@ -114,10 +127,12 @@ window.CUBE_SERVER = 'https://cube-game-production-e946.up.railway.app/';
 
     s.on('remoteInput',   d => { MP._emit('remoteInput', d); });
     s.on('remoteEvo',     d => { MP._emit('remoteEvo', d); });
+    s.on('remoteScore',   d => { MP._emit('remoteScore', d); });
     s.on('playerDied',    d => { MP._emit('playerDied', d); });
     s.on('bombExploded',  d => { MP._emit('bombExploded', d); });
     s.on('heartCollected',d => { MP._emit('heartCollected', d); });
     s.on('gameEvent',     d => { MP._emit('gameEvent', d); });
+    s.on('gameReward',    d => { MP._emit('gameReward', d); });
     s.on('pong',          ts => { MP.latency = Math.round((Date.now() - ts) / 2); MP._emit('ping', MP.latency); });
   };
 
@@ -129,28 +144,51 @@ window.CUBE_SERVER = 'https://cube-game-production-e946.up.railway.app/';
 
   // ─── Room API ─────────────────────────────────────────────────────────────
 
-  MP.createRoom = function (mode, profile) {
+  /**
+   * Create a private room with a room code. `teamSize` is the cap per side
+   * (1 = 1v1 room, 4 = 4v4 room). The host is placed on Team A.
+   */
+  MP.createRoom = function (teamSize, profile) {
     return new Promise((resolve, reject) => {
       if (!MP.connected) return reject('Not connected');
-      MP.socket.emit('createRoom', { mode, profile }, res => {
+      MP.socket.emit('createRoom', { teamSize, profile }, res => {
         if (res.error) return reject(res.error);
         MP.roomCode = res.code;
-        MP.roomMode = mode;
         MP.isHost   = true;
         MP.inRoom   = true;
+        MP.myTeam   = res.team || 'A';
         MP._applyRoomState(res.room);
         resolve(res);
       });
     });
   };
 
-  MP.joinRoom = function (code, profile) {
+  /**
+   * Join a room by code. `team` is 'A' or 'B' — the side the player picked.
+   * If omitted, or that side is full, the server assigns whichever team has
+   * room.
+   */
+  MP.joinRoom = function (code, team, profile) {
     return new Promise((resolve, reject) => {
       if (!MP.connected) return reject('Not connected');
-      MP.socket.emit('joinRoom', { code, profile }, res => {
+      MP.socket.emit('joinRoom', { code, team, profile }, res => {
         if (res.error) return reject(res.error);
         MP.roomCode = code.toUpperCase();
         MP.inRoom   = true;
+        MP.myTeam   = res.team || team || null;
+        MP._applyRoomState(res.room);
+        resolve(res);
+      });
+    });
+  };
+
+  /** Switch sides pre-game (only works while the room is still waiting). */
+  MP.switchTeam = function (team) {
+    return new Promise((resolve, reject) => {
+      if (!MP.inRoom || !MP.socket) return reject('Not in a room');
+      MP.socket.emit('switchTeam', { team }, res => {
+        if (res.error) return reject(res.error);
+        MP.myTeam = team;
         MP._applyRoomState(res.room);
         resolve(res);
       });
@@ -163,12 +201,19 @@ window.CUBE_SERVER = 'https://cube-game-production-e946.up.railway.app/';
     MP.inRoom    = false;
     MP.roomCode  = null;
     MP.roomState = null;
+    MP.myTeam    = null;
     MP.remotePlayers.clear();
   };
 
-  MP.joinQueue = function (mode, profile) {
+  /**
+   * Quick play matchmaking. `size` is 1-4 (1v1 through 4v4). Server places
+   * the first half of matched players on Team A, second half on Team B —
+   * teams aren't chosen by the player in quick play, since it's meant to be
+   * instant.
+   */
+  MP.joinQueue = function (size, profile) {
     if (!MP.connected) return;
-    MP.socket.emit('joinQueue', { mode, profile });
+    MP.socket.emit('joinQueue', { size, profile });
   };
 
   MP.leaveQueue = function () {
@@ -237,13 +282,40 @@ window.CUBE_SERVER = 'https://cube-game-production-e946.up.railway.app/';
     MP.socket.emit('gameEvent', event);
   };
 
+  MP.sendCubeSliced = function (event) {
+    if (!MP.inRoom || !MP.socket) return;
+    MP.socket.emit('cubeSliced', event);
+  };
+
+  // ─── Helpers ──────────────────────────────────────────────────────────────
+
+  /** Flat array of everyone in the room, both teams, each tagged with .team */
+  MP.allPlayers = function () {
+    if (!MP.roomState) return [];
+    return [...(MP.roomState.teams?.A || []), ...(MP.roomState.teams?.B || [])];
+  };
+
+  MP.myTeammates = function () {
+    if (!MP.roomState || !MP.myTeam) return [];
+    return (MP.roomState.teams?.[MP.myTeam] || []).filter(p => p.id !== MP.myId);
+  };
+
+  MP.opponents = function () {
+    if (!MP.roomState || !MP.myTeam) return [];
+    const other = MP.myTeam === 'A' ? 'B' : 'A';
+    return MP.roomState.teams?.[other] || [];
+  };
+
   // ─── Internal ─────────────────────────────────────────────────────────────
 
   MP._applyRoomState = function (roomState) {
     if (!roomState) return;
     MP.roomState = roomState;
-    MP.roomMode  = roomState.mode;
     MP.isHost    = roomState.hostId === MP.myId;
+    if (roomState.teams) {
+      if (roomState.teams.A?.some(p => p.id === MP.myId)) MP.myTeam = 'A';
+      else if (roomState.teams.B?.some(p => p.id === MP.myId)) MP.myTeam = 'B';
+    }
     MP._emit('roomState', roomState);
   };
 

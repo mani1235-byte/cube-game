@@ -1,123 +1,120 @@
-// login.js
-// DEPENDS ON: nothing — standalone login system
-// Saves everything to localStorage until real backend is live on firstgame.org
+// login.js — CUBE GAME Login System
+// Accounts: email + password → stored locally by email key
+// Username is a display name (shown in game/leaderboard), not the login key
 // ============================================================================
 
-// ── Storage keys ───────────────────────────────────────────────────────────
 const KEYS = {
   currentUser: "cg_current_user",
-  users:       "cg_users",        // all registered accounts
-  guestData:   "cg_guest",        // guest save data
+  users:       "cg_users",
+  guestData:   "cg_guest",
 };
 
-// ── Default save structure ─────────────────────────────────────────────────
-function defaultSave(username) {
+function defaultSave(username, email) {
   return {
     username,
+    email:         email || null,
     isGuest:       false,
     coins:         0,
     highScore:     0,
     totalGames:    0,
     unlockedItems: [],
-    settings: {
-      soundOn:    true,
-      musicOn:    true,
-      showFPS:    false,
-      colorTheme: "default",
-    },
+    settings: { soundOn:true, musicOn:true, showFPS:false, colorTheme:"default" },
     createdAt: Date.now(),
     lastSeen:  Date.now(),
   };
 }
 
-// ── Load / save helpers ────────────────────────────────────────────────────
+// ── Storage helpers ───────────────────────────────────────────────────────
 function loadUsers() {
-  try { return JSON.parse(localStorage.getItem(KEYS.users) || "{}"); }
-  catch { return {}; }
+  try { return JSON.parse(localStorage.getItem(KEYS.users) || "{}"); } catch { return {}; }
 }
-function saveUsers(users) {
-  localStorage.setItem(KEYS.users, JSON.stringify(users));
-}
-function setCurrentUser(data) {
-  localStorage.setItem(KEYS.currentUser, JSON.stringify(data));
-}
+function saveUsers(u) { localStorage.setItem(KEYS.users, JSON.stringify(u)); }
+function setCurrentUser(data) { localStorage.setItem(KEYS.currentUser, JSON.stringify(data)); }
 function getCurrentUser() {
-  try { return JSON.parse(localStorage.getItem(KEYS.currentUser)); }
-  catch { return null; }
+  try { return JSON.parse(localStorage.getItem(KEYS.currentUser)); } catch { return null; }
 }
 
 // ── Panel switcher ─────────────────────────────────────────────────────────
 function showPanel(name) {
   document.querySelectorAll(".panel").forEach(p => p.classList.remove("active"));
   document.querySelectorAll(".card-tab").forEach(t => t.classList.remove("active"));
-  document.getElementById("panel" + name.charAt(0).toUpperCase() + name.slice(1)).classList.add("active");
-  document.getElementById("tab"   + name.charAt(0).toUpperCase() + name.slice(1)).classList.add("active");
+  const panelEl = document.getElementById("panel" + name.charAt(0).toUpperCase() + name.slice(1));
+  const tabEl   = document.getElementById("tab"   + name.charAt(0).toUpperCase() + name.slice(1));
+  if (panelEl) panelEl.classList.add("active");
+  if (tabEl)   tabEl.classList.add("active");
   clearErrors();
 }
 
 function clearErrors() {
   document.querySelectorAll(".error-msg").forEach(e => e.textContent = "");
 }
-
 function showError(id, msg) {
-  document.getElementById(id).textContent = msg;
+  const el = document.getElementById(id);
+  if (el) el.textContent = msg;
 }
 
-// ── Show/hide password ─────────────────────────────────────────────────────
+// ── Validate email format ─────────────────────────────────────────────────
+function isValidEmail(email) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
+// ── Show/hide password ────────────────────────────────────────────────────
 function togglePass(inputId, btn) {
   const input = document.getElementById(inputId);
-  if (input.type === "password") {
-    input.type = "text";
-    btn.textContent = "HIDE";
-  } else {
-    input.type = "password";
-    btn.textContent = "SHOW";
-  }
+  if (!input) return;
+  input.type = input.type === "password" ? "text" : "password";
+  btn.textContent = input.type === "password" ? "SHOW" : "HIDE";
 }
 
-// ── Guest play ─────────────────────────────────────────────────────────────
+// ── Guest play ────────────────────────────────────────────────────────────
 function playAsGuest() {
   const nameInput = document.getElementById("guestName");
-  const name = nameInput.value.trim();
-  if (!name) return showError("guestError", "Username required.");
+  const name = nameInput ? nameInput.value.trim() : "";
+  if (!name) return showError("guestError", "Please enter a nickname.");
+  if (name.length < 2) return showError("guestError", "Nickname must be at least 2 characters.");
 
-  // Load existing guest data or create fresh
   let guestData;
   try { guestData = JSON.parse(localStorage.getItem(KEYS.guestData)); } catch { guestData = null; }
   if (!guestData) {
-    guestData = defaultSave(name);
+    guestData = defaultSave(name, null);
     guestData.isGuest = true;
   } else {
     guestData.username = name;
     guestData.lastSeen = Date.now();
   }
-
   localStorage.setItem(KEYS.guestData, JSON.stringify(guestData));
   setCurrentUser(guestData);
   goToGame();
 }
 
-// ── Signup ─────────────────────────────────────────────────────────────────
+// ── Sign up (email + username + password) ─────────────────────────────────
 function doSignup() {
-  const username = document.getElementById("signupUser").value.trim();
-  const pass     = document.getElementById("signupPass").value;
-  const pass2    = document.getElementById("signupPass2").value;
+  const username = (document.getElementById("signupUser")?.value  || "").trim();
+  const email    = (document.getElementById("signupEmail")?.value || "").trim().toLowerCase();
+  const pass     = document.getElementById("signupPass")?.value   || "";
+  const pass2    = document.getElementById("signupPass2")?.value  || "";
 
-  if (!username)            return showError("signupError", "Please choose a username.");
-  if (username.length < 3)  return showError("signupError", "Username must be at least 3 characters.");
-  if (!pass)                return showError("signupError", "Please choose a password.");
-  if (pass.length < 6)      return showError("signupError", "Password must be at least 6 characters.");
-  if (pass !== pass2)       return showError("signupError", "Passwords don't match.");
+  if (!username)           return showError("signupError", "Please choose a display name.");
+  if (username.length < 2) return showError("signupError", "Display name must be at least 2 characters.");
+  if (!email)              return showError("signupError", "Please enter your email.");
+  if (!isValidEmail(email))return showError("signupError", "Please enter a valid email address.");
+  if (!pass)               return showError("signupError", "Please choose a password.");
+  if (pass.length < 6)     return showError("signupError", "Password must be at least 6 characters.");
+  if (pass !== pass2)      return showError("signupError", "Passwords don't match.");
 
   const users = loadUsers();
-  if (users[username.toLowerCase()]) return showError("signupError", "Username already taken.");
 
-  // Simple hash (NOT secure — fine for local, replace with bcrypt on backend)
-  const hashed = simpleHash(pass);
-  const newUser = defaultSave(username);
-  newUser.passHash = hashed;
+  // Check email not already registered
+  if (users[email]) return showError("signupError", "An account with that email already exists.");
 
-  users[username.toLowerCase()] = newUser;
+  // Check display name not already taken
+  const nameTaken = Object.values(users).some(u => u.username.toLowerCase() === username.toLowerCase());
+  if (nameTaken) return showError("signupError", "That display name is already taken.");
+
+  const newUser = defaultSave(username, email);
+  newUser.passHash = simpleHash(pass);
+
+  users[email] = newUser;
   saveUsers(users);
   setCurrentUser(newUser);
 
@@ -125,22 +122,23 @@ function doSignup() {
   setTimeout(goToGame, 600);
 }
 
-// ── Login ──────────────────────────────────────────────────────────────────
+// ── Login (email + password) ──────────────────────────────────────────────
 function doLogin() {
-  const username = document.getElementById("loginUser").value.trim();
-  const pass     = document.getElementById("loginPass").value;
+  const email = (document.getElementById("loginEmail")?.value || "").trim().toLowerCase();
+  const pass  = document.getElementById("loginPass")?.value  || "";
 
-  if (!username) return showError("loginError", "Please enter your username.");
-  if (!pass)     return showError("loginError", "Please enter your password.");
+  if (!email)               return showError("loginError", "Please enter your email.");
+  if (!isValidEmail(email)) return showError("loginError", "Please enter a valid email address.");
+  if (!pass)                return showError("loginError", "Please enter your password.");
 
   const users = loadUsers();
-  const user  = users[username.toLowerCase()];
+  const user  = users[email];
 
-  if (!user)                          return showError("loginError", "Username not found.");
+  if (!user) return showError("loginError", "No account found with that email.");
   if (user.passHash !== simpleHash(pass)) return showError("loginError", "Wrong password.");
 
   user.lastSeen = Date.now();
-  users[username.toLowerCase()] = user;
+  users[email]  = user;
   saveUsers(users);
   setCurrentUser(user);
 
@@ -148,73 +146,61 @@ function doLogin() {
   setTimeout(goToGame, 600);
 }
 
-// ── Simple hash (local only — replace with bcrypt server-side) ─────────────
+// ── Simple hash (client-side only — not cryptographically secure) ─────────
 function simpleHash(str) {
   let hash = 5381;
   for (let i = 0; i < str.length; i++) {
     hash = ((hash << 5) + hash) ^ str.charCodeAt(i);
-    hash = hash >>> 0; // keep unsigned
+    hash = hash >>> 0;
   }
   return hash.toString(16);
 }
 
-// ── Redirect to game ───────────────────────────────────────────────────────
+// ── Redirect to game ──────────────────────────────────────────────────────
 function goToGame() {
-  // Set flag so index.html knows we just logged in
   sessionStorage.setItem("cg_just_logged_in", "1");
   if (window.CinematicNav) {
     setTimeout(() => CinematicNav.cinematic("./index.html"), 80);
   } else {
-    setTimeout(() => {
-      window.location.href = "./index.html";
-    }, 100);
+    setTimeout(() => { window.location.href = "./index.html"; }, 100);
   }
 }
 
-// ── Card success flash ─────────────────────────────────────────────────────
+// ── Card success flash ────────────────────────────────────────────────────
 function flashSuccess() {
   const card = document.getElementById("card");
-  card.classList.add("success");
-  setTimeout(() => card.classList.remove("success"), 400);
+  if (card) { card.classList.add("success"); setTimeout(() => card.classList.remove("success"), 400); }
 }
 
-// ── Floating background cubes ──────────────────────────────────────────────
+// ── Floating background cubes ─────────────────────────────────────────────
 function spawnBgCubes() {
   const container = document.getElementById("bgCubes");
-  const colors = ["#67d7f0", "#a6e02c", "#fa2473", "#fe9522", "#cc00ff"];
-
+  if (!container) return;
+  const colors = ["#67d7f0","#a6e02c","#fa2473","#fe9522","#cc00ff"];
   for (let i = 0; i < 18; i++) {
-    const cube = document.createElement("div");
+    const cube  = document.createElement("div");
     cube.className = "bg-cube";
-    const size   = 20 + Math.random() * 50;
-    const left   = Math.random() * 100;
-    const delay  = Math.random() * 12;
-    const dur    = 8 + Math.random() * 14;
-    const color  = colors[Math.floor(Math.random() * colors.length)];
+    const size  = 20 + Math.random() * 50;
     cube.style.cssText = `
       width:${size}px; height:${size}px;
-      left:${left}%;
-      border-color:${color}22;
-      animation-duration:${dur}s;
-      animation-delay:${delay}s;
+      left:${Math.random()*100}%;
+      border-color:${colors[Math.floor(Math.random()*colors.length)]}22;
+      animation-duration:${8 + Math.random()*14}s;
+      animation-delay:${Math.random()*12}s;
     `;
     container.appendChild(cube);
   }
 }
 
-// ── Auto-redirect if already logged in ────────────────────────────────────
-function checkAlreadyLoggedIn() {
-  const user = getCurrentUser();
-  if (user) {
-    // Already has a session — go straight to game
-    goToGame();
-  }
-}
-
-// ── Init ───────────────────────────────────────────────────────────────────
+// ── Init ──────────────────────────────────────────────────────────────────
 spawnBgCubes();
-// Uncomment the line below to auto-skip login if already logged in:
-checkAlreadyLoggedIn();
+
+// Only auto-redirect if user is already fully signed in AND this is a
+// deliberate return visit — NOT on every page load. The flag is set by
+// index.html's routing guard, NOT here, so we don't intercept users who
+// were explicitly logged out or whose session expired.
+// (Auto-redirect is handled by index.html's guard script now — login.html
+//  is only reached when the user genuinely needs to log in.)
 
 // Enter key support
 document.addEventListener("keydown", e => {

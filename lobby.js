@@ -1,5 +1,5 @@
 // lobby.js
-// Client-side controller for lobby.html.
+// Client-side controller for lobby.html — Team Versus (1v1..4v4).
 // Wires the lobby UI to CubeMultiplayer and keeps the screen states in sync.
 // ============================================================================
 
@@ -33,8 +33,14 @@
     queueCount: document.getElementById("queue-count"),
     roomModeBadge: document.getElementById("room-mode-badge"),
     roomCodeDisplay: document.getElementById("room-code-display"),
-    playerList: document.getElementById("player-list"),
+    teamAList: document.getElementById("team-a-list"),
+    teamBList: document.getElementById("team-b-list"),
+    teamACount: document.getElementById("team-a-count"),
+    teamBCount: document.getElementById("team-b-count"),
+    btnJoinA: document.getElementById("btn-join-a"),
+    btnJoinB: document.getElementById("btn-join-b"),
     roomPlayerCount: document.getElementById("room-player-count"),
+    roomMaxCount: document.getElementById("room-max-count"),
     chatMessages: document.getElementById("chat-messages"),
     chatInput: document.getElementById("chat-input"),
     roomList: document.getElementById("room-list"),
@@ -69,7 +75,7 @@
   const state = {
     profile: getProfile(),
     roomState: null,
-    queueMode: null,
+    queueSize: null,
     queueStartedAt: 0,
     queueTimerId: null,
     ready: false,
@@ -82,9 +88,10 @@
         name: user?.username || "Guest",
         avatar: user?.avatar || "cube",
         evoStage: typeof user?.evoStage === "number" ? user.evoStage : 1,
+        badgeIcon: user?.equippedBadgeIcon || null,
       };
     } catch {
-      return { name: "Guest", avatar: "cube", evoStage: 1 };
+      return { name: "Guest", avatar: "cube", evoStage: 1, badgeIcon: null };
     }
   }
 
@@ -120,7 +127,9 @@
   }
 
   function updateHeader() {
-    if (els.badgeName) els.badgeName.textContent = state.profile.name;
+    if (els.badgeName) els.badgeName.textContent = state.profile.badgeIcon
+      ? `${state.profile.badgeIcon} ${state.profile.name}`
+      : state.profile.name;
     if (els.badgeEvo) els.badgeEvo.textContent = evoIcon(state.profile.evoStage);
     if (els.badgePing) els.badgePing.textContent = MP.latency ? `${MP.latency} ms` : "-- ms";
   }
@@ -132,10 +141,6 @@
     if (stage >= 3) return "⚡";
     if (stage >= 2) return "⭐";
     return "★";
-  }
-
-  function formatMode(mode) {
-    return String(mode || "versus").toUpperCase();
   }
 
   function clearNode(node) {
@@ -157,7 +162,7 @@
 
     const name = document.createElement("div");
     name.className = "player-name";
-    name.textContent = player.name || "Unknown";
+    name.textContent = player.badgeIcon ? `${player.badgeIcon} ${player.name || "Unknown"}` : (player.name || "Unknown");
 
     const meta = document.createElement("div");
     meta.className = "player-meta";
@@ -178,32 +183,56 @@
     status.textContent = [
       player.id === roomState.hostId ? "HOST" : null,
       player.ready ? "READY" : null,
-    ].filter(Boolean).join(" • ") || "PLAYING";
+    ].filter(Boolean).join(" • ") || "WAITING";
 
     item.append(evo, info, status);
     return item;
   }
 
-  function renderPlayers(roomState) {
-    if (!roomState || !els.playerList) return;
+  // Are we allowed to freely switch teams right now? Only pre-game, and not
+  // during quick-play matches (those are auto-assigned and start instantly).
+  function canSwitchTeams() {
+    return !!state.roomState && state.roomState.state === "waiting" && !state.roomState.quickPlay;
+  }
 
-    clearNode(els.playerList);
-    if (els.roomPlayerCount) {
-      els.roomPlayerCount.textContent = String(roomState.players?.length || 0);
-    }
+  function renderTeams(roomState) {
+    if (!roomState || !els.teamAList || !els.teamBList) return;
+
+    const teamSize = roomState.teamSize || 4;
+    const teamA = roomState.teams?.A || [];
+    const teamB = roomState.teams?.B || [];
+
+    clearNode(els.teamAList);
+    clearNode(els.teamBList);
+    teamA.forEach(p => els.teamAList.appendChild(createPlayerRow(roomState, p)));
+    teamB.forEach(p => els.teamBList.appendChild(createPlayerRow(roomState, p)));
+
+    if (els.teamACount) els.teamACount.textContent = `${teamA.length}/${teamSize}`;
+    if (els.teamBCount) els.teamBCount.textContent = `${teamB.length}/${teamSize}`;
+
+    const totalPlayers = teamA.length + teamB.length;
+    if (els.roomPlayerCount) els.roomPlayerCount.textContent = String(totalPlayers);
+    if (els.roomMaxCount) els.roomMaxCount.textContent = String(teamSize * 2);
+
     if (els.roomModeBadge) {
-      els.roomModeBadge.textContent = formatMode(roomState.mode);
-      els.roomModeBadge.classList.toggle("coop", roomState.mode === "coop");
+      els.roomModeBadge.textContent = `TEAM VERSUS · ${teamSize}v${teamSize}`;
     }
     if (els.roomCodeDisplay) {
-      els.roomCodeDisplay.textContent = roomState.code || "------";
+      els.roomCodeDisplay.textContent = roomState.quickPlay ? "QUICK PLAY" : (roomState.code || "------");
     }
     if (els.btnHostStart) {
-      els.btnHostStart.classList.toggle("hidden", !MP.isHost);
+      els.btnHostStart.classList.toggle("hidden", !MP.isHost || roomState.quickPlay);
     }
 
-    (roomState.players || []).forEach(player => {
-      els.playerList.appendChild(createPlayerRow(roomState, player));
+    // Join-team buttons: hide/disable based on current team, room state, and capacity
+    const switchable = canSwitchTeams();
+    [["A", els.btnJoinA, teamA], ["B", els.btnJoinB, teamB]].forEach(([team, btn, list]) => {
+      if (!btn) return;
+      const onThisTeam = MP.myTeam === team;
+      const full = list.length >= teamSize;
+      btn.classList.toggle("hidden", !switchable || onThisTeam);
+      btn.disabled = full;
+      btn.textContent = full ? "Team Full" : `Join Team ${team}`;
     });
   }
 
@@ -223,7 +252,7 @@
 
     const name = document.createElement("span");
     name.className = "msg-name";
-    name.textContent = `${msg.name || "Unknown"}:`;
+    name.textContent = msg.team ? `[${msg.team}] ${msg.name || "Unknown"}:` : `${msg.name || "Unknown"}:`;
 
     const text = document.createElement("span");
     text.className = "msg-text";
@@ -249,7 +278,7 @@
 
     const mode = document.createElement("div");
     mode.className = "rli-mode";
-    mode.textContent = formatMode(room.mode);
+    mode.textContent = `${room.teamSize}v${room.teamSize}`;
 
     const host = document.createElement("div");
     host.className = "rli-host";
@@ -257,7 +286,7 @@
 
     const count = document.createElement("div");
     count.className = "rli-count";
-    count.textContent = `${room.playerCount}/${room.maxPlayers}`;
+    count.textContent = `${room.teamACount}v${room.teamBCount} (max ${room.teamSize})`;
 
     const join = document.createElement("button");
     join.className = "btn-secondary rli-join";
@@ -317,7 +346,7 @@
     }
   }
 
-  async function joinRoom(code) {
+  async function joinRoom(code, team) {
     const cleaned = String(code || els.joinCodeInput?.value || "").trim().toUpperCase();
     if (!cleaned) {
       showToast("Enter a room code first", "error");
@@ -325,7 +354,7 @@
     }
 
     try {
-      await MP.joinRoom(cleaned, state.profile);
+      await MP.joinRoom(cleaned, team, state.profile);
       setScreen("room");
       showToast(`Joined room ${cleaned}`, "success");
     } catch (err) {
@@ -333,27 +362,35 @@
     }
   }
 
-  async function createRoom(mode) {
+  async function createRoom(teamSize) {
     try {
-      await MP.createRoom(mode, state.profile);
+      await MP.createRoom(teamSize, state.profile);
       setScreen("room");
       setReadyButton(false);
-      showToast(`Created ${formatMode(mode)} room`, "success");
+      showToast(`Created ${teamSize}v${teamSize} room`, "success");
     } catch (err) {
       showToast(err || "Could not create room", "error");
     }
   }
 
-  function joinQueue(mode) {
+  async function doSwitchTeam(team) {
+    try {
+      await MP.switchTeam(team);
+    } catch (err) {
+      showToast(err || "Could not switch team", "error");
+    }
+  }
+
+  function joinQueue(size) {
     if (!MP.connected) {
       showToast("Connecting to server…", "error");
       return;
     }
-    state.queueMode = mode;
-    MP.joinQueue(mode, state.profile);
+    state.queueSize = size;
+    MP.joinQueue(size, state.profile);
     setScreen("queue");
     if (els.queueTitle) {
-      els.queueTitle.textContent = mode === "coop" ? "Finding Co-op Match…" : "Finding VS Match…";
+      els.queueTitle.textContent = `Finding ${size}v${size} Match…`;
     }
     if (els.queueSub) els.queueSub.textContent = "Position 1 in queue";
     startQueueTimer();
@@ -362,7 +399,7 @@
   function leaveQueue() {
     MP.leaveQueue();
     stopQueueTimer();
-    state.queueMode = null;
+    state.queueSize = null;
     setScreen("home");
   }
 
@@ -380,27 +417,35 @@
     // Hide HUD
     if (els.mpHud) els.mpHud.classList.add("hidden");
 
-    // Trophy & title
-    const isWinner = data.winner === MP.myId;
-    if (els.endTrophy) els.endTrophy.textContent = isWinner ? "🏆" : (data.mode === "coop" ? "💀" : "😔");
+    const isWinner = data.winnerTeam && MP.myTeam === data.winnerTeam;
+    const isDraw = !data.winnerTeam;
+
+    if (els.endTrophy) els.endTrophy.textContent = isDraw ? "🤝" : (isWinner ? "🏆" : "😔");
     if (els.endTitle) {
-      if (data.mode === "coop") {
-        els.endTitle.textContent = data.winner ? "SURVIVED!" : "GAME OVER";
-      } else {
-        els.endTitle.textContent = isWinner ? "VICTORY!" : "DEFEATED";
-      }
+      els.endTitle.textContent = isDraw ? "DRAW" : (isWinner ? "VICTORY!" : "DEFEATED");
     }
 
-    // Scoreboard
     if (els.endScoreboard) {
       els.endScoreboard.innerHTML = "";
+
+      // Team score summary at the top
+      if (data.teamScores) {
+        const summary = document.createElement("div");
+        summary.className = "score-row team-summary";
+        summary.innerHTML = `
+          <span class="score-name">TEAM A: ${data.teamScores.A ?? 0}</span>
+          <span class="score-name">TEAM B: ${data.teamScores.B ?? 0}</span>
+        `;
+        els.endScoreboard.appendChild(summary);
+      }
+
       (data.scores || []).forEach((entry, i) => {
         const row = document.createElement("div");
         row.className = "score-row";
-        if (entry.id === data.winner) row.classList.add("winner");
+        if (entry.team === data.winnerTeam) row.classList.add("winner");
         row.innerHTML = `
           <span class="score-rank">#${i + 1}</span>
-          <span class="score-name">${entry.name || "Unknown"}${entry.id === MP.myId ? " (you)" : ""}</span>
+          <span class="score-name">[${entry.team}] ${entry.name || "Unknown"}${entry.id === MP.myId ? " (you)" : ""}</span>
           <span class="score-val">${entry.score ?? 0}</span>
         `;
         els.endScoreboard.appendChild(row);
@@ -481,7 +526,7 @@
   function handleRoomState(roomState) {
     state.roomState = roomState;
     updateHeader();
-    renderPlayers(roomState);
+    renderTeams(roomState);
     setScreen("room");
   }
 
@@ -504,12 +549,12 @@
   function renderHud() {
     if (!els.hudPlayers || !state.roomState) return;
     els.hudPlayers.innerHTML = "";
-    (state.roomState.players || []).forEach(player => {
+    MP.allPlayers().forEach(player => {
       const pill = document.createElement("div");
       pill.className = "hud-player-pill";
       if (player.id === MP.myId) pill.classList.add("me");
       if (!player.alive) pill.classList.add("dead");
-      pill.innerHTML = `<span>${evoIcon(player.evoStage)}</span><span>${player.name}</span><span style="color:var(--gold)">${player.score ?? 0}</span>`;
+      pill.innerHTML = `<span>[${player.team}]</span><span>${evoIcon(player.evoStage)}</span><span>${player.name}</span><span style="color:var(--gold)">${player.score ?? 0}</span>`;
       els.hudPlayers.appendChild(pill);
     });
     if (els.hudLatency) els.hudLatency.textContent = `${MP.latency || "--"} ms`;
@@ -547,29 +592,32 @@
       showToast(err?.message || "Server error", "error");
     });
 
+    MP.on("kicked", (data) => {
+      showToast(data?.reason || "Kicked from server", "error");
+    });
+
     MP.on("queueStatus", (data) => {
       if (els.queuePos) els.queuePos.textContent = String(data?.position || 1);
       if (els.queueSub) els.queueSub.textContent = `Position ${data?.position || 1} in queue`;
-      if (els.queueCount) els.queueCount.textContent = `${data?.position || 1} in queue`;
+      if (els.queueCount) els.queueCount.textContent = `${data?.total || 0} in queue`;
       if (!state.queueStartedAt) startQueueTimer();
       setScreen("queue");
     });
 
     MP.on("matchFound", (data) => {
       stopQueueTimer();
-      showToast(`Match found in ${data?.code || "room"}`, "success");
+      showToast(`Match found — ${data?.teamSize || state.queueSize}v${data?.teamSize || state.queueSize}`, "success");
     });
 
     MP.on("roomState", handleRoomState);
     MP.on("playerJoined", (data) => {
       if (data?.roomState) handleRoomState(data.roomState);
       if (data?.player) {
-        renderChatMessage({ system: true, message: `${data.player.name} joined the room.` });
+        renderChatMessage({ system: true, message: `${data.player.name} joined Team ${data.player.team}.` });
       }
     });
     MP.on("playerLeft", (data) => {
       if (data?.roomState) handleRoomState(data.roomState);
-      const leftPlayer = state.roomState?.players ? null : data.playerId;
       if (data?.playerId) {
         renderChatMessage({ system: true, message: `A player left the room.` });
       }
@@ -577,8 +625,12 @@
     MP.on("playerReady", (data) => {
       if (data?.roomState) handleRoomState(data.roomState);
     });
+    MP.on("teamChanged", (data) => {
+      if (data?.roomState) handleRoomState(data.roomState);
+      renderChatMessage({ system: true, message: `A player switched to Team ${data?.team}.` });
+    });
     MP.on("hostChanged", () => {
-      if (state.roomState) renderPlayers(state.roomState);
+      if (state.roomState) renderTeams(state.roomState);
       renderChatMessage({ system: true, message: "Host has changed." });
     });
     MP.on("chat", renderChatMessage);
@@ -597,18 +649,30 @@
   }
 
   function wireUi() {
-    document.querySelectorAll(".mode-card .btn-mode[data-action='queue']").forEach(btn => {
-      btn.addEventListener("click", () => joinQueue(btn.dataset.mode));
+    // Size pickers: Quick Play + Create Room
+    document.querySelectorAll(".size-picker[data-action='queue'] .btn-size").forEach(btn => {
+      btn.addEventListener("click", () => {
+        document.querySelectorAll(".size-picker[data-action='queue'] .btn-size")
+          .forEach(b => b.classList.toggle("selected", b === btn));
+        joinQueue(parseInt(btn.dataset.size, 10));
+      });
     });
 
-    document.querySelectorAll(".mode-card .btn-mode[data-action='create']").forEach(btn => {
-      btn.addEventListener("click", () => createRoom(btn.dataset.mode));
+    document.querySelectorAll(".size-picker[data-action='create'] .btn-size").forEach(btn => {
+      btn.addEventListener("click", () => {
+        document.querySelectorAll(".size-picker[data-action='create'] .btn-size")
+          .forEach(b => b.classList.toggle("selected", b === btn));
+        createRoom(parseInt(btn.dataset.size, 10));
+      });
     });
 
     els.btnJoinCode?.addEventListener("click", () => joinRoom());
     els.joinCodeInput?.addEventListener("keydown", e => {
       if (e.key === "Enter") joinRoom();
     });
+
+    els.btnJoinA?.addEventListener("click", () => doSwitchTeam("A"));
+    els.btnJoinB?.addEventListener("click", () => doSwitchTeam("B"));
 
     els.btnBrowse?.addEventListener("click", async () => {
       setScreen("browse");
@@ -630,7 +694,7 @@
 
     els.btnCopyCode?.addEventListener("click", async () => {
       const code = state.roomState?.code || els.roomCodeDisplay?.textContent || "";
-      if (!code || code === "------") return;
+      if (!code || code === "------" || code === "QUICK PLAY") return;
       try {
         await navigator.clipboard.writeText(code);
         showToast("Room code copied", "success");

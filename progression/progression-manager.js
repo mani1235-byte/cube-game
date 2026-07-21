@@ -25,6 +25,7 @@ window.ProgressionManager = (function () {
     window.PassSystem.init(state);
     window.MissionSystem.init(state);
     window.WeeklyMissionSystem.init(state);
+    window.StreakSystem.init(state);
 
     wireAchievements();
     wireRecheck();
@@ -37,6 +38,7 @@ window.ProgressionManager = (function () {
     window.MissionSystem.checkMissions(); // claims any already-met missions on first load
     window.WeeklyMissionSystem.ensureCurrentWeek(); // rolls a fresh weekly set if the stored one is from a past week
     window.WeeklyMissionSystem.checkMissions();
+    window.StreakSystem.checkIn(); // unlocks today's day; reward is granted separately via StreakSystem.claim()
     Events.emit("progression:ready", state);
   }
 

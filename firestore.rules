@@ -24,6 +24,23 @@ service cloud.firestore {
       allow write: if false; // server writes via Admin SDK
     }
 
+    // ── Wallets: real-money coin balances — server-side only ──────
+    match /wallets/{username} {
+      allow read, write: if false; // server reads/writes via Admin SDK only
+    }
+
+    // ── Streaks: daily login streak counters — server-side only ───
+    // (checked in/out via /api/streak/checkin so the same account can't be
+    // double-claimed from two devices, or reset differently per device)
+    match /streaks/{username} {
+      allow read, write: if false; // server reads/writes via Admin SDK only
+    }
+
+    // ── Payments: permanent record of every confirmed payment ─────
+    match /payments/{paymentId} {
+      allow read, write: if false; // server writes via Admin SDK only; never client-readable
+    }
+
     // ── Block everything else ─────────────────────────────────────
     match /{document=**} {
       allow read, write: if false;

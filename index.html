@@ -1,8 +1,38 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+<!-- Google AdSense -->
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-2256005749629612" crossorigin="anonymous"></script>
+<meta name="google-adsense-account" content="ca-pub-2256005749629612">
+<!-- Google tag (gtag.js) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-F09Z1V2L7J"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', 'G-F09Z1V2L7J');
+</script>
+
   <meta charset="UTF-8">
   <title>3d game</title>
+  <script>
+    (function() {
+      var seen     = localStorage.getItem("introSeen") === "true";
+      var user     = null;
+      try { user = JSON.parse(localStorage.getItem("cg_current_user")); } catch(e) {}
+      var signedIn = !!(user && user.username); // guests count as signed in too
+
+      if (!seen) {
+        // Never seen the intro — go there first
+        window.location.replace("./intro.html");
+      } else if (!signedIn) {
+        // Seen intro but not logged in — go to login
+        window.location.replace("./login.html");
+      }
+      // else: seen intro + signed in → stay on index, game loads normally
+    })();
+  </script>
    <link rel="icon" type="logo" href="cube_game_logo.png">
     <link rel="stylesheet" href="./style.css">
   <link rel="stylesheet" href="./sound.css">
@@ -97,7 +127,7 @@
 <!-- Menu System -->
 <div class="menus">
   <div class="menu menu--main">
-    <h1>CUBE GAME</h1>
+    <h1 id="mainMenuLogo">CUBE GAME</h1>
     <div class="trophy-badge" data-open-pass title="Open Brawl Pass">
       <div class="tb-rank-icon"></div>
       <div class="tb-info">
@@ -116,7 +146,7 @@
       </a>
       <button type="button" class="shop-link-btn" id="openShopMenu">🛒 SHOP</button>
       <button type="button" class="shop-link-btn" id="openPassMenu">🎫 BRAWL PASS</button>
-      <button type="button" class="shop-link-btn" onclick="window.location.href='./leaderboard.html'">🏆 LEADERBOARD</button>
+
       <button type="button" class="shop-link-btn" onclick="window.location.href='./settings.html'">⚙️ SETTINGS</button>
       <button type="button" class="shop-link-btn" onclick="window.location.href='./mobile.html'">📱 MOBILE</button>
       <button type="button" class="multiplayer-server-btn" onclick="window.location.href='./lobby.html'">
@@ -152,7 +182,7 @@
     <div id="trophyResult"></div>
     <button type="button" class="play-again-btn">PLAY AGAIN</button>
     <button type="button" class="menu-btn--score">MAIN MENU</button>
-    <button type="button" class="shop-link-btn" onclick="window.location.href='./leaderboard.html'">🏆 VIEW LEADERBOARD</button>
+
   </div>
 </div>
  
@@ -170,6 +200,7 @@
       <button class="shop-tab active" data-tab="coins">💰 BUY COINS</button>
       <button class="shop-tab" data-tab="items">🎮 ITEMS</button>
       <button class="shop-tab" data-tab="evolution">🌈 EVOLUTION</button>
+      <button class="shop-tab" data-tab="redeem">🎁 SECRETS</button>
     </div>
  
     <!-- Coins Tab -->
@@ -342,6 +373,15 @@
  
       </div>
     </div>
+
+    <!-- Secrets Tab -->
+    <div class="shop-content" id="tab-redeem">
+      <p class="shop-subtitle">Exclusive rewards are hidden in the game itself — find them to unlock. No codes to type, just secrets to discover.</p>
+      <div class="secrets-progress" id="secretsFoundCount">0 / 0 found</div>
+      <div id="secretsGrid" class="item-grid">
+        <!-- built by shop.js buildSecretsTab() -->
+      </div>
+    </div>
  
     <div class="shop-footer">
       <a href="https://www.youtube.com/@cubegame2026" target="_blank" class="yt-footer-link">
@@ -418,8 +458,9 @@
 <script src="./mechanics.js"></script>
 <script src="./ads.js"></script>
 <script src="./shop.js"></script>
+<script src="./secrets.js"></script>
 <script src="./trophies.js"></script>
-<script src="./leaderboard.js"></script>
+
 <script src="./particles.js"></script>
 <script src="./items-ingame.js"></script>
 <script src="./audio-reactive.js"></script>
@@ -464,6 +505,7 @@
 <script src="progression/pass-system.js"></script>
 <script src="progression/mission-system.js"></script>
 <script src="progression/weekly-mission-system.js"></script>
+<script src="progression/streak-system.js"></script>
 <script src="progression/progression-manager.js"></script>
 
 <!-- visuals (canvas pseudo-3D layer, see three/progression-scene.js) -->
@@ -495,6 +537,7 @@
 <script src="progression/ui/difficulty-ui.js"></script>
 <script src="progression/ui/chest-ui.js"></script>
 <script src="progression/ui/mission-ui.js"></script>
+<script src="progression/ui/streak-ui.js"></script>
 <script src="progression/ui/progression-menu.js"></script>
 <script src="progression/ui/trophy-badge-sync.js"></script>
 
@@ -503,5 +546,18 @@
 
 <!-- boot last -->
 <script src="progression/progression-init.js"></script>
+<!-- 100% privacy-first analytics -->
+<script async src="https://scripts.simpleanalyticscdn.com/latest.js"></script>
+
+<!-- Google tag (gtag.js) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-MCMX7ELYNB"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', 'G-MCMX7ELYNB');
+</script>
+
 </body>
 </html>

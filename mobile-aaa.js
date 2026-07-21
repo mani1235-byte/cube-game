@@ -333,11 +333,23 @@
   `;
   document.body.appendChild(orientEl);
 
+  function orientLockEnabled() {
+    try {
+      const s = JSON.parse(localStorage.getItem("cg_mobile_settings"));
+      return !!(s && s.orientLock);
+    } catch (e) { return false; }
+  }
+
   function checkOrientation() {
     const portrait = window.innerHeight > window.innerWidth;
-    orientEl.classList.toggle("show", portrait && !!gameCanvas);
+    // Only block gameplay with the full-screen "rotate" overlay if the
+    // player explicitly turned on Orientation Lock in Mobile Settings.
+    // Otherwise the game supports portrait play and this must never
+    // swallow taps (it was freezing the whole game for portrait users).
+    orientEl.classList.toggle("show", portrait && !!gameCanvas && orientLockEnabled());
   }
   window.addEventListener("resize", checkOrientation);
+  window.addEventListener("orientationchange", () => setTimeout(checkOrientation, 300));
   checkOrientation();
 
   console.log("📱 MobileAAA Phase 7 loaded!");

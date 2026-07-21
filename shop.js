@@ -1,6 +1,10 @@
 // shop.js — CUBE GAME Shop: coin packs + item unlocks
 // ============================================================================
 
+// Frontend (Netlify) and backend (Railway) are different domains, so API
+// calls need to be absolute — same pattern as multiplayer.js's window.CUBE_SERVER.
+const SHOP_SERVER_URL = (window.CUBE_SERVER || window.location.origin || "").replace(/\/$/, "");
+
 const CONFIG = {
   paypalEmail:     "alferedobook@gmail.com",
   paypalCurrency:  "USD",
@@ -51,26 +55,30 @@ const ITEM_CATALOGUE = [
   { id:"power_slowmo",  name:"Slow-Mo Boost", desc:"+30s extra slow-mo per game",   icon:"🌊", gradient:"135deg,#262e36,#67d7f0", cost:300,  tag:"power" },
   { id:"power_explode", name:"Explosion FX",  desc:"Epic cube-burst particles",     icon:"💥", gradient:"135deg,#fe9522,#a6e02c", cost:500,  tag:"power" },
   { id:"power_shield",  name:"Force Shield",  desc:"Block one hit per game",        icon:"🛡️", gradient:"135deg,#4169e1,#6a5acd", cost:1000, tag:"power" },
-  { id:"power_magnet",  name:"Coin Magnet",   desc:"Double coins from gameplay",    icon:"🧲", gradient:"135deg,#cc0000,#880000", cost:1400, tag:"power" },
+  { id:"power_magnet",  name:"Coin Magnet",   desc:"Earn bonus coins based on your score, every game", icon:"🧲", gradient:"135deg,#cc0000,#880000", cost:1400, tag:"power" },
   { id:"power_x2score", name:"Score Rush",    desc:"2× score multiplier for 60s",  icon:"⬆️", gradient:"135deg,#ffd700,#ff8c00", cost:1200, tag:"power" },
   { id:"power_freeze",  name:"Freeze Ray",    desc:"Freeze all cubes for 5s",       icon:"🧊", gradient:"135deg,#00bcd4,#006064", cost:800,  tag:"power" },
   { id:"power_ghost2",  name:"Phase Through", desc:"Pass through 3 cubes per game", icon:"🌀", gradient:"135deg,#9c27b0,#673ab7", cost:1600, tag:"power" },
   { id:"power_time",    name:"Time Warp",     desc:"Add 30 bonus seconds",          icon:"⏱️", gradient:"135deg,#00897b,#00695c", cost:900,  tag:"power" },
   // Badges
   { id:"badge_rookie",  name:"Rookie",        desc:"Show your starting spirit",     icon:"🌟", gradient:"135deg,#29b6f6,#0288d1", cost:100,  tag:"badge" },
-  { id:"badge_slayer",  name:"Cube Slayer",   desc:"Badge shown on leaderboard",    icon:"⚔️", gradient:"135deg,#b71c1c,#880000", cost:500,  tag:"badge" },
+  { id:"badge_slayer",  name:"Cube Slayer",   desc:"Badge shown next to your name in multiplayer", icon:"⚔️", gradient:"135deg,#b71c1c,#880000", cost:500,  tag:"badge" },
   { id:"badge_legend",  name:"Legend",        desc:"Exclusive gold legend badge",   icon:"🏆", gradient:"135deg,#ffd700,#ff8c00", cost:2500, tag:"badge" },
   { id:"badge_void",    name:"Void Walker",   desc:"Rare dark-matter badge",        icon:"🔮", gradient:"135deg,#4a0080,#1a0030", cost:3000, tag:"badge" },
+  // Exclusive — cost:Infinity means it can't be bought with coins. Shows as
+  // "🔒 EARN IT" until unlocked by finding its hidden secret in-game (see
+  // secrets.js and unlockSecret() below).
+  { id:"skin_code_founder", name:"Founder Cube", desc:"Exclusive skin — found only via a hidden secret", icon:"🎁", gradient:"135deg,#ff2fb0,#00eaff", cost:Infinity, tag:"skin" },
 ];
 
 const COIN_PACKS = [
-  { coins:    50, label:"Trial Pack",   icon:"🥉", usd:"0.49",   eth:"0.00025", badge:"" },
-  { coins:   200, label:"Starter Pack", icon:"🪙",  usd:"1.99",   eth:"0.001",  badge:"" },
-  { coins:   600, label:"Value Pack",   icon:"💰",  usd:"4.99",   eth:"0.0025", badge:"POPULAR" },
-  { coins:  1500, label:"Pro Pack",     icon:"💎",  usd:"9.99",   eth:"0.005",  badge:"BEST VALUE" },
-  { coins:  4000, label:"Legend Pack",  icon:"👑",  usd:"19.99",  eth:"0.01",   badge:"" },
-  { coins: 10000, label:"Elite Pack",   icon:"🚀",  usd:"49.99",  eth:"0.025",  badge:"HOT" },
-  { coins: 25000, label:"Mega Pack",    icon:"🌌",  usd:"119.99", eth:"0.06",   badge:"MEGA" },
+  { coins:    50, label:"Trial Pack",   icon:"🥉", usd:"0.39",  eth:"0.0002",  badge:"" },
+  { coins:   200, label:"Starter Pack", icon:"🪙",  usd:"1.49",  eth:"0.00075", badge:"" },
+  { coins:   600, label:"Value Pack",   icon:"💰",  usd:"3.79",  eth:"0.0019",  badge:"POPULAR" },
+  { coins:  1500, label:"Pro Pack",     icon:"💎",  usd:"7.49",  eth:"0.00375", badge:"BEST VALUE" },
+  { coins:  4000, label:"Legend Pack",  icon:"👑",  usd:"14.99", eth:"0.0075",  badge:"" },
+  { coins: 10000, label:"Elite Pack",   icon:"🚀",  usd:"37.49", eth:"0.01875", badge:"HOT" },
+  { coins: 25000, label:"Mega Pack",    icon:"🌌",  usd:"89.99", eth:"0.045",   badge:"MEGA" },
 ];
 
 // ── Expose item data for in-game systems ──────────────────────────────────
@@ -168,23 +176,50 @@ let selectedPayment = "paypal";
 
 // ── User helpers ──────────────────────────────────────────────────────────
 function getUser() {
-  try { return JSON.parse(localStorage.getItem("cg_current_user")) || null; } catch (_) { return null; }
+  try {
+    const raw = localStorage.getItem("cg_current_user");
+    if (!raw) return null;
+    const u = JSON.parse(raw);
+    if (!u || typeof u !== "object") throw new Error("corrupt");
+    return sanitizeUser(u);
+  } catch (_) {
+    // Corrupted save data — wipe and recreate defaults instead of crashing
+    console.warn("[shop] localStorage corrupted — resetting user data");
+    localStorage.removeItem("cg_current_user");
+    return null;
+  }
 }
-function saveUser(u) { localStorage.setItem("cg_current_user", JSON.stringify(u)); }
+
+// Ensures all expected fields exist even if save data is partially corrupt
+function sanitizeUser(u) {
+  if (!u.username)          u.username      = "Player";
+  if (typeof u.coins !== "number" || isNaN(u.coins) || u.coins < 0) u.coins = 0;
+  if (!Array.isArray(u.unlockedItems)) u.unlockedItems = [];
+  if (!Array.isArray(u.foundSecrets))  u.foundSecrets  = [];
+  if (typeof u.totalGames !== "number") u.totalGames = 0;
+  if (typeof u.highScore  !== "number") u.highScore  = 0;
+  return u;
+}
+
+function saveUser(u) {
+  try { localStorage.setItem("cg_current_user", JSON.stringify(u)); }
+  catch (_) { console.error("[shop] Failed to save user data"); }
+}
 
 function grantCoins(amount) {
   let user = getUser();
   if (!user) user = { username:"Guest", isGuest:true, coins:0, unlockedItems:[], totalGames:0, highScore:0 };
-  user.coins = (user.coins || 0) + amount;
+  user.coins = Math.round((user.coins || 0) + amount);
   saveUser(user);
   refreshCoinDisplay(user.coins);
   return user.coins;
 }
 
 function refreshCoinDisplay(total) {
+  const display = typeof total === "number" ? total.toLocaleString() : "0";
   ["paCoins","statCoins","shopCoinCount"].forEach(id => {
     const el = document.getElementById(id);
-    if (el) el.textContent = total;
+    if (el) el.textContent = display;
   });
   renderItemButtons();
 }
@@ -215,23 +250,49 @@ function isItemUnlocked(itemId) {
   return user.unlockedItems.includes(itemId);
 }
 
+// In-flight purchase lock — prevents double-purchases from button spam
+const _buyingItems = new Set();
+
 function buyItem(itemId) {
+  if (_buyingItems.has(itemId)) return; // already processing
+
   const item = ITEM_CATALOGUE.find(i => i.id === itemId);
   if (!item) return;
   if (isItemUnlocked(itemId)) { showToast("✅ Already unlocked!"); return; }
+
   let user = getUser();
-  if (!user) { showToast("⚠️ Please log in first!"); return; }
+  if (!user || user.isGuest) { showToast("⚠️ Please log in first!"); return; }
+
   const balance = user.coins || 0;
   if (balance < item.cost) {
     showToast(`❌ Need ${item.cost.toLocaleString()} 🪙 (you have ${balance.toLocaleString()})`);
     return;
   }
-  user.coins = balance - item.cost;
-  saveUser(user);
-  unlockItem(itemId);
-  refreshCoinDisplay(user.coins);
-  showToast(`✅ ${item.name} unlocked! 🎉 (−${item.cost} 🪙)`);
-  renderItemButtons();
+
+  // Lock the button immediately
+  _buyingItems.add(itemId);
+  const btn = document.querySelector(`.item-buy[data-item-id="${itemId}"]`);
+  if (btn) { btn.disabled = true; btn.textContent = "…"; }
+
+  try {
+    // Re-read from storage before deducting (prevents race with multiple tabs)
+    user = getUser();
+    if (!user || (user.coins || 0) < item.cost) {
+      showToast(`❌ Not enough coins!`);
+      return;
+    }
+    // Re-check ownership (another tab may have already bought it)
+    if (isItemUnlocked(itemId)) { showToast("✅ Already unlocked!"); return; }
+
+    user.coins = (user.coins || 0) - item.cost;
+    saveUser(user);
+    unlockItem(itemId);
+    refreshCoinDisplay(user.coins);
+    showToast(`✅ ${item.name} unlocked! 🎉 (−${item.cost.toLocaleString()} 🪙)`);
+    buildItemGrid(); // full re-render so owned/equip state is correct immediately
+  } finally {
+    _buyingItems.delete(itemId);
+  }
 }
 
 function renderItemButtons() {
@@ -368,11 +429,17 @@ function buildCoinGrid() {
 }
 
 // ── PayPal — proper form POST (actually works, no popup blocking) ──────────
+// IMPORTANT: coins are NOT granted here. This only opens PayPal checkout.
+// The server credits coins only after PayPal itself confirms the payment via
+// IPN (see /api/paypal/ipn in server.js). walletSync() below then picks up
+// the confirmed coins — so closing the tab, cancelling, or never finishing
+// the payment simply results in nothing being granted.
 function buyWithPayPal(itemName, price, coins) {
-  // Grant coins immediately (optimistic)
-  const total = grantCoins(coins);
-  showToast(`🪙 +${coins.toLocaleString()} Coins! Total: ${total.toLocaleString()} 🎉`);
-  showCoinCelebration(coins);
+  const user = getUser();
+  if (!user || !user.username) { showToast("⚠️ Please log in first!"); return; }
+
+  showToast(`↗️ Opening PayPal — coins are added once payment is confirmed.`);
+  startWalletSyncWatch();
 
   // Build a hidden form and submit it (bypasses popup blockers entirely)
   const form = document.createElement("form");
@@ -390,7 +457,9 @@ function buyWithPayPal(itemName, price, coins) {
     return:        window.location.href,
     cancel_return: window.location.href,
     no_shipping:   "1",
-    custom:        "coins:" + coins,
+    // Server reads this to know who to credit and how much — verified against
+    // the actual completed PayPal transaction, never trusted from the client.
+    custom:        `user:${user.username}|coins:${coins}`,
   };
   Object.entries(fields).forEach(([name, value]) => {
     const input = document.createElement("input");
@@ -404,13 +473,76 @@ function buyWithPayPal(itemName, price, coins) {
   setTimeout(() => form.remove(), 2000);
 }
 
+// ── Wallet sync — picks up server-verified coin purchases ──────────────────
+// Polls /api/wallet/:username (backed by Firestore, credited only by the
+// PayPal IPN handler) and grants the LOCAL user any newly-confirmed coins.
+// user.walletSynced tracks how much of the server wallet has already been
+// applied locally, so re-polling never double-grants.
+let _walletWatchTimer = null;
+
+function startWalletSyncWatch() {
+  // Check right when the user comes back to this tab (most common case after
+  // finishing checkout in the new PayPal tab), plus a background poll for a
+  // couple of minutes in case they don't tab back manually.
+  document.addEventListener("visibilitychange", _onVisibilityWalletCheck);
+  window.addEventListener("focus", _onVisibilityWalletCheck);
+
+  let attempts = 0;
+  clearInterval(_walletWatchTimer);
+  _walletWatchTimer = setInterval(() => {
+    attempts++;
+    syncWallet();
+    if (attempts >= 24) { // ~2 minutes at 5s intervals
+      clearInterval(_walletWatchTimer);
+      _walletWatchTimer = null;
+    }
+  }, 5000);
+}
+
+function _onVisibilityWalletCheck() {
+  if (document.visibilityState === "visible") syncWallet();
+}
+
+async function syncWallet() {
+  const user = getUser();
+  if (!user || !user.username || user.isGuest) return;
+  try {
+    const res = await fetch(`${SHOP_SERVER_URL}/api/wallet/${encodeURIComponent(user.username)}`);
+    if (!res.ok) return; // e.g. 503 if wallet isn't configured — fail silently
+    const data = await res.json();
+    const serverCoins = typeof data.coins === "number" ? data.coins : 0;
+    const alreadyApplied = user.walletSynced || 0;
+    const delta = serverCoins - alreadyApplied;
+    if (delta > 0) {
+      const total = grantCoins(delta);
+      let u = getUser();
+      u.walletSynced = serverCoins;
+      saveUser(u);
+      showToast(`🪙 Payment confirmed! +${delta.toLocaleString()} Coins! Total: ${total.toLocaleString()} 🎉`);
+      showCoinCelebration(delta);
+    }
+  } catch (_) {
+    // Network hiccup — next poll or next shop visit will catch up.
+  }
+}
+
 // ── MetaMask ───────────────────────────────────────────────────────────────
+// IMPORTANT: coins are NOT granted here just because the browser says the
+// transaction was sent. We send the txHash to the server, which reads the
+// transaction straight off the blockchain (correct recipient, correct
+// amount, at least 1 confirmation) before crediting anything — same
+// principle as the PayPal IPN flow. This closes the hole where someone
+// could previously call grantCoins() from devtools, or fake a "success",
+// and get free coins with no real payment.
 async function buyWithMetaMask(itemName, coins, ethAmount) {
   if (typeof window.ethereum === "undefined") {
     showToast("❌ MetaMask not found — install it first!");
     window.open("https://metamask.io/download/", "_blank", "noopener,noreferrer");
     return;
   }
+  const user = getUser();
+  if (!user || !user.username || user.isGuest) { showToast("⚠️ Please log in first!"); return; }
+
   try {
     showToast("🦊 Connecting to MetaMask…");
     const accounts = await window.ethereum.request({ method: "eth_requestAccounts" });
@@ -421,20 +553,84 @@ async function buyWithMetaMask(itemName, coins, ethAmount) {
       method: "eth_sendTransaction",
       params: [{ from, to: CONFIG.metamaskAddress, value: valueHex, gas: "0x5208" }],
     });
-    const total = grantCoins(coins);
-    showToast(`✅ TX sent! +${coins.toLocaleString()} Coins! Total: ${total.toLocaleString()} 🎉`);
-    showCoinCelebration(coins);
-    console.log("MetaMask TX:", txHash);
+    showToast("⛓️ Transaction sent — waiting for the blockchain to confirm it…");
+    await pollMetaMaskVerification(user.username, txHash, coins);
   } catch (err) {
     showToast(err.code === 4001 ? "❌ Transaction cancelled." : "❌ " + (err.message || "Error"));
   }
 }
 
+// Polls the server every few seconds until it confirms the transaction (or
+// gives up). The server itself re-checks confirmations/amount every time —
+// this loop just waits for it to say yes.
+async function pollMetaMaskVerification(username, txHash, coins, attempt = 0) {
+  try {
+    const res = await fetch(`${SHOP_SERVER_URL}/api/metamask/verify`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, txHash, coins }),
+    });
+    const data = await res.json().catch(() => ({}));
+
+    if (data.success) {
+      const total = grantCoins(data.coins);
+      showToast(`✅ Confirmed! +${data.coins.toLocaleString()} Coins! Total: ${total.toLocaleString()} 🎉`);
+      showCoinCelebration(data.coins);
+      return;
+    }
+    if (data.reason === "already_credited") {
+      showToast("✅ This transaction was already credited.");
+      return;
+    }
+    if (!res.ok) {
+      showToast(`❌ ${data.error || "Verification failed."}`);
+      return;
+    }
+    // still pending — try again
+    if (attempt < 20) { // ~2 minutes at 6s intervals
+      setTimeout(() => pollMetaMaskVerification(username, txHash, coins, attempt + 1), 6000);
+    } else {
+      showToast("⏳ Still waiting on-chain — reopen the shop in a bit, it'll sync automatically.");
+    }
+  } catch (_) {
+    if (attempt < 20) {
+      setTimeout(() => pollMetaMaskVerification(username, txHash, coins, attempt + 1), 6000);
+    }
+  }
+}
+
+let _buyInProgress = false;
+
 function handleBuy(itemName, price, coins) {
+  if (_buyInProgress) return;
+  _buyInProgress = true;
+
+  // Disable all BUY NOW buttons while processing
+  document.querySelectorAll(".coin-card .buy-btn").forEach(b => {
+    b.disabled = true; b.style.opacity = "0.6";
+  });
+
+  const finish = () => {
+    _buyInProgress = false;
+    document.querySelectorAll(".coin-card .buy-btn").forEach(b => {
+      b.disabled = false; b.style.opacity = "";
+    });
+  };
+
   if (selectedPayment === "metamask") {
-    buyWithMetaMask(itemName, coins, CONFIG.ethPrices[String(coins)] || "0.001");
+    // Validate MetaMask address before attempting
+    const addr = CONFIG.metamaskAddress;
+    if (!addr || !/^0x[0-9a-fA-F]{40}$/.test(addr)) {
+      showToast("❌ Invalid wallet address configured.");
+      finish();
+      return;
+    }
+    buyWithMetaMask(itemName, coins, CONFIG.ethPrices[String(coins)] || "0.001")
+      .finally(finish);
   } else {
     buyWithPayPal(itemName, price, coins);
+    // PayPal opens a new tab — re-enable after a short delay
+    setTimeout(finish, 1500);
   }
 }
 
@@ -573,6 +769,147 @@ function showPurchaseSuccess(label) {
   showCoinCelebration(0, label);
 }
 
+// ── Secrets (found in-game, not typed in) ──────────────────────────────────
+// There's no text box here on purpose. secrets.js watches for actual hidden
+// triggers in the game (a key sequence, a click pattern, etc.) and calls
+// window.cgSecrets.unlockSecret(secretId) the moment one fires. This file
+// only knows the secretId and a vague public hint — the real reward values
+// live only on the server (see SECRET_REWARDS in server.js), so nothing here
+// gives away what a secret is worth.
+const SECRETS_INFO = [
+  { id: "konami",     hint: "A sequence every classic gamer knows...", icon: "🕹️" },
+  { id: "logoClicks", hint: "The title screen isn't just for looks...", icon: "🖱️" },
+];
+
+let _unlockingSecret = false;
+
+function getFoundSecrets() {
+  const user = getUser();
+  return (user && Array.isArray(user.foundSecrets)) ? user.foundSecrets : [];
+}
+
+async function unlockSecret(secretId) {
+  if (_unlockingSecret) return;
+  if (getFoundSecrets().includes(secretId)) return; // already have it, don't hit the server again
+
+  const user = getUser();
+  if (!user || user.isGuest || !user.username) return; // silently skip — nothing to attach the reward to
+
+  _unlockingSecret = true;
+  try {
+    const res = await fetch(`${SHOP_SERVER_URL}/api/secret/unlock`, {
+      method:  "POST",
+      headers: { "Content-Type": "application/json" },
+      body:    JSON.stringify({ username: user.username, secretId }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.success) return; // wrong guess, already found elsewhere, rate-limited, etc. — fail quietly
+
+    let u = getUser();
+    if (!u) return;
+    if (!Array.isArray(u.foundSecrets)) u.foundSecrets = [];
+    if (!u.foundSecrets.includes(secretId)) u.foundSecrets.push(secretId);
+    saveUser(u);
+
+    if (data.coins) grantCoins(data.coins);
+    if (data.item)  unlockItem(data.item);
+
+    buildItemGrid();
+    buildSecretsTab();
+    showSecretUnlocked(data.label, data.coins, data.item);
+  } catch (err) {
+    console.error("[secrets] unlock request failed", err);
+  } finally {
+    _unlockingSecret = false;
+  }
+}
+window.cgSecrets = { unlockSecret };
+
+function buildSecretsTab() {
+  const grid = document.getElementById("secretsGrid");
+  if (!grid) return;
+  const found = getFoundSecrets();
+  const foundCount = SECRETS_INFO.filter(s => found.includes(s.id)).length;
+
+  const countEl = document.getElementById("secretsFoundCount");
+  if (countEl) countEl.textContent = `${foundCount} / ${SECRETS_INFO.length} found`;
+
+  grid.innerHTML = SECRETS_INFO.map(s => {
+    const isFound = found.includes(s.id);
+    return `
+      <div class="item-card${isFound ? " item-owned" : ""}">
+        <div class="item-preview" style="background:linear-gradient(135deg,#241a3d,#150f28)">${isFound ? s.icon : "❓"}</div>
+        <div class="item-name">${isFound ? "Secret Found" : "??? Secret"}</div>
+        <div class="item-desc">${isFound ? "Reward already claimed" : s.hint}</div>
+        <div class="item-cost">${isFound ? "✅ UNLOCKED" : "🔒 HIDDEN"}</div>
+      </div>`;
+  }).join("");
+}
+
+function showSecretUnlocked(label, coins, itemId) {
+  if (!document.getElementById("secretPopupStyles")) {
+    const s = document.createElement("style");
+    s.id = "secretPopupStyles";
+    s.textContent = `
+      .secret-overlay {
+        position:fixed;inset:0;z-index:10001;display:flex;align-items:center;justify-content:center;
+        background:rgba(0,0,0,0.65);animation:purchaseFadeIn .2s ease;
+      }
+      .secret-card {
+        background:linear-gradient(160deg,#241a3d 0%,#150f28 100%);
+        border:1px solid rgba(255,47,176,0.35);border-radius:24px;
+        padding:32px 28px;width:min(340px,88vw);text-align:center;
+        box-shadow:0 0 60px rgba(255,47,176,0.18),0 24px 80px rgba(0,0,0,0.6);
+      }
+      .secret-banner {
+        font-family:monospace;font-size:0.72rem;letter-spacing:0.1em;color:#ff2fb0;
+        text-shadow:0 0 12px rgba(255,47,176,0.6);margin-bottom:10px;font-weight:900;
+      }
+      .secret-icon { font-size:3rem;margin-bottom:8px; }
+      .secret-label {
+        font-family:monospace;font-weight:900;font-size:1.1rem;color:#fff;margin-bottom:14px;
+      }
+      .secret-rewards { display:flex;flex-direction:column;gap:8px;margin-bottom:22px; }
+      .secret-reward-row {
+        background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);
+        border-radius:12px;padding:10px 16px;font-family:monospace;font-size:0.85rem;
+        color:rgba(255,255,255,0.85);
+      }
+      .secret-ok-btn {
+        background:linear-gradient(135deg,#ff2fb0,#00eaff);border:none;border-radius:14px;
+        padding:14px 48px;font-family:monospace;font-weight:900;font-size:1rem;
+        letter-spacing:0.08em;color:#150f28;cursor:pointer;width:100%;
+        box-shadow:0 0 20px rgba(255,47,176,0.35);transition:transform .15s;
+      }
+      .secret-ok-btn:hover { transform:scale(1.03); }
+      .secret-ok-btn:active { transform:scale(0.97); }
+    `;
+    document.head.appendChild(s);
+  }
+
+  const item = itemId ? ITEM_CATALOGUE.find(i => i.id === itemId) : null;
+  let rewardsHtml = "";
+  if (coins) rewardsHtml += `<div class="secret-reward-row">🪙 +${coins.toLocaleString()} Coins</div>`;
+  if (item)  rewardsHtml += `<div class="secret-reward-row">${item.icon} ${item.name}</div>`;
+
+  const overlay = document.createElement("div");
+  overlay.className = "secret-overlay";
+  overlay.innerHTML = `
+    <div class="secret-card">
+      <div class="secret-banner">🎁 SECRET FOUND</div>
+      <div class="secret-icon">${item ? item.icon : "🪙"}</div>
+      <div class="secret-label">${label || "Exclusive Reward!"}</div>
+      <div class="secret-rewards">${rewardsHtml}</div>
+      <button class="secret-ok-btn" id="secretOkBtn">NICE! 🎉</button>
+    </div>`;
+  document.body.appendChild(overlay);
+
+  const close = () => { overlay.style.animation = "purchaseFadeIn .2s ease reverse"; setTimeout(() => overlay.remove(), 200); };
+  overlay.querySelector("#secretOkBtn").addEventListener("click", close);
+  overlay.addEventListener("click", e => { if (e.target === overlay) close(); });
+  setTimeout(close, 8000);
+}
+
 // ── Payment method selector ────────────────────────────────────────────────
 function setPaymentMethod(method) {
   selectedPayment = method;
@@ -606,8 +943,10 @@ function openShop() {
   if (overlay) overlay.classList.add("open");
   buildCoinGrid();
   buildItemGrid();
+  buildSecretsTab();
   const user = getUser();
   refreshCoinDisplay(user ? (user.coins || 0) : 0);
+  syncWallet(); // pick up any coins confirmed while the shop was closed
 }
 function closeShop() {
   const overlay = document.getElementById("shopOverlay");

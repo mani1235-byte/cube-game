@@ -1729,11 +1729,7 @@ function endGame() {
             localStorage.setItem("cg_users", JSON.stringify(users));
           }
         } catch(e) {}
-        // Save directly to leaderboard
-        if (window.LB && window.LB.saveScore) {
-          const badgeIcon = user.equippedBadgeIcon || null;
-          window.LB.saveScore(user.username, finalScore, user.totalGames, badgeIcon);
-        }
+
       }
     }
   } catch(e) {}
