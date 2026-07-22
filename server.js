@@ -17,15 +17,17 @@ const server = http.createServer(app);
 // ─── Environment Variables ────────────────────────────────────────────────────
 // All secrets from env — never hardcoded
 const PORT         = process.env.PORT         || 3000;
-const ADMIN_SECRET = process.env.ADMIN_SECRET || null; // must be set in Railway
+const ADMIN_SECRET = process.env.ADMIN_SECRET || null; // must be set in Render
 const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS
   ? process.env.ALLOWED_ORIGINS.split(',').map(s => s.trim())
   : [
       'https://cubegame.club',
       'https://www.cubegame.club',
-      'https://cube-game-production-9d45.up.railway.app',
+      'https://cube-game-fnam.onrender.com',
       'http://localhost:3000',
       'http://127.0.0.1:3000',
+      'http://localhost:5500',   // VS Code "Live Server" default — local dev only
+      'http://127.0.0.1:5500',
     ];
 
 // Firebase client config — served to the browser via /config (never in static JS)
@@ -44,7 +46,7 @@ const FIREBASE_CLIENT_CONFIG = {
 // trusted server, same as the "server writes via Admin SDK" comments already
 // in firestore.rules for leaderboard/scores. If FIREBASE_SERVICE_ACCOUNT_KEY
 // isn't set, payments fall back to a local JSON file (see below) so the app
-// still runs, but that file resets on every Railway redeploy — set the env
+// still runs, but that file resets on every Render redeploy — set the env
 // var for real persistence.
 let db = null;
 try {
@@ -54,7 +56,7 @@ try {
     db = admin.firestore();
     console.log('🔥 Firestore connected — payments will persist permanently.');
   } else {
-    console.warn('⚠️  FIREBASE_SERVICE_ACCOUNT_KEY not set — payments will only persist to a local file, which Railway wipes on redeploy. Set this env var for real persistence.');
+    console.warn('⚠️  FIREBASE_SERVICE_ACCOUNT_KEY not set — payments will only persist to a local file, which Render wipes on redeploy. Set this env var for real persistence.');
   }
 } catch (e) {
   console.error('❌ Firebase Admin init failed — falling back to local file storage:', e.message);
@@ -182,9 +184,9 @@ const SECRET_REWARDS = {
 
 // Persisted so a redeploy/restart doesn't let everyone re-unlock "one-time"
 // secrets. Structure: { secretId: { username: isoTimestamp, ... }, ... }
-// NOTE: on Railway this file lives on the container's ephemeral disk, so it
+// NOTE: on Render this file lives on the container's ephemeral disk, so it
 // will reset if the service is redeployed without a mounted volume. For
-// long-lived rewards, attach a Railway volume at this path (or migrate to
+// long-lived rewards, attach a Render volume at this path (or migrate to
 // Firestore) so unlock history survives deploys.
 const SECRETS_FILE = path.join(__dirname, 'secrets-found.json');
 let secretsFound = {};
@@ -586,7 +588,7 @@ function startGame(room) {
   io.to(room.code).emit('gameStart', { roomState: roomPublicState(room) });
 }
 
-function endGame(room, winnerTeam) {
+async function endGame(room, winnerTeam) {
   if (room.state === 'ended') return;
   room.state = 'ended';
 
@@ -597,7 +599,11 @@ function endGame(room, winnerTeam) {
     .map(p => ({ id: p.id, name: p.name, team: p.team, score: p.score, evoStage: p.evoStage, coins: p.coins }))
     .sort((a, b) => b.score - a.score);
 
-  // Server decides coin rewards — winning team gets a bigger bonus
+  const matchStart = room.gameData.startedAt || room.createdAt;
+
+  // Server decides coin rewards — winning team gets a bigger bonus. Credited
+  // to the real wallet (not just told to the client to self-apply) so a
+  // match win actually counts toward what the shop will let you spend.
   scores.forEach((p) => {
     const onWinner = winnerTeam && p.team === winnerTeam;
     const bonus = onWinner ? 50 : 10;
@@ -606,6 +612,10 @@ function endGame(room, winnerTeam) {
       coinsEarned: coinReward,
       trophyChange: onWinner ? 30 : -10,
     });
+    if (isValidName(p.name)) {
+      creditWallet(p.name, coinReward, `mp:${room.code}:${matchStart}:${p.id}`, { method: 'multiplayer', room: room.code })
+        .catch(e => console.error('[wallet] multiplayer credit failed:', e.message));
+    }
     audit('gameReward', { socketId: p.id, name: p.name, coins: coinReward, score: p.score });
   });
 
@@ -979,7 +989,7 @@ io.on('connection', (socket) => {
 // trigger in-game (see secrets.js). Server is the sole source of truth for
 // whether that secret is real, still active, and not already claimed by this
 // player — the client never knows the reward values, only the result.
-app.post('/api/secret/unlock', (req, res) => {
+app.post('/api/secret/unlock', async (req, res) => {
   const ip = req.ip || req.socket.remoteAddress;
   if (!checkSecretRate(ip)) {
     audit('secret:rateLimited', { ip });
@@ -1017,6 +1027,13 @@ app.post('/api/secret/unlock', (req, res) => {
   finders[username] = new Date().toISOString();
   saveSecretsFound();
 
+  // Credit the server wallet too — not just the client-applied response —
+  // so this coin grant actually counts toward what the shop will let you
+  // spend, the same as a real payment does.
+  if (reward.coins) {
+    await creditWallet(username, reward.coins, `secret:${normId}:${username}`, { method: 'secret', secretId: normId });
+  }
+
   audit('secret:success', {
     ip, username: sanitizeText(username, 24), secretId: normId,
     coins: reward.coins || 0, item: reward.item || null,
@@ -1044,7 +1061,7 @@ app.post('/api/secret/unlock', (req, res) => {
 //
 // If FIREBASE_SERVICE_ACCOUNT_KEY isn't set, this falls back to a local
 // wallet-ledger.json file so the shop still works — but that file lives on
-// Railway's ephemeral disk and resets on redeploy. Set the env var for real,
+// Render's ephemeral disk and resets on redeploy. Set the env var for real,
 // permanent memory of payments.
 const WALLET_FILE = path.join(__dirname, 'wallet-ledger.json');
 let walletLocal = {}; // { username: { coins: number, txns: [txnId, ...] } } — fallback only
@@ -1120,6 +1137,135 @@ async function getWalletBalance(username) {
   return (walletLocal[username] && walletLocal[username].coins) || 0;
 }
 
+// ─── Shop spend gate (anti-cheat) ──────────────────────────────────────────
+// Problem: user.coins lives in localStorage, so anyone can open devtools and
+// type `coins = 9999999` (or edit cg_current_user directly) to give
+// themselves a fake balance. shop.js used to trust that number completely
+// when deciding whether a purchase was allowed — so that fake balance could
+// buy real items.
+//
+// Fix: purchases are now gated by THIS server-side wallet balance, which the
+// client can never write to directly — only server code (creditWallet)
+// increments it, in response to something the server itself verified
+// (a real payment, a real secret unlock, a real multiplayer win, or a
+// rate-limited/capped report of single-player earnings — see
+// /api/coins/earn below). Inflating localStorage still inflates what the
+// UI *shows*, but the instant that balance is asked to actually buy
+// something, it's checked against this number instead — and rejected if
+// it doesn't hold up.
+//
+// Known limitation: chest loot and mission/reward-table coins are still
+// applied purely client-side for now (replicating those RNG/gating tables
+// server-side is a bigger follow-up project) — so an honest player's real
+// balance may undercount slightly vs. what they've legitimately earned
+// until that's migrated too. That's a UX gap, not a security hole: it just
+// means the server errs on the side of rejecting, never on trusting the
+// client.
+const SHOP_ITEM_COSTS = {
+  trail_neon: 150, trail_fire: 250, trail_thunder: 400, trail_void: 600,
+  trail_rainbow: 900, trail_ice: 350, trail_gold: 750, trail_shadow: 550,
+  skin_royal: 800, skin_diamond: 1200, skin_lava: 950, skin_galaxy: 1500,
+  skin_ghost: 700, skin_emerald: 1100, skin_neon_grid: 1800, skin_inferno: 2000,
+  power_slowmo: 300, power_explode: 500, power_shield: 1000, power_magnet: 1400,
+  power_x2score: 1200, power_freeze: 800, power_ghost2: 1600, power_time: 900,
+  badge_rookie: 100, badge_slayer: 500, badge_legend: 2500, badge_void: 3000,
+  // skin_code_founder is intentionally absent — cost:Infinity in shop.js,
+  // meaning it can only ever come from /api/secret/unlock, never bought.
+};
+
+const UNLOCKS_FILE = path.join(__dirname, 'unlocks-ledger.json');
+let unlocksLocal = {}; // { username: [itemId, ...] } — fallback only
+try {
+  if (fs.existsSync(UNLOCKS_FILE)) {
+    unlocksLocal = JSON.parse(fs.readFileSync(UNLOCKS_FILE, 'utf8'));
+  }
+} catch (e) {
+  console.warn('[unlocks] could not load unlocks-ledger.json — starting fresh:', e.message);
+  unlocksLocal = {};
+}
+function saveUnlocksLocal() {
+  try { fs.writeFileSync(UNLOCKS_FILE, JSON.stringify(unlocksLocal)); }
+  catch (e) { console.warn('[unlocks] could not persist unlocks-ledger.json:', e.message); }
+}
+
+async function getUnlocks(username) {
+  if (db) {
+    try {
+      const doc = await db.collection('unlocks').doc(username).get();
+      return doc.exists ? (doc.data().items || []) : [];
+    } catch (e) {
+      console.error('[unlocks] Firestore read failed, falling back to local file:', e.message);
+    }
+  }
+  return unlocksLocal[username] || [];
+}
+
+// Atomically: verify the item exists + isn't already owned, check balance,
+// deduct, record ownership. Returns { success, balance, reason? }.
+async function debitWalletForItem(username, itemId) {
+  const cost = SHOP_ITEM_COSTS[itemId];
+  if (!cost) return { success: false, reason: 'unknown_item' };
+
+  if (db) {
+    try {
+      const walletRef  = db.collection('wallets').doc(username);
+      const unlockRef  = db.collection('unlocks').doc(username);
+      return await db.runTransaction(async (t) => {
+        const [walletDoc, unlockDoc] = await Promise.all([t.get(walletRef), t.get(unlockRef)]);
+        const balance = walletDoc.exists ? (walletDoc.data().coins || 0) : 0;
+        const owned   = unlockDoc.exists ? (unlockDoc.data().items || []) : [];
+
+        if (owned.includes(itemId)) return { success: false, reason: 'already_owned', balance };
+        if (balance < cost) return { success: false, reason: 'insufficient_funds', balance };
+
+        const newBalance = balance - cost;
+        t.set(walletRef, { username, coins: newBalance, updatedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
+        t.set(unlockRef, { username, items: [...owned, itemId], updatedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
+        return { success: true, balance: newBalance, itemId };
+      });
+    } catch (e) {
+      console.error('[wallet] Firestore debit failed, falling back to local file:', e.message);
+    }
+  }
+
+  // Local-file fallback (dev / no Firestore configured)
+  const balance = (walletLocal[username] && walletLocal[username].coins) || 0;
+  const owned   = unlocksLocal[username] || [];
+  if (owned.includes(itemId)) return { success: false, reason: 'already_owned', balance };
+  if (balance < cost) return { success: false, reason: 'insufficient_funds', balance };
+
+  walletLocal[username] = walletLocal[username] || { coins: 0, txns: [] };
+  walletLocal[username].coins = balance - cost;
+  unlocksLocal[username] = [...owned, itemId];
+  saveWalletLocal();
+  saveUnlocksLocal();
+  return { success: true, balance: walletLocal[username].coins, itemId };
+}
+
+// ─── Rate-limited single-player coin reporting ─────────────────────────────
+// Single-player score, chests, and missions are computed entirely client
+// side today (no server session to verify against). Rather than trust
+// whatever number the client claims outright, each report is capped to the
+// largest legitimate single reward in the game (a Legendary chest tops out
+// at 3000) and rate-limited per player — so even a scripted/console loop
+// calling this over and over can only trickle coins in slowly, nowhere near
+// fast enough to matter, instead of minting millions instantly.
+const EARN_MAX_PER_CALL = 3000;
+const EARN_MAX_CALLS_PER_WINDOW = 20;
+const EARN_WINDOW_MS = 10 * 60 * 1000; // 10 minutes
+const earnRateBuckets = new Map(); // username → { count, resetAt }
+
+function checkEarnRate(username) {
+  const now = Date.now();
+  let bucket = earnRateBuckets.get(username);
+  if (!bucket || now > bucket.resetAt) {
+    bucket = { count: 0, resetAt: now + EARN_WINDOW_MS };
+    earnRateBuckets.set(username, bucket);
+  }
+  bucket.count++;
+  return bucket.count <= EARN_MAX_CALLS_PER_WINDOW;
+}
+
 // Full payment history for a player — used for support/dispute lookups
 // (e.g. "I paid but didn't get coins") rather than by the game client.
 async function getPaymentHistory(username) {
@@ -1140,7 +1286,7 @@ async function getPaymentHistory(username) {
 // the client's.
 //
 // Storage: Firestore (`streaks/{username}`) when available, else a local
-// streak-ledger.json file (ephemeral on Railway redeploys, same caveat as
+// streak-ledger.json file (ephemeral on Render redeploys, same caveat as
 // the wallet fallback above).
 const STREAK_FILE = path.join(__dirname, 'streak-ledger.json');
 let streakLocal = {}; // { username: { count, longest, lastCheckIn, claimedUpTo } } — fallback only
@@ -1516,8 +1662,60 @@ app.get('/api/wallet/:username', async (req, res) => {
   if (!isValidName(username)) {
     return res.status(400).json({ error: 'Invalid username.' });
   }
-  const coins = await getWalletBalance(username);
-  res.json({ coins });
+  const [coins, unlocks] = await Promise.all([getWalletBalance(username), getUnlocks(username)]);
+  res.json({ coins, unlocks });
+});
+
+// ─── Shop purchase — the actual anti-cheat gate ─────────────────────────────
+// shop.js calls this instead of just deducting user.coins locally. Whatever
+// the client's localStorage says the balance is gets completely ignored —
+// only the server wallet counts. Insufficient real balance = instant 402,
+// no item, no deduction, regardless of what the browser console claims.
+app.post('/api/wallet/spend', async (req, res) => {
+  const { username, itemId } = req.body || {};
+  if (!isValidName(username)) {
+    return res.status(400).json({ error: 'Invalid username.' });
+  }
+  if (typeof itemId !== 'string' || !SHOP_ITEM_COSTS[itemId]) {
+    return res.status(400).json({ error: 'Unknown item.' });
+  }
+
+  const result = await debitWalletForItem(username, itemId);
+
+  if (!result.success) {
+    audit('spend:rejected', { username: sanitizeText(username, 24), itemId, reason: result.reason, balance: result.balance });
+    const status = result.reason === 'already_owned' ? 409 : 402;
+    return res.status(status).json(result);
+  }
+
+  audit('spend:success', { username: sanitizeText(username, 24), itemId, cost: SHOP_ITEM_COSTS[itemId], newBalance: result.balance });
+  res.json(result);
+});
+
+// ─── Single-player coin reporting (capped + rate-limited, not fully verified)
+// See the big comment above SHOP_ITEM_COSTS for the trust model here: this
+// is deliberately NOT a blind "credit whatever the client says" endpoint.
+app.post('/api/coins/earn', async (req, res) => {
+  const { username, amount, reason } = req.body || {};
+  if (!isValidName(username)) {
+    return res.status(400).json({ error: 'Invalid username.' });
+  }
+  const amt = Math.floor(Number(amount));
+  if (!Number.isFinite(amt) || amt <= 0 || amt > EARN_MAX_PER_CALL) {
+    audit('earn:rejected', { username: sanitizeText(username, 24), amount, reason: 'out_of_bounds' });
+    return res.status(400).json({ error: 'Invalid amount.' });
+  }
+  if (typeof reason !== 'string' || !/^(win|reward:|chest:)/.test(reason)) {
+    return res.status(400).json({ error: 'Invalid reason.' });
+  }
+  if (!checkEarnRate(username)) {
+    audit('earn:rateLimited', { username: sanitizeText(username, 24), amount, reason });
+    return res.status(429).json({ error: 'Too many earn reports — slow down.' });
+  }
+
+  const credited = await creditWallet(username, amt, null, { method: 'gameplay', reason: sanitizeText(reason, 40) });
+  const balance = await getWalletBalance(username);
+  res.json({ success: !!credited, balance });
 });
 
 // ─── Daily streak check-in — account-wide, not per-device ───────────────────

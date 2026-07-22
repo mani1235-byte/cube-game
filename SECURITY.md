@@ -41,12 +41,12 @@
 
 ---
 
-## Setting Up on Railway
+## Setting Up on Render
 
 ```bash
-# Environment variables to set in Railway:
+# Environment variables to set in Render:
 PORT=3000
-ALLOWED_ORIGINS=https://cube-game-production-26c5.up.railway.app/
+ALLOWED_ORIGINS=https://cube-game-fnam.onrender.com/
 ADMIN_SECRET=a-strong-random-string
 FIREBASE_API_KEY=...
 FIREBASE_PROJECT_ID=...

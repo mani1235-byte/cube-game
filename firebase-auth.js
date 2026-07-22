@@ -4,7 +4,7 @@
 (function () {
   // Firebase CLIENT config — these keys are intentionally public.
   // (Security comes from Firestore rules, not from hiding these.)
-  // Override any of these via Railway env vars → /config endpoint.
+  // Override any of these via Render env vars → /config endpoint.
   const FALLBACK_CONFIG = {
     apiKey:            "AIzaSyC_gTL3m6Snz9bUcTIr1teBWQG9KsG-0ds",
     authDomain:        "cube-game-515d7.firebaseapp.com",
@@ -17,8 +17,9 @@
   function init() {
     if (typeof firebase === "undefined") return setTimeout(init, 50);
 
-    // Try server /config first (Railway env vars), fall back to the baked-in config above.
-    fetch('/config')
+    // Try server /config first (Render env vars), fall back to the baked-in config above.
+    const configUrl = (window.CUBE_SERVER ? window.CUBE_SERVER.replace(/\/$/, '') : '') + '/config';
+    fetch(configUrl)
       .then(r => r.ok ? r.json() : {})
       .catch(() => ({}))
       .then(serverConfig => {

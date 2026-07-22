@@ -1,5 +1,6 @@
 // Backend URL now lives in one place: server-config.js (loaded before this
 // file). Falls back here only if that script wasn't included on this page.
+window.CUBE_SERVER = window.CUBE_SERVER || 'https://cube-game-fnam.onrender.com/';
 
 /**
  * multiplayer.js

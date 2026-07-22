@@ -21,6 +21,27 @@ window.CoinSystem = (function () {
     }
     Events.emit("coins:earned", { amount, total: state.coins, reason });
     Events.emit("progression:dirty");
+    reportEarnToServer(amount, reason);
+  }
+
+  // Best-effort report to the server wallet (see server.js's /api/coins/earn)
+  // so this earn event actually counts toward what the shop's server-side
+  // spend check will allow — not just the client-side display. Fire and
+  // forget: if it fails (offline, rate-limited), the local UI still works
+  // as before, it just won't be spendable server-side until it succeeds.
+  function reportEarnToServer(amount, reason) {
+    try {
+      if (typeof window.getUser !== "function") return;
+      const user = window.getUser();
+      if (!user || user.isGuest || !user.username) return;
+      const base = (window.CUBE_SERVER || window.location.origin || "").replace(/\/$/, "");
+      fetch(`${base}/api/coins/earn`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username: user.username, amount, reason }),
+        keepalive: true,
+      }).catch(() => {});
+    } catch (_) { /* non-fatal — display already updated locally */ }
   }
 
   function spend(amount) {

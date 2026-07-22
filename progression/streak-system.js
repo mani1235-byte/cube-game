@@ -7,7 +7,7 @@
 // full day) clears the backlog, since that starts a brand new cycle.
 //
 // The streak counter and the claimed watermark are both account-wide, not
-// per-device: check-in and claim both round-trip through the Railway server
+// per-device: check-in and claim both round-trip through the Render server
 // (/api/streak/checkin, /api/streak/claim), backed by Firestore keyed by
 // username — same pattern as the real-money wallet. That's what makes "day
 // 4, 2 unclaimed" mean the same thing on a phone and a laptop, and stops the

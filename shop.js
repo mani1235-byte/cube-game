@@ -1,7 +1,7 @@
 // shop.js — CUBE GAME Shop: coin packs + item unlocks
 // ============================================================================
 
-// Frontend (Netlify) and backend (Railway) are different domains, so API
+// Frontend (Netlify) and backend (Render) are different domains, so API
 // calls need to be absolute — same pattern as multiplayer.js's window.CUBE_SERVER.
 const SHOP_SERVER_URL = (window.CUBE_SERVER || window.location.origin || "").replace(/\/$/, "");
 
@@ -253,7 +253,14 @@ function isItemUnlocked(itemId) {
 // In-flight purchase lock — prevents double-purchases from button spam
 const _buyingItems = new Set();
 
-function buyItem(itemId) {
+// Purchases are gated by the SERVER wallet (see server.js's /api/wallet/spend)
+// — not by user.coins, which lives in localStorage and can be edited from
+// devtools. A locally-inflated balance will still show in the UI, but the
+// server independently checks its own ledger and rejects instantly if the
+// real balance is short — so console-cheated coins can't actually buy
+// anything. On success OR rejection we resync user.coins to whatever the
+// server says is true, so the display self-corrects either way.
+async function buyItem(itemId) {
   if (_buyingItems.has(itemId)) return; // already processing
 
   const item = ITEM_CATALOGUE.find(i => i.id === itemId);
@@ -263,33 +270,62 @@ function buyItem(itemId) {
   let user = getUser();
   if (!user || user.isGuest) { showToast("⚠️ Please log in first!"); return; }
 
+  // Quick client-side check first purely for responsive UX (instant "you
+  // need more coins" feedback) — this is NOT the real gate, just avoids a
+  // round-trip for the common case of an honestly-low balance.
   const balance = user.coins || 0;
   if (balance < item.cost) {
     showToast(`❌ Need ${item.cost.toLocaleString()} 🪙 (you have ${balance.toLocaleString()})`);
     return;
   }
 
-  // Lock the button immediately
   _buyingItems.add(itemId);
   const btn = document.querySelector(`.item-buy[data-item-id="${itemId}"]`);
   if (btn) { btn.disabled = true; btn.textContent = "…"; }
 
   try {
-    // Re-read from storage before deducting (prevents race with multiple tabs)
-    user = getUser();
-    if (!user || (user.coins || 0) < item.cost) {
-      showToast(`❌ Not enough coins!`);
+    const res = await fetch(`${SHOP_SERVER_URL}/api/wallet/spend`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username: user.username, itemId }),
+    });
+    const data = await res.json().catch(() => ({}));
+
+    if (!res.ok || !data.success) {
+      // Whatever the real reason, correct the local balance to match the
+      // server's truth right now — this is what actually neutralizes a
+      // console-set fake balance instead of just leaving it inflated.
+      if (typeof data.balance === "number") {
+        let u = getUser();
+        if (u) { u.coins = data.balance; saveUser(u); refreshCoinDisplay(u.coins); }
+      }
+      if (data.reason === "already_owned") {
+        showToast("✅ Already unlocked!");
+        unlockItem(itemId); // sync local ownership flag too
+      } else if (data.reason === "insufficient_funds") {
+        showToast(`❌ Not enough coins! (real balance: ${(data.balance ?? 0).toLocaleString()} 🪙)`);
+      } else if (res.status === 429) {
+        showToast("⏳ Too many requests — try again in a moment.");
+      } else {
+        showToast("❌ Purchase failed — try again.");
+      }
+      buildItemGrid();
       return;
     }
-    // Re-check ownership (another tab may have already bought it)
-    if (isItemUnlocked(itemId)) { showToast("✅ Already unlocked!"); return; }
 
-    user.coins = (user.coins || 0) - item.cost;
-    saveUser(user);
+    // Server confirmed the spend — apply the authoritative new balance,
+    // not a locally-computed one.
+    user = getUser();
+    if (user) {
+      user.coins = data.balance;
+      saveUser(user);
+    }
     unlockItem(itemId);
-    refreshCoinDisplay(user.coins);
+    refreshCoinDisplay(data.balance);
     showToast(`✅ ${item.name} unlocked! 🎉 (−${item.cost.toLocaleString()} 🪙)`);
     buildItemGrid(); // full re-render so owned/equip state is correct immediately
+  } catch (_) {
+    showToast("❌ Network error — purchase not completed.");
   } finally {
     _buyingItems.delete(itemId);
   }
@@ -520,6 +556,22 @@ async function syncWallet() {
       saveUser(u);
       showToast(`🪙 Payment confirmed! +${delta.toLocaleString()} Coins! Total: ${total.toLocaleString()} 🎉`);
       showCoinCelebration(delta);
+    }
+
+    // Pick up items bought/unlocked from another device or session — server
+    // ownership is authoritative, so merge in anything it knows about that
+    // this browser doesn't have locally yet.
+    if (Array.isArray(data.unlocks) && data.unlocks.length) {
+      let u = getUser();
+      if (u) {
+        const before = new Set(u.unlockedItems || []);
+        const merged = new Set([...(u.unlockedItems || []), ...data.unlocks]);
+        if (merged.size !== before.size) {
+          u.unlockedItems = [...merged];
+          saveUser(u);
+          renderItemButtons();
+        }
+      }
     }
   } catch (_) {
     // Network hiccup — next poll or next shop visit will catch up.
