@@ -56,6 +56,10 @@ window.CUBE_SERVER = window.CUBE_SERVER || 'https://cube-game-fnam.onrender.com/
 
   MP.connect = function () {
     if (MP.socket) return;
+    if (typeof io === 'undefined') {
+      console.error('[multiplayer] socket.io client not loaded — multiplayer is unavailable this session.');
+      return;
+    }
     MP.socket = io(SERVER_URL, {
       transports: ['websocket', 'polling'],
       reconnection: true,

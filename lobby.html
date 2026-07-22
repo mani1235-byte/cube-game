@@ -251,9 +251,44 @@
   <script src="./firebase-auth.js"></script>
   <script src="./profile-avatar.js"></script>
   <script src="./transition.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.8.1/socket.io.min.js"></script>
-  <script src="multiplayer.js"></script>
-  <script src="lobby.js"></script>
+  <script>
+    // socket.io's client library used to be loaded from cdnjs as a plain
+    // <script src>, racing against the static <script src="multiplayer.js">
+    // tag right after it. If that CDN request was ever slow, blocked by an
+    // ad/privacy-blocker extension flagging a third-party script host, or
+    // just failed, multiplayer.js would run before `io` existed on window,
+    // throwing "Uncaught ReferenceError: io is not defined" in MP.connect().
+    //
+    // Fix: load socket.io's client from the game server itself first (every
+    // socket.io server auto-serves a version-matched client at
+    // /socket.io/socket.io.js — no extra dependency, and same-origin-ish
+    // enough that blockers don't flag it), fall back to the cdnjs copy if
+    // that's unreachable, and only THEN load multiplayer.js/lobby.js —
+    // guaranteeing `io` exists before either one runs.
+    (function loadSocketIO(sources, i) {
+      i = i || 0;
+      if (i >= sources.length) {
+        console.error('[socket.io] could not load client from any source — multiplayer will be unavailable this session');
+        loadScript('multiplayer.js', function () { loadScript('lobby.js'); });
+        return;
+      }
+      var s = document.createElement('script');
+      s.src = sources[i];
+      s.onload = function () { loadScript('multiplayer.js', function () { loadScript('lobby.js'); }); };
+      s.onerror = function () { loadSocketIO(sources, i + 1); };
+      document.head.appendChild(s);
+    })([
+      (window.CUBE_SERVER || '').replace(/\/$/, '') + '/socket.io/socket.io.js',
+      'https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.8.1/socket.io.min.js'
+    ]);
+
+    function loadScript(src, onload) {
+      var s = document.createElement('script');
+      s.src = src;
+      if (onload) s.onload = onload;
+      document.head.appendChild(s);
+    }
+  </script>
 <script src="./translate.js"></script>
 </body>
 </html>
