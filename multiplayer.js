@@ -29,7 +29,7 @@ window.CUBE_SERVER = window.CUBE_SERVER || 'https://cube-game-fnam.onrender.com/
 
   // ─── Config ───────────────────────────────────────────────────────────────
 
-  const SERVER_URL = window.CUBE_SERVER || window.location.origin || 'https://cubegame.club';
+  const SERVER_URL = window.CUBE_SERVER || window.location.origin || 'https://cubegame.club/';
   const SEND_RATE  = 30;   // Hz — how often we send our state to the server
   const PING_RATE  = 3000; // ms
 
