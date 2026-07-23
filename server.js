@@ -633,7 +633,12 @@ async function endGame(room, winnerTeam) {
 // Players queue for a specific match size (1v1 / 2v2 / 3v3 / 4v4). Once enough
 // players are waiting for that size, the first half are auto-placed on Team A
 // and the second half on Team B, and the match starts immediately.
-setInterval(() => {
+//
+// runMatchmaking() is called both immediately — whenever someone joins/leaves
+// the queue, so a room is "found" the instant a second player shows up
+// instead of waiting for the next poll tick — and on a slower interval as a
+// safety net (to catch the MATCHMAKING_WAIT_MAX timeout case).
+function runMatchmaking() {
   const now = Date.now();
 
   for (let size = 1; size <= MAX_TEAM_SIZE; size++) {
@@ -672,7 +677,9 @@ setInterval(() => {
       entry.socket.emit('queueStatus', { position: i + 1, size, total: entries.length });
     });
   }
-}, MATCHMAKING_INTERVAL);
+}
+
+setInterval(runMatchmaking, MATCHMAKING_INTERVAL);
 
 // Stale room cleanup
 setInterval(() => {
@@ -750,6 +757,9 @@ io.on('connection', (socket) => {
         size: validSize,
         total: sameSize.length,
       });
+      // Check for a match right away — don't make a waiting player sit
+      // through up to MATCHMAKING_INTERVAL ms before the room is found.
+      runMatchmaking();
     }
   });
 

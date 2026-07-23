@@ -606,7 +606,10 @@
 
     MP.on("matchFound", (data) => {
       stopQueueTimer();
-      showToast(`Match found — ${data?.teamSize || state.queueSize}v${data?.teamSize || state.queueSize}`, "success");
+      const size = data?.teamSize || state.queueSize;
+      if (els.queueTitle) els.queueTitle.textContent = "Room Found!";
+      if (els.queueSub) els.queueSub.textContent = `${size}v${size} match ready — joining…`;
+      showToast(`Room found — ${size}v${size}`, "success");
     });
 
     MP.on("roomState", handleRoomState);
