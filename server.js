@@ -73,8 +73,8 @@ app.use((req, res, next) => {
   res.setHeader('Permissions-Policy',      'camera=(), microphone=(), geolocation=()');
   res.setHeader('Content-Security-Policy',
     "default-src 'self'; " +
-    "script-src 'self' 'unsafe-inline' https://www.gstatic.com https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://pagead2.googlesyndication.com https://adservice.google.com https://www.googletagservices.com; " +
-    "connect-src 'self' wss: ws: https://*.firebaseapp.com https://*.googleapis.com https://cubegame.club https://www.cubegame.club https://pagead2.googlesyndication.com https://adservice.google.com; " +
+    "script-src 'self' 'unsafe-inline' https://www.gstatic.com https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://pagead2.googlesyndication.com https://adservice.google.com https://www.googletagservices.com https://www.googletagmanager.com https://cube-game-fnam.onrender.com; " +
+    "connect-src 'self' wss: ws: https://*.firebaseapp.com https://*.googleapis.com https://cubegame.club https://www.cubegame.club https://cube-game-fnam.onrender.com https://pagead2.googlesyndication.com https://adservice.google.com; " +
     "img-src 'self' data: https://*.googleusercontent.com https://pagead2.googlesyndication.com https://tpc.googlesyndication.com; " +
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " +
     "font-src 'self' https://fonts.gstatic.com; " +
@@ -264,6 +264,15 @@ const MAX_SCORE_PER_HIT   = 500;    // points — reject above this per event
 const SOCKET_RATE_LIMIT   = 25;     // events/sec per socket
 const SOCKET_RATE_WINDOW  = 1000;   // ms
 
+// ─── Arena shooter constants (must mirror lobby.js's ARENA values) ────────────
+const ARENA_HIT_RADIUS      = 20;   // world units — bullet-to-player hit distance
+const ARENA_BULLET_RANGE    = 480;  // world units — max shot distance
+const ARENA_RENDER_DELAY_MS = 100;  // matches MP.getInterpolatedPosition's default
+const ARENA_MAX_ONE_WAY_MS  = 150;  // cap on assumed one-way latency for rewind
+const POS_HISTORY_MS        = 600;  // how far back we keep position snapshots
+const ARENA_MAX_ORIGIN_DRIFT = 60;  // units — how far a claimed shot origin may
+                                     // differ from the server's last known position
+
 // ─── Audit log ────────────────────────────────────────────────────────────────
 const auditLog = [];
 const MAX_AUDIT = 5000;
@@ -396,8 +405,30 @@ function createRoom(code, hostId, teamSize) {
     quickPlay:    false,     // true if created by matchmaking (auto-starts)
     createdAt:    Date.now(),
     lastActivity: Date.now(),
-    gameData:     { events: [] }
+    gameData:     { events: [] },
+    mapVotes:     {},        // socketId -> mapId, tallied for roomPublicState
+    map:          null,      // locked in once the game actually starts
   };
+}
+
+/** Tally current mapVotes into { mapId: count }, including zero-count ids. */
+function mapVoteTally(room) {
+  const tally = {};
+  MAP_IDS.forEach(id => { tally[id] = 0; });
+  Object.values(room.mapVotes || {}).forEach(id => {
+    if (tally[id] !== undefined) tally[id]++;
+  });
+  return tally;
+}
+
+/** Pick the winning map from current votes; ties broken randomly. Falls back
+ *  to a random map if nobody voted. */
+function resolveMapVote(room) {
+  const tally = mapVoteTally(room);
+  const max = Math.max(...Object.values(tally));
+  if (max <= 0) return MAP_IDS[Math.floor(Math.random() * MAP_IDS.length)];
+  const winners = Object.keys(tally).filter(id => tally[id] === max);
+  return winners[Math.floor(Math.random() * winners.length)];
 }
 
 function generateCode() {
@@ -419,13 +450,16 @@ function roomPublicState(room) {
     id:        p.id,
     name:      p.name,
     avatar:    p.avatar,
+    photo:     p.photo || null,
     evoStage:  p.evoStage,
     score:     p.score,
     ready:     p.ready,
     alive:     p.alive,
+    hp:        typeof p.hp === 'number' ? p.hp : 150,
     ping:      p.ping,
     badgeIcon: p.badgeIcon || null,
     team:      p.team,
+    mapVote:   room.mapVotes ? (room.mapVotes[p.id] || null) : null,
   }));
   return {
     code:      room.code,
@@ -436,6 +470,8 @@ function roomPublicState(room) {
     quickPlay: room.quickPlay,
     teams:     { A: teamList('A'), B: teamList('B') },
     gameData:  room.gameData,
+    mapVotes:  mapVoteTally(room),
+    map:       room.map,
   };
 }
 
@@ -445,9 +481,23 @@ function roomPublicState(room) {
 // Whether they've actually *earned* the badge is still enforced client-side
 // (localStorage), which is fine for a cosmetic flex badge but NOT something
 // to rely on for anything with real value (see the coins/items note above).
+// Map pool — ids only. Visuals (colors/thumbnails/names) live client-side in
+// lobby.js MAP_POOL; the server only needs to know which ids are legal to
+// vote for and tally the votes.
+const MAP_IDS = ['neon-grid', 'sunset-dune', 'deep-void'];
+
 const VALID_BADGE_ICONS = new Set(['🌟', '⚔️', '🏆', '🔮']);
 function sanitizeBadgeIcon(icon) {
   return (typeof icon === 'string' && VALID_BADGE_ICONS.has(icon)) ? icon : null;
+}
+
+// Only allow http(s) image URLs, capped in length — this is a cosmetic
+// display-only field (rendered as a CSS background-image), never trusted
+// for anything else, and we never fetch it server-side.
+function sanitizePhotoURL(url) {
+  if (typeof url !== 'string' || url.length > 500) return null;
+  if (!/^https:\/\//i.test(url)) return null;
+  return url;
 }
 
 // Picks whichever team has fewer players (ties → A). Used for quick play,
@@ -503,6 +553,7 @@ function joinRoom(socket, code, requestedTeam, profile) {
     id:        socket.id,
     name,
     avatar:    profile?.avatar || 'cube',
+    photo:     sanitizePhotoURL(profile?.photo),
     evoStage:  1, // always start at 1 — server controls evo
     badgeIcon: sanitizeBadgeIcon(profile?.badgeIcon),
     team,
@@ -510,11 +561,13 @@ function joinRoom(socket, code, requestedTeam, profile) {
     coins:     0,
     ready:     false,
     alive:     true,
+    hp:        150,
     ping:      0,
     position:  { x: 0, y: 0 },
     velocity:  { x: 0, y: 0 },
     inputs:    {},
     flagCount: 0, // anti-cheat flag counter
+    posHistory: [], // { t, x, y } — recent positions for shot rewind (Phase 3 lag comp)
   };
 
   room.teams[team].set(socket.id, playerState);
@@ -554,6 +607,48 @@ function switchTeam(socketId, requestedTeam) {
   return { success: true, room: roomPublicState(room) };
 }
 
+/**
+ * Where a player's hitbox actually was at `targetTime`, per their recorded
+ * position history — this is the "rewind" step of lag-compensated hit
+ * detection: we resolve shots against where the target appeared to be on
+ * the shooter's screen, not where they are on the server right now.
+ */
+function getRewoundPosition(player, targetTime) {
+  const hist = player.posHistory;
+  if (!hist || hist.length === 0) return player.position;
+  if (targetTime <= hist[0].t) return { x: hist[0].x, y: hist[0].y };
+  for (let i = 1; i < hist.length; i++) {
+    if (hist[i].t >= targetTime) {
+      const a = hist[i - 1], b = hist[i];
+      const span = b.t - a.t;
+      const frac = span > 0 ? (targetTime - a.t) / span : 0;
+      return { x: a.x + (b.x - a.x) * frac, y: a.y + (b.y - a.y) * frac };
+    }
+  }
+  const last = hist[hist.length - 1];
+  return { x: last.x, y: last.y };
+}
+
+/** Closest distance from point P to the ray segment [origin, origin + dir*range]. */
+function rayPointDistance(origin, dir, range, point) {
+  const vx = point.x - origin.x, vy = point.y - origin.y;
+  let proj = vx * dir.x + vy * dir.y;
+  proj = Math.max(0, Math.min(range, proj));
+  const cx = origin.x + dir.x * proj, cy = origin.y + dir.y * proj;
+  return { dist: Math.hypot(point.x - cx, point.y - cy), proj };
+}
+
+function checkTeamElimination(room) {
+  if (!room || room.state !== 'playing') return;
+  const aliveA = [...room.teams.A.values()].filter(p => p.alive).length;
+  const aliveB = [...room.teams.B.values()].filter(p => p.alive).length;
+  const eliminatedA = room.teams.A.size === 0 || aliveA === 0;
+  const eliminatedB = room.teams.B.size === 0 || aliveB === 0;
+  if (eliminatedA && eliminatedB) endGame(room, null);
+  else if (eliminatedA) endGame(room, 'B');
+  else if (eliminatedB) endGame(room, 'A');
+}
+
 function leaveRoom(socketId) {
   const pData = players.get(socketId);
   if (!pData) return;
@@ -565,6 +660,8 @@ function leaveRoom(socketId) {
   room.teams[team].delete(socketId);
   players.delete(socketId);
 
+  if (room.mapVotes) delete room.mapVotes[socketId];
+
   const remaining = [...room.teams.A.keys(), ...room.teams.B.keys()];
 
   if (room.hostId === socketId && remaining.length > 0) {
@@ -573,10 +670,7 @@ function leaveRoom(socketId) {
   }
 
   if (room.state === 'playing') {
-    const aliveA = [...room.teams.A.values()].filter(p => p.alive).length;
-    const aliveB = [...room.teams.B.values()].filter(p => p.alive).length;
-    if (room.teams.A.size === 0 || aliveA === 0) endGame(room, room.teams.B.size ? 'B' : null);
-    else if (room.teams.B.size === 0 || aliveB === 0) endGame(room, room.teams.A.size ? 'A' : null);
+    checkTeamElimination(room);
   }
 
   io.to(room.code).emit('playerLeft', { playerId: socketId, roomState: roomPublicState(room) });
@@ -597,11 +691,15 @@ function startCountdown(room) {
 
 function startGame(room) {
   room.state = 'playing';
+  room.map = resolveMapVote(room);
   room.gameData.startedAt = Date.now();
   [...room.teams.A.values(), ...room.teams.B.values()].forEach(p => {
     p.score = 0; p.coins = 0;
     p.alive = true; p.ready = false;
     p.evoStage = 1; p.flagCount = 0;
+    p.hp = 150; p._lastShot = 0;
+    p.posHistory = [];
+    p._posAckCount = 0;
   });
   io.to(room.code).emit('gameStart', { roomState: roomPublicState(room) });
 }
@@ -769,6 +867,19 @@ io.on('connection', (socket) => {
     if (typeof cb === 'function') cb(result);
   });
 
+  socket.on('voteMap', ({ mapId } = {}) => {
+    const pData = players.get(socket.id);
+    if (!pData) return;
+    const room = rooms.get(pData.roomCode);
+    if (!room || room.state !== 'waiting') return;
+    if (!teamOfSocket(room, socket.id)) return;
+    if (!MAP_IDS.includes(mapId)) return;
+
+    room.mapVotes[socket.id] = mapId;
+    room.lastActivity = Date.now();
+    io.to(room.code).emit('mapVoteUpdate', { roomState: roomPublicState(room) });
+  });
+
   socket.on('switchTeam', ({ team } = {}, cb) => {
     const result = switchTeam(socket.id, team);
     if (typeof cb === 'function') cb(result);
@@ -931,11 +1042,35 @@ io.on('connection', (socket) => {
         if (player.flagCount >= 5) {
           socket.emit('kicked', { reason: 'Anti-cheat: movement violation' });
           socket.disconnect();
+        } else {
+          // Reconciliation: the client's local prediction just diverged
+          // enough to get rejected (bad input, dropped/reordered packets,
+          // etc.) — tell it exactly where the server still thinks it is so
+          // it snaps back into agreement instead of drifting forever.
+          socket.emit('positionCorrection', { position: player.position });
         }
         return; // reject this update
       }
       player.position = state.position;
       if (state.velocity) player.velocity = state.velocity;
+
+      // Position history for server-side shot rewind (Phase 3 lag comp).
+      const t = Date.now();
+      player.posHistory.push({ t, x: player.position.x, y: player.position.y });
+      const cutoff = t - POS_HISTORY_MS;
+      while (player.posHistory.length > 1 && player.posHistory[0].t < cutoff) {
+        player.posHistory.shift();
+      }
+
+      // Reconciliation (Phase 4): occasionally echo the accepted position
+      // back to its own sender. Under normal conditions the client's
+      // prediction already matches this exactly, so it's a no-op — it only
+      // visibly corrects anything after dropped/reordered packets let the
+      // client's local prediction drift from what the server has.
+      player._posAckCount = (player._posAckCount || 0) + 1;
+      if (player._posAckCount % 8 === 0) {
+        socket.emit('positionAck', { position: player.position });
+      }
     }
 
     // NEVER trust score from client — score comes from cubeSliced events
@@ -998,12 +1133,79 @@ io.on('connection', (socket) => {
     player.alive = false;
     io.to(room.code).emit('playerDied', { playerId: socket.id, team: player.team });
 
-    // Team is eliminated once every member on that team is dead.
-    const aliveA = [...room.teams.A.values()].filter(p => p.alive).length;
-    const aliveB = [...room.teams.B.values()].filter(p => p.alive).length;
-    if (aliveA === 0 && aliveB === 0) endGame(room, null); // draw
-    else if (aliveA === 0) endGame(room, 'B');
-    else if (aliveB === 0) endGame(room, 'A');
+    checkTeamElimination(room);
+  });
+
+  // ── Server-authoritative shooting (Phase 3: lag-compensated hit detection) ─
+  // The shooter's client still only relays where it fired from and which
+  // way — the server decides whether that shot actually hit anyone, using
+  // each potential target's rewound position at the shooter's effective
+  // "saw them here" time. Clients no longer get to self-report damage.
+  socket.on('playerShoot', (data = {}) => {
+    const pData = players.get(socket.id);
+    if (!pData) return;
+    const room = rooms.get(pData.roomCode);
+    if (!room || room.state !== 'playing') return;
+    const team = teamOfSocket(room, socket.id);
+    const player = team ? room.teams[team].get(socket.id) : null;
+    if (!player || !player.alive) return;
+
+    // Rate limit — max ~6 shots/sec per player
+    const now = Date.now();
+    if (now - (player._lastShot || 0) < 150) return;
+    player._lastShot = now;
+
+    if (!isFinite(data.x) || !isFinite(data.y) || !isFinite(data.dx) || !isFinite(data.dy)) return;
+    const dirLen = Math.hypot(data.dx, data.dy);
+    if (dirLen < 0.01) return;
+    const dir = { x: data.dx / dirLen, y: data.dy / dirLen };
+
+    // Don't fully trust the claimed muzzle position — clamp it to near the
+    // player's last server-confirmed position so a modified client can't
+    // claim to be firing from across the map.
+    const serverPos = player.position || { x: 0, y: 0 };
+    const claimed = { x: +data.x, y: +data.y };
+    const drift = Math.hypot(claimed.x - serverPos.x, claimed.y - serverPos.y);
+    const origin = drift <= ARENA_MAX_ORIGIN_DRIFT ? claimed : serverPos;
+
+    socket.to(room.code).emit('remoteShoot', {
+      playerId: socket.id,
+      team: player.team,
+      x: origin.x, y: origin.y,
+      dx: dir.x, dy: dir.y,
+    });
+
+    // Rewind time: how far in the past the shooter's screen was showing
+    // everyone else when they pulled the trigger — their one-way latency
+    // (shot took that long to reach us) plus the client's render delay
+    // (they were already looking ~100ms into the past for smoothing).
+    const oneWay = Math.min(ARENA_MAX_ONE_WAY_MS, (player.ping || 60) / 2);
+    const shotTime = now - oneWay - ARENA_RENDER_DELAY_MS;
+
+    const enemyTeam = player.team === 'A' ? 'B' : 'A';
+    const enemies = [...room.teams[enemyTeam].values()].filter(p => p.alive);
+
+    let best = null; // closest valid hit along the ray
+    for (const target of enemies) {
+      const rewound = getRewoundPosition(target, shotTime);
+      const { dist, proj } = rayPointDistance(origin, dir, ARENA_BULLET_RANGE, rewound);
+      if (dist <= ARENA_HIT_RADIUS && (!best || proj < best.proj)) {
+        best = { target, proj };
+      }
+    }
+
+    if (best) {
+      const dmg = 10 + Math.floor(Math.random() * 11); // 10-20 inclusive
+      const target = best.target;
+      target.hp = Math.max(0, (typeof target.hp === 'number' ? target.hp : 150) - dmg);
+      io.to(room.code).emit('remoteHealth', { playerId: target.id, hp: target.hp });
+
+      if (target.hp <= 0 && target.alive) {
+        target.alive = false;
+        io.to(room.code).emit('playerDied', { playerId: target.id, team: target.team });
+        checkTeamElimination(room);
+      }
+    }
   });
 
   socket.on('bombExploded', (data) => {
