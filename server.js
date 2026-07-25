@@ -456,6 +456,24 @@ function autoTeam(room) {
   return teamCount(room, 'A') <= teamCount(room, 'B') ? 'A' : 'B';
 }
 
+// Finds an existing room that's still waiting for players, matches the
+// requested team size, and has an open slot — so a new player can drop into
+// it instead of always spinning up a brand new (empty) room. Prefers the
+// room that's already the most full, so rooms fill up and start rather than
+// players getting scattered thin across lots of half-empty rooms.
+function findOpenRoom(teamSize) {
+  let best = null;
+  let bestCount = -1;
+  for (const room of rooms.values()) {
+    if (room.state !== 'waiting') continue;
+    if (room.teamSize !== teamSize) continue;
+    const count = room.teams.A.size + room.teams.B.size;
+    if (count >= room.teamSize * 2) continue; // full
+    if (count > bestCount) { best = room; bestCount = count; }
+  }
+  return best;
+}
+
 function joinRoom(socket, code, requestedTeam, profile) {
   const room = rooms.get(code);
   if (!room) return { error: 'Room not found' };
@@ -722,6 +740,19 @@ io.on('connection', (socket) => {
   // ── Lobby: room creation / joining ─────────────────────────────────────────
   socket.on('createRoom', ({ teamSize, profile } = {}, cb) => {
     const size = isValidTeamSize(teamSize);
+
+    // If a room of this size is already open and waiting for players, join
+    // that instead of creating a new (empty) one.
+    const existing = findOpenRoom(size);
+    if (existing) {
+      const result = joinRoom(socket, existing.code, undefined, profile);
+      if (result.success) {
+        if (typeof cb === 'function') cb({ ...result, code: existing.code, teamSize: size, joinedExisting: true });
+        return;
+      }
+      // Fell through (e.g. filled up right before we joined) — just create a new one below.
+    }
+
     const code = generateCode();
     const room = createRoom(code, socket.id, size);
     rooms.set(code, room);
@@ -749,18 +780,34 @@ io.on('connection', (socket) => {
   // size = 1..4, meaning "queue for a 1v1", "queue for a 2v2", etc.
   socket.on('joinQueue', ({ size, profile } = {}) => {
     const validSize = isValidTeamSize(size);
-    if (!queue.has(socket.id)) {
-      queue.set(socket.id, { socket, size: validSize, profile, joinedAt: Date.now() });
-      const sameSize = [...queue.values()].filter(e => e.size === validSize);
-      socket.emit('queueStatus', {
-        position: sameSize.length,
-        size: validSize,
-        total: sameSize.length,
-      });
-      // Check for a match right away — don't make a waiting player sit
-      // through up to MATCHMAKING_INTERVAL ms before the room is found.
-      runMatchmaking();
+    if (queue.has(socket.id)) return;
+
+    // Prefer dropping straight into an existing open room over waiting in
+    // the queue for a brand new one to be created.
+    const existing = findOpenRoom(validSize);
+    if (existing) {
+      const result = joinRoom(socket, existing.code, undefined, profile);
+      if (result.success) {
+        socket.emit('matchFound', { code: existing.code, mode: 'versus', teamSize: validSize });
+        // If this fill made a quick-play room full, start it right away —
+        // mirrors the normal quick-play "match found → countdown" flow.
+        const count = existing.teams.A.size + existing.teams.B.size;
+        if (existing.quickPlay && count >= existing.teamSize * 2) startCountdown(existing);
+        return;
+      }
+      // Fell through (e.g. someone else filled the last slot first) — queue normally below.
     }
+
+    queue.set(socket.id, { socket, size: validSize, profile, joinedAt: Date.now() });
+    const sameSize = [...queue.values()].filter(e => e.size === validSize);
+    socket.emit('queueStatus', {
+      position: sameSize.length,
+      size: validSize,
+      total: sameSize.length,
+    });
+    // Check for a match right away — don't make a waiting player sit
+    // through up to MATCHMAKING_INTERVAL ms before the room is found.
+    runMatchmaking();
   });
 
   socket.on('leaveQueue', () => queue.delete(socket.id));
