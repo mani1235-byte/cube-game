@@ -423,52 +423,6 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: var(--bg);
   margin-top: .5rem; text-transform: uppercase;
 }
 
-/* ─── Arena (top-down match canvas) ──────────────────────────────────────── */
-#arena-canvas {
-  position: fixed; inset: 0; z-index: 50;
-  width: 100%; height: 100%;
-  background: radial-gradient(circle at 50% 50%, #10142a 0%, #07080f 80%);
-  touch-action: none;
-}
-#arena-canvas.hidden { display: none; }
-
-.arena-joystick-zone {
-  position: fixed; left: 0; bottom: 0; width: 45%; height: 45%;
-  z-index: 110; touch-action: none;
-}
-.arena-joystick-zone.hidden { display: none; }
-.arena-joystick-base {
-  position: absolute; width: 110px; height: 110px; border-radius: 50%;
-  background: rgba(20,23,40,.55); border: 2px solid var(--border2);
-  display: none; align-items: center; justify-content: center;
-  backdrop-filter: blur(4px);
-}
-.arena-joystick-base.active { display: flex; }
-.arena-joystick-knob {
-  width: 46px; height: 46px; border-radius: 50%;
-  background: var(--accent); box-shadow: var(--glow-c);
-}
-
-.arena-aim-zone {
-  position: fixed; right: 0; bottom: 0; width: 45%; height: 45%;
-  z-index: 110; touch-action: none;
-}
-.arena-aim-zone.hidden { display: none; }
-.arena-aim-base { border-color: rgba(255,68,102,.5); }
-.arena-aim-knob { background: var(--versus); box-shadow: var(--glow-r); }
-
-.arena-hp-wrap {
-  position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%);
-  width: 220px; height: 10px; border-radius: 6px; z-index: 105;
-  background: rgba(20,23,40,.7); border: 1px solid var(--border2);
-  overflow: hidden;
-}
-.arena-hp-wrap.hidden { display: none; }
-.arena-hp-fill {
-  height: 100%; width: 100%; background: var(--coop);
-  transition: width .15s ease, background .15s ease;
-}
-
 /* ─── HUD ─────────────────────────────────────────────────────────────────── */
 .mp-hud {
   position: fixed; top: 12px; right: 12px; z-index: 100;
@@ -488,9 +442,6 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: var(--bg);
   font-family: var(--font-mono); font-size: .65rem; color: var(--muted);
   background: rgba(7,8,15,.7); padding: .15rem .45rem;
   border-radius: 4px; border: 1px solid var(--border);
-}
-.btn-leave-match {
-  pointer-events: auto; font-size: .7rem; padding: .3rem .8rem;
 }
 
 /* ─── Game end overlay ────────────────────────────────────────────────────── */

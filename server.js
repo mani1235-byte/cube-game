@@ -423,7 +423,6 @@ function roomPublicState(room) {
     score:     p.score,
     ready:     p.ready,
     alive:     p.alive,
-    hp:        typeof p.hp === 'number' ? p.hp : 100,
     ping:      p.ping,
     badgeIcon: p.badgeIcon || null,
     team:      p.team,
@@ -511,7 +510,6 @@ function joinRoom(socket, code, requestedTeam, profile) {
     coins:     0,
     ready:     false,
     alive:     true,
-    hp:        100,
     ping:      0,
     position:  { x: 0, y: 0 },
     velocity:  { x: 0, y: 0 },
@@ -556,17 +554,6 @@ function switchTeam(socketId, requestedTeam) {
   return { success: true, room: roomPublicState(room) };
 }
 
-function checkTeamElimination(room) {
-  if (!room || room.state !== 'playing') return;
-  const aliveA = [...room.teams.A.values()].filter(p => p.alive).length;
-  const aliveB = [...room.teams.B.values()].filter(p => p.alive).length;
-  const eliminatedA = room.teams.A.size === 0 || aliveA === 0;
-  const eliminatedB = room.teams.B.size === 0 || aliveB === 0;
-  if (eliminatedA && eliminatedB) endGame(room, null);
-  else if (eliminatedA) endGame(room, 'B');
-  else if (eliminatedB) endGame(room, 'A');
-}
-
 function leaveRoom(socketId) {
   const pData = players.get(socketId);
   if (!pData) return;
@@ -586,7 +573,10 @@ function leaveRoom(socketId) {
   }
 
   if (room.state === 'playing') {
-    checkTeamElimination(room);
+    const aliveA = [...room.teams.A.values()].filter(p => p.alive).length;
+    const aliveB = [...room.teams.B.values()].filter(p => p.alive).length;
+    if (room.teams.A.size === 0 || aliveA === 0) endGame(room, room.teams.B.size ? 'B' : null);
+    else if (room.teams.B.size === 0 || aliveB === 0) endGame(room, room.teams.A.size ? 'A' : null);
   }
 
   io.to(room.code).emit('playerLeft', { playerId: socketId, roomState: roomPublicState(room) });
@@ -612,7 +602,6 @@ function startGame(room) {
     p.score = 0; p.coins = 0;
     p.alive = true; p.ready = false;
     p.evoStage = 1; p.flagCount = 0;
-    p.hp = 100; p._lastShot = 0;
   });
   io.to(room.code).emit('gameStart', { roomState: roomPublicState(room) });
 }
@@ -1009,58 +998,12 @@ io.on('connection', (socket) => {
     player.alive = false;
     io.to(room.code).emit('playerDied', { playerId: socket.id, team: player.team });
 
-    checkTeamElimination(room);
-  });
-
-  socket.on('playerShoot', (data = {}) => {
-    const pData = players.get(socket.id);
-    if (!pData) return;
-    const room = rooms.get(pData.roomCode);
-    if (!room || room.state !== 'playing') return;
-    const team = teamOfSocket(room, socket.id);
-    const player = team ? room.teams[team].get(socket.id) : null;
-    if (!player || !player.alive) return;
-
-    // Rate limit — max ~6 shots/sec per player
-    const now = Date.now();
-    if (now - (player._lastShot || 0) < 150) return;
-    player._lastShot = now;
-
-    if (!isFinite(data.x) || !isFinite(data.y) || !isFinite(data.dx) || !isFinite(data.dy)) return;
-    const dirLen = Math.hypot(data.dx, data.dy);
-    if (dirLen < 0.01) return;
-
-    socket.to(room.code).emit('remoteShoot', {
-      playerId: socket.id,
-      team: player.team,
-      x: +data.x, y: +data.y,
-      dx: data.dx / dirLen, dy: data.dy / dirLen,
-    });
-  });
-
-  // Self-reported damage (same trust model as playerDied below): the client
-  // that gets hit is the one who tells the server, since it's the one that
-  // ran local hit-detection against the bullet. Server just clamps the
-  // amount so a modified client can't zero someone's HP in one shot.
-  socket.on('playerDamaged', ({ amount } = {}) => {
-    const pData = players.get(socket.id);
-    if (!pData) return;
-    const room = rooms.get(pData.roomCode);
-    if (!room || room.state !== 'playing') return;
-    const team = teamOfSocket(room, socket.id);
-    const player = team ? room.teams[team].get(socket.id) : null;
-    if (!player || !player.alive) return;
-
-    const dmg = Math.max(0, Math.min(40, Number(amount) || 0));
-    if (dmg <= 0) return;
-    player.hp = Math.max(0, (typeof player.hp === 'number' ? player.hp : 100) - dmg);
-    io.to(room.code).emit('remoteHealth', { playerId: socket.id, hp: player.hp });
-
-    if (player.hp <= 0) {
-      player.alive = false;
-      io.to(room.code).emit('playerDied', { playerId: socket.id, team: player.team });
-      checkTeamElimination(room);
-    }
+    // Team is eliminated once every member on that team is dead.
+    const aliveA = [...room.teams.A.values()].filter(p => p.alive).length;
+    const aliveB = [...room.teams.B.values()].filter(p => p.alive).length;
+    if (aliveA === 0 && aliveB === 0) endGame(room, null); // draw
+    else if (aliveA === 0) endGame(room, 'B');
+    else if (aliveB === 0) endGame(room, 'A');
   });
 
   socket.on('bombExploded', (data) => {

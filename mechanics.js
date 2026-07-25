@@ -28,10 +28,14 @@
   const style = document.createElement("style");
   style.textContent = `
     #heartsHud {
-      /* Superseded by the real 150-HP bar rendered by script.js's
-         renderHearts(); kept in the DOM (unused) so nothing else that
-         references #heartsHud/#heart1-3 breaks, but hidden visually. */
-      display: none !important;
+      position: fixed;
+      top: 12px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      gap: 8px;
+      z-index: 1000;
+      pointer-events: none;
     }
     .heart {
       font-size: clamp(20px, 4vw, 28px);
@@ -311,13 +315,11 @@
     prevHits.forEach(({ ref, wasHit }) => {
       if (!wasHit && ref.hit) {
         if (ref.isBomb) {
-          // NOTE: script.js's native tick already applies real HP damage
-          // for this same isBomb hit — don't double-process it here with
-          // a second, private heart counter (that used to end the game
-          // early). Just keep the sound cue.
+          loseHeart();
           if (window.SOUND) window.SOUND.bombHit();
         } else {
           if (Math.random() < HEART_CHANCE) {
+            gainHeart();
             if (window.SOUND) window.SOUND.heartGain();
           }
         }

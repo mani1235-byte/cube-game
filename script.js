@@ -19,8 +19,6 @@ const allColors = [BLUE, GREEN, PINK, ORANGE];
 // Hearts (normal mode only)
 const MAX_HEARTS = 3;
 let hearts       = MAX_HEARTS;
-const MAX_HP     = 150;
-let currentHP    = MAX_HP;
 const BOMB_CHANCE = 0.12; // ~12% chance each spawn cycle
 
 // Gameplay
@@ -1303,13 +1301,12 @@ function renderMenus() {
           const anchor = document.getElementById('trophyResult') || menuScoreNode.querySelector('.play-again-btn');
           if (anchor) menuScoreNode.insertBefore(goHearts, anchor);
         }
-        // Build HP display
+        // Build hearts display
         let html = '';
-        if (currentHP <= 0) {
-          html = '<span style="font-size:1.2rem;color:#ff4444;letter-spacing:0.1em">💔 NO HP LEFT</span>';
-        } else {
-          html = `<span style="font-size:1.1rem;color:#a6e02c;letter-spacing:0.08em">❤️ ${Math.round(currentHP)} / ${MAX_HP} HP</span>`;
+        for (let i = 0; i < MAX_HEARTS; i++) {
+          html += `<span style="opacity:${i < hearts ? 1 : 0.2}">${i < hearts ? '❤️' : '🖤'}</span> `;
         }
+        if (hearts <= 0) html = '<span style="font-size:1.2rem;color:#ff4444;letter-spacing:0.1em">💔 NO HEARTS LEFT</span>';
         goHearts.innerHTML = html;
         if (!document.getElementById('goHeartStyle')) {
           const s = document.createElement('style');
@@ -1584,7 +1581,7 @@ function setScore(score) {
   renderScoreHud();
 }
 
-// ── HP Bar UI ──────────────────────────────────────────────────────────────
+// ── Hearts UI ────────────────────────────────────────────────────────────────
 function renderHearts() {
   let el = document.getElementById("hearts-hud");
   if (!el) {
@@ -1592,61 +1589,27 @@ function renderHearts() {
     el.id = "hearts-hud";
     el.style.cssText = [
       "position:fixed","top:14px","left:50%","transform:translateX(-50%)",
-      "display:flex","flex-direction:column","align-items:center","gap:3px",
-      "z-index:999","pointer-events:none","width:min(220px,55vw)"
+      "display:flex","gap:6px","z-index:999","pointer-events:none",
+      "font-size:clamp(20px,4vw,30px)","filter:drop-shadow(0 0 6px rgba(255,60,60,0.7))"
     ].join(";");
-
-    const track = document.createElement("div");
-    track.id = "hp-bar-track";
-    track.style.cssText = [
-      "width:100%","height:14px","border-radius:7px",
-      "background:rgba(255,255,255,0.15)","overflow:hidden",
-      "border:1px solid rgba(255,255,255,0.25)",
-      "box-shadow:0 0 6px rgba(255,60,60,0.5)"
-    ].join(";");
-
-    const fill = document.createElement("div");
-    fill.id = "hp-bar-fill";
-    fill.style.cssText = [
-      "height:100%","width:100%",
-      "background:linear-gradient(90deg,#a6e02c,#67d7f0)",
-      "transition:width 0.25s ease,background 0.25s ease"
-    ].join(";");
-    track.appendChild(fill);
-
-    const label = document.createElement("div");
-    label.id = "hp-bar-label";
-    label.style.cssText = [
-      "font-family:monospace","font-size:0.7rem","font-weight:bold",
-      "color:#fff","text-shadow:0 0 6px rgba(255,60,60,0.8)","letter-spacing:0.05em"
-    ].join(";");
-
-    el.appendChild(track);
-    el.appendChild(label);
     document.body.appendChild(el);
   }
   // Show in all modes when in game
   const show = isInGame();
   el.style.display = show ? "flex" : "none";
-
-  const pct = Math.max(0, Math.min(100, (currentHP / MAX_HP) * 100));
-  const fill = document.getElementById("hp-bar-fill");
-  const label = document.getElementById("hp-bar-label");
-  if (fill) {
-    fill.style.width = pct + "%";
-    fill.style.background = pct > 50
-      ? "linear-gradient(90deg,#a6e02c,#67d7f0)"
-      : pct > 20
-        ? "linear-gradient(90deg,#ff8844,#ffd700)"
-        : "linear-gradient(90deg,#ff2222,#ff4444)";
+  el.innerHTML = "";
+  for (let i = 0; i < MAX_HEARTS; i++) {
+    const span = document.createElement("span");
+    span.textContent = i < hearts ? "❤️" : "🖤";
+    span.style.transition = "transform 0.2s";
+    if (i === hearts) span.style.transform = "scale(0.7)";
+    el.appendChild(span);
   }
-  if (label) label.textContent = `${Math.max(0, Math.round(currentHP))} / ${MAX_HP} HP`;
 }
 
 function loseHeart() {
   if (!isInGame()) return;
-  const dmg = 10 + Math.floor(Math.random() * 11); // random 10-20 (inclusive)
-  currentHP = Math.max(0, currentHP - dmg);
+  hearts = Math.max(0, hearts - 1);
   renderHearts();
   // Flash screen red + bomb room warning pulse
   const flash = document.createElement("div");
@@ -1664,7 +1627,7 @@ function loseHeart() {
   document.body.classList.add('bomb-warning');
   setTimeout(() => flash.remove(), 400);
   setTimeout(() => document.body.classList.remove('bomb-warning'), 600);
-  if (currentHP <= 0) endGame();
+  if (hearts <= 0) endGame();
 }
 
 function incrementScore(inc) {
@@ -1728,9 +1691,8 @@ function resetGame() {
   clearTimeout(comboTimer);
   const comboEl = document.getElementById("combo-label");
   if (comboEl) comboEl.style.opacity = "0";
-  // Reset hearts / HP
+  // Reset hearts
   hearts = MAX_HEARTS;
-  currentHP = MAX_HP;
   renderHearts();
 }
 
@@ -2026,10 +1988,10 @@ function tick(width, height, simTime, simSpeed, lag) {
                 createBurst(target, forceMultiplier);
                 sparkBurst(hitX, hitY, 8, sparkSpeed);
                 // Normal mode: 15% chance to gain a heart on cube kill
-                if (state.game.mode === GAME_MODE_RANKED && currentHP < MAX_HP && Math.random() < 0.15) {
-                  currentHP = Math.min(MAX_HP, currentHP + 15);
+                if (state.game.mode === GAME_MODE_RANKED && hearts < MAX_HEARTS && Math.random() < 0.15) {
+                  hearts++;
                   renderHearts();
-                  showComboLabel("+15 HP");
+                  showComboLabel("❤️ +1");
                 }
                 if (target.wireframe) {
                   slowmoRemaining = slowmoDuration;

@@ -60,7 +60,6 @@ const ITEM_CATALOGUE = [
   { id:"power_freeze",  name:"Freeze Ray",    desc:"Freeze all cubes for 5s",       icon:"🧊", gradient:"135deg,#00bcd4,#006064", cost:800,  tag:"power" },
   { id:"power_ghost2",  name:"Phase Through", desc:"Pass through 3 cubes per game", icon:"🌀", gradient:"135deg,#9c27b0,#673ab7", cost:1600, tag:"power" },
   { id:"power_time",    name:"Time Warp",     desc:"Add 30 bonus seconds",          icon:"⏱️", gradient:"135deg,#00897b,#00695c", cost:900,  tag:"power" },
-  { id:"power_weapon",  name:"Cube Blaster",  desc:"6 shots to destroy bombs on sight — auto-reloads", icon:"🔫", gradient:"135deg,#ff5722,#d84315", cost:1100, tag:"power" },
   // Badges
   { id:"badge_rookie",  name:"Rookie",        desc:"Show your starting spirit",     icon:"🌟", gradient:"135deg,#29b6f6,#0288d1", cost:100,  tag:"badge" },
   { id:"badge_slayer",  name:"Cube Slayer",   desc:"Badge shown next to your name in multiplayer", icon:"⚔️", gradient:"135deg,#b71c1c,#880000", cost:500,  tag:"badge" },
