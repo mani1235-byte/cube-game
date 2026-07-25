@@ -29,7 +29,7 @@ window.CUBE_SERVER = window.CUBE_SERVER || 'https://cube-game-fnam.onrender.com/
 
   // ─── Config ───────────────────────────────────────────────────────────────
 
-  const SERVER_URL = window.CUBE_SERVER || window.location.origin || 'https://cubegame.club';
+  const SERVER_URL = window.CUBE_SERVER || window.location.origin || 'https://firstgame.org';
   const SEND_RATE  = 30;   // Hz — how often we send our state to the server
   const PING_RATE  = 3000; // ms
 
@@ -132,7 +132,17 @@ window.CUBE_SERVER = window.CUBE_SERVER || 'https://cube-game-fnam.onrender.com/
     s.on('remoteInput',   d => { MP._emit('remoteInput', d); });
     s.on('remoteEvo',     d => { MP._emit('remoteEvo', d); });
     s.on('remoteScore',   d => { MP._emit('remoteScore', d); });
-    s.on('playerDied',    d => { MP._emit('playerDied', d); });
+    s.on('playerDied',    d => {
+      const rp = MP.remotePlayers.get(d.playerId);
+      if (rp) rp.state.alive = false;
+      MP._emit('playerDied', d);
+    });
+    s.on('remoteShoot',   d => { MP._emit('remoteShoot', d); });
+    s.on('remoteHealth',  d => {
+      const rp = MP.remotePlayers.get(d.playerId);
+      if (rp) rp.state.hp = d.hp;
+      MP._emit('remoteHealth', d);
+    });
     s.on('bombExploded',  d => { MP._emit('bombExploded', d); });
     s.on('heartCollected',d => { MP._emit('heartCollected', d); });
     s.on('gameEvent',     d => { MP._emit('gameEvent', d); });
@@ -264,6 +274,16 @@ window.CUBE_SERVER = window.CUBE_SERVER || 'https://cube-game-fnam.onrender.com/
   MP.sendDied = function (killedBy) {
     if (!MP.inRoom || !MP.socket) return;
     MP.socket.emit('playerDied', { killedBy });
+  };
+
+  MP.sendShoot = function (data) {
+    if (!MP.inRoom || !MP.socket) return;
+    MP.socket.emit('playerShoot', data);
+  };
+
+  MP.sendDamage = function (amount) {
+    if (!MP.inRoom || !MP.socket) return;
+    MP.socket.emit('playerDamaged', { amount });
   };
 
   MP.sendBomb = function (data) {

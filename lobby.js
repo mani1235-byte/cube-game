@@ -68,8 +68,19 @@
     mpHud: document.getElementById("mp-hud"),
     hudPlayers: document.getElementById("hud-players"),
     hudLatency: document.getElementById("hud-latency"),
+    btnLeaveMatch: document.getElementById("btn-leave-match"),
     // Background canvas
     bgCanvas: document.getElementById("bg-canvas"),
+    // Arena (in-match top-down canvas)
+    arenaCanvas: document.getElementById("arena-canvas"),
+    joystickZone: document.getElementById("arena-joystick-zone"),
+    joystickBase: document.getElementById("arena-joystick-base"),
+    joystickKnob: document.getElementById("arena-joystick-knob"),
+    aimZone: document.getElementById("arena-aim-zone"),
+    aimBase: document.getElementById("arena-aim-base"),
+    aimKnob: document.getElementById("arena-aim-knob"),
+    hpWrap: document.getElementById("arena-hp-wrap"),
+    hpFill: document.getElementById("arena-hp-fill"),
   };
 
   const state = {
@@ -408,13 +419,18 @@
     state.roomState = null;
     setReadyButton(false);
     stopQueueTimer();
+    stopArenaLoop();
+    hideArena();
+    if (els.mpHud) els.mpHud.classList.add("hidden");
     setScreen("home");
   }
 
   function showEndOverlay(data) {
     if (!els.overlayEnd) return;
 
-    // Hide HUD
+    // Match is over — stop the arena loop and hide it + the HUD
+    stopArenaLoop();
+    hideArena();
     if (els.mpHud) els.mpHud.classList.add("hidden");
 
     const isWinner = data.winnerTeam && MP.myTeam === data.winnerTeam;
@@ -537,23 +553,370 @@
 
   function handleGameStart() {
     showToast("Game starting!", "success");
-    // Hide all lobby screens; the game canvas takes over
+    // Hide all lobby screens; the arena canvas takes over
     Object.values(screens).forEach(el => el?.classList.remove("active"));
     if (els.overlayEnd) els.overlayEnd.classList.add("hidden");
     if (els.mpHud) {
       els.mpHud.classList.remove("hidden");
       renderHud();
     }
+    showArena();
+    startArenaLoop();
+  }
+
+  // ── Arena (top-down in-match view) ───────────────────────────────────────
+  // Movement + shooting placeholder. Positions are synced through the
+  // server (already anti-cheat checked there). Shots are relayed by the
+  // server but hit-detected locally by whoever gets hit — same trust model
+  // the codebase already uses for playerDied — the server just clamps the
+  // damage amount so a modified client can't one-shot people.
+
+  const ARENA = {
+    WORLD_HALF: 320,     // arena spans -320..320 on each axis
+    SPEED: 180,          // world units per second
+    BULLET_SPEED: 460,   // world units per second
+    BULLET_RANGE: 480,   // max travel distance before a bullet expires
+    HIT_RADIUS: 20,      // world units — bullet-to-player hit distance
+    DAMAGE: 12,
+    FIRE_COOLDOWN: 220,  // ms between local shots
+    running: false,
+    ctx: null,
+    keys: { up: false, down: false, left: false, right: false },
+    joy: { active: false, x: 0, y: 0 },     // -1..1 movement vector
+    aimJoy: { active: false, x: 0, y: 0 },  // -1..1 aim vector (mobile)
+    myPos: { x: 0, y: 0 },
+    hp: 100,
+    dead: false,
+    bullets: [],         // { x, y, dx, dy, team, ownerId, mine, dist }
+    lastShotAt: 0,
+    aimPoint: null,      // last mouse position on canvas, for desktop click-to-fire
+    lastFrame: 0,
+    rafId: null,
+  };
+
+  function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
+
+  function resizeArenaCanvas() {
+    if (!els.arenaCanvas) return;
+    els.arenaCanvas.width = window.innerWidth;
+    els.arenaCanvas.height = window.innerHeight;
+  }
+
+  function isTouchDevice() {
+    return ("ontouchstart" in window) || navigator.maxTouchPoints > 0;
+  }
+
+  function arenaToScreen() {
+    const canvas = els.arenaCanvas;
+    const w = canvas.width, h = canvas.height;
+    const scale = (Math.min(w, h) / (ARENA.WORLD_HALF * 2)) * 0.9;
+    const cx = w / 2, cy = h / 2;
+    return { scale, cx, cy };
+  }
+
+  /** Fire a shot from my current position toward a world-space direction. */
+  function fireShot(dx, dy) {
+    if (ARENA.dead || !ARENA.running) return;
+    const now = performance.now();
+    if (now - ARENA.lastShotAt < ARENA.FIRE_COOLDOWN) return;
+    const len = Math.hypot(dx, dy);
+    if (len < 0.01) return;
+    dx /= len; dy /= len;
+    ARENA.lastShotAt = now;
+
+    ARENA.bullets.push({
+      x: ARENA.myPos.x, y: ARENA.myPos.y, dx, dy,
+      team: MP.myTeam, ownerId: MP.myId, mine: true, dist: 0,
+    });
+    MP.sendShoot({ x: ARENA.myPos.x, y: ARENA.myPos.y, dx, dy });
+  }
+
+  function createJoystick(zone, base, knob, radius, onMove, onEnd) {
+    if (!zone || !base || !knob) return;
+    let originX = 0, originY = 0;
+
+    function start(e) {
+      if (!ARENA.running) return;
+      const t = e.changedTouches ? e.changedTouches[0] : e;
+      originX = t.clientX; originY = t.clientY;
+      base.style.left = `${originX - 55}px`;
+      base.style.top  = `${originY - 55}px`;
+      base.classList.add("active");
+      e.preventDefault();
+    }
+    function move(e) {
+      if (!base.classList.contains("active")) return;
+      const t = e.changedTouches ? e.changedTouches[0] : e;
+      let dx = t.clientX - originX, dy = t.clientY - originY;
+      const dist = Math.hypot(dx, dy);
+      if (dist > radius) { dx = dx / dist * radius; dy = dy / dist * radius; }
+      knob.style.transform = `translate(${dx}px, ${dy}px)`;
+      onMove(dx / radius, dy / radius);
+      e.preventDefault();
+    }
+    function end() {
+      knob.style.transform = "translate(0,0)";
+      base.classList.remove("active");
+      onEnd();
+    }
+
+    zone.addEventListener("touchstart", start, { passive: false });
+    zone.addEventListener("touchmove", move, { passive: false });
+    zone.addEventListener("touchend", end);
+    zone.addEventListener("touchcancel", end);
+  }
+
+  function initArenaControls() {
+    window.addEventListener("resize", resizeArenaCanvas);
+
+    window.addEventListener("keydown", e => {
+      if (!ARENA.running) return;
+      if (["w","W","ArrowUp"].includes(e.key)) ARENA.keys.up = true;
+      else if (["s","S","ArrowDown"].includes(e.key)) ARENA.keys.down = true;
+      else if (["a","A","ArrowLeft"].includes(e.key)) ARENA.keys.left = true;
+      else if (["d","D","ArrowRight"].includes(e.key)) ARENA.keys.right = true;
+    });
+    window.addEventListener("keyup", e => {
+      if (["w","W","ArrowUp"].includes(e.key)) ARENA.keys.up = false;
+      else if (["s","S","ArrowDown"].includes(e.key)) ARENA.keys.down = false;
+      else if (["a","A","ArrowLeft"].includes(e.key)) ARENA.keys.left = false;
+      else if (["d","D","ArrowRight"].includes(e.key)) ARENA.keys.right = false;
+    });
+
+    // Left joystick — movement
+    createJoystick(els.joystickZone, els.joystickBase, els.joystickKnob, 50,
+      (x, y) => { ARENA.joy.active = true; ARENA.joy.x = x; ARENA.joy.y = y; },
+      () => { ARENA.joy.active = false; ARENA.joy.x = 0; ARENA.joy.y = 0; });
+
+    // Right joystick — aim, auto-fires toward the drag direction while held
+    createJoystick(els.aimZone, els.aimBase, els.aimKnob, 50,
+      (x, y) => { ARENA.aimJoy.active = true; ARENA.aimJoy.x = x; ARENA.aimJoy.y = y; },
+      () => { ARENA.aimJoy.active = false; ARENA.aimJoy.x = 0; ARENA.aimJoy.y = 0; });
+
+    // Desktop: click the arena to fire toward the clicked point
+    els.arenaCanvas?.addEventListener("mousedown", e => {
+      if (!ARENA.running || isTouchDevice()) return;
+      const { scale, cx, cy } = arenaToScreen();
+      const wx = (e.clientX - cx) / scale, wy = (e.clientY - cy) / scale;
+      fireShot(wx - ARENA.myPos.x, wy - ARENA.myPos.y);
+    });
+  }
+
+  function showArena() {
+    if (!els.arenaCanvas) return;
+    resizeArenaCanvas();
+    els.arenaCanvas.classList.remove("hidden");
+    els.hpWrap?.classList.remove("hidden");
+    if (isTouchDevice()) {
+      els.joystickZone?.classList.remove("hidden");
+      els.aimZone?.classList.remove("hidden");
+    }
+  }
+
+  function hideArena() {
+    if (els.arenaCanvas) els.arenaCanvas.classList.add("hidden");
+    els.hpWrap?.classList.add("hidden");
+    if (els.joystickZone) {
+      els.joystickZone.classList.add("hidden");
+      els.joystickBase?.classList.remove("active");
+    }
+    if (els.aimZone) {
+      els.aimZone.classList.add("hidden");
+      els.aimBase?.classList.remove("active");
+    }
+  }
+
+  function setHp(hp) {
+    ARENA.hp = clamp(hp, 0, 100);
+    if (els.hpFill) {
+      els.hpFill.style.width = `${ARENA.hp}%`;
+      els.hpFill.style.background = ARENA.hp > 40 ? "var(--coop)" : "var(--versus)";
+    }
+  }
+
+  function startArenaLoop() {
+    if (!els.arenaCanvas) return;
+    ARENA.ctx = els.arenaCanvas.getContext("2d");
+    ARENA.running = true;
+    ARENA.myPos = { x: 0, y: 0 };
+    ARENA.bullets = [];
+    ARENA.dead = false;
+    setHp(100);
+    ARENA.lastFrame = performance.now();
+
+    function frame(now) {
+      if (!ARENA.running) return;
+      const dt = Math.min((now - ARENA.lastFrame) / 1000, 0.1);
+      ARENA.lastFrame = now;
+
+      if (!ARENA.dead) {
+        // Movement
+        let vx = 0, vy = 0;
+        if (ARENA.joy.active) {
+          vx = ARENA.joy.x; vy = ARENA.joy.y;
+        } else {
+          if (ARENA.keys.left) vx -= 1;
+          if (ARENA.keys.right) vx += 1;
+          if (ARENA.keys.up) vy -= 1;
+          if (ARENA.keys.down) vy += 1;
+          const mag = Math.hypot(vx, vy);
+          if (mag > 1) { vx /= mag; vy /= mag; }
+        }
+        ARENA.myPos.x = clamp(ARENA.myPos.x + vx * ARENA.SPEED * dt, -ARENA.WORLD_HALF, ARENA.WORLD_HALF);
+        ARENA.myPos.y = clamp(ARENA.myPos.y + vy * ARENA.SPEED * dt, -ARENA.WORLD_HALF, ARENA.WORLD_HALF);
+
+        // Position-only — omits velocity so the server's optional speed
+        // check never applies; deltas per send are already small/clamped.
+        MP.updateMyState({ position: { x: ARENA.myPos.x, y: ARENA.myPos.y } });
+
+        // Aim joystick auto-fires while held
+        if (ARENA.aimJoy.active) fireShot(ARENA.aimJoy.x, ARENA.aimJoy.y);
+      }
+
+      updateBullets(dt);
+      drawArena();
+      ARENA.rafId = requestAnimationFrame(frame);
+    }
+    ARENA.rafId = requestAnimationFrame(frame);
+  }
+
+  function stopArenaLoop() {
+    ARENA.running = false;
+    if (ARENA.rafId) cancelAnimationFrame(ARENA.rafId);
+    ARENA.rafId = null;
+    ARENA.keys = { up: false, down: false, left: false, right: false };
+    ARENA.joy = { active: false, x: 0, y: 0 };
+    ARENA.aimJoy = { active: false, x: 0, y: 0 };
+    ARENA.bullets = [];
+  }
+
+  /** Spawn a bullet fired by someone else, relayed through the server. */
+  function spawnRemoteBullet(d) {
+    if (d.playerId === MP.myId) return;
+    ARENA.bullets.push({
+      x: d.x, y: d.y, dx: d.dx, dy: d.dy,
+      team: d.team, ownerId: d.playerId, mine: false, dist: 0,
+    });
+  }
+
+  function updateBullets(dt) {
+    const step = ARENA.BULLET_SPEED * dt;
+    ARENA.bullets = ARENA.bullets.filter(b => {
+      b.x += b.dx * step;
+      b.y += b.dy * step;
+      b.dist += step;
+      if (b.dist > ARENA.BULLET_RANGE) return false;
+      if (Math.abs(b.x) > ARENA.WORLD_HALF || Math.abs(b.y) > ARENA.WORLD_HALF) return false;
+
+      // Only bullets fired by someone else can hit me, and only if I'm alive.
+      if (!b.mine && !ARENA.dead && b.team !== MP.myTeam) {
+        const dist = Math.hypot(b.x - ARENA.myPos.x, b.y - ARENA.myPos.y);
+        if (dist <= ARENA.HIT_RADIUS) {
+          registerLocalHit();
+          return false; // bullet consumed
+        }
+      }
+      return true;
+    });
+  }
+
+  function registerLocalHit() {
+    setHp(ARENA.hp - ARENA.DAMAGE);
+    MP.sendDamage(ARENA.DAMAGE);
+    if (ARENA.hp <= 0 && !ARENA.dead) {
+      ARENA.dead = true;
+      showToast("You were eliminated", "error");
+    }
+  }
+
+  function drawArena() {
+    const ctx = ARENA.ctx, canvas = els.arenaCanvas;
+    if (!ctx || !canvas) return;
+    const w = canvas.width, h = canvas.height;
+    ctx.clearRect(0, 0, w, h);
+
+    const { scale, cx, cy } = arenaToScreen();
+    const toScreen = (wx, wy) => ({ x: cx + wx * scale, y: cy + wy * scale });
+    const half = ARENA.WORLD_HALF * scale;
+
+    // Arena boundary
+    ctx.strokeStyle = "rgba(123,108,255,.35)";
+    ctx.lineWidth = 2;
+    ctx.strokeRect(cx - half, cy - half, half * 2, half * 2);
+
+    // Grid
+    ctx.strokeStyle = "rgba(100,120,255,.08)";
+    ctx.lineWidth = 1;
+    const step = 40 * scale;
+    for (let x = cx - half; x <= cx + half; x += step) {
+      ctx.beginPath(); ctx.moveTo(x, cy - half); ctx.lineTo(x, cy + half); ctx.stroke();
+    }
+    for (let y = cy - half; y <= cy + half; y += step) {
+      ctx.beginPath(); ctx.moveTo(cx - half, y); ctx.lineTo(cx + half, y); ctx.stroke();
+    }
+
+    // Bullets
+    ctx.lineCap = "round";
+    ARENA.bullets.forEach(b => {
+      const sp = toScreen(b.x, b.y);
+      const tail = toScreen(b.x - b.dx * 10, b.y - b.dy * 10);
+      ctx.strokeStyle = b.team === "A" ? "#00e5a0" : "#ff4466";
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(tail.x, tail.y);
+      ctx.lineTo(sp.x, sp.y);
+      ctx.stroke();
+    });
+
+    // Players
+    MP.allPlayers().forEach(p => {
+      const isMe = p.id === MP.myId;
+      const remote = MP.remotePlayers.get(p.id);
+      const pos = isMe ? ARENA.myPos : (remote?.state?.position || { x: 0, y: 0 });
+      const hp = isMe ? ARENA.hp : (typeof remote?.state?.hp === "number" ? remote.state.hp : (p.hp ?? 100));
+      const isDead = isMe ? ARENA.dead : (remote?.state?.alive === false || !p.alive);
+      const sp = toScreen(pos.x, pos.y);
+      const color = p.team === "A" ? "#00e5a0" : "#ff4466";
+
+      ctx.globalAlpha = isDead ? 0.25 : 1;
+      ctx.beginPath();
+      ctx.arc(sp.x, sp.y, isMe ? 14 : 12, 0, Math.PI * 2);
+      ctx.fillStyle = color;
+      ctx.fill();
+      if (isMe) {
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = "#fff";
+        ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+
+      // HP bar over the head
+      if (!isDead) {
+        const barW = 28;
+        ctx.fillStyle = "rgba(20,23,40,.8)";
+        ctx.fillRect(sp.x - barW / 2, sp.y - 30, barW, 4);
+        ctx.fillStyle = hp > 40 ? "#00e5a0" : "#ff4466";
+        ctx.fillRect(sp.x - barW / 2, sp.y - 30, barW * clamp(hp, 0, 100) / 100, 4);
+      }
+
+      ctx.font = "12px 'Rajdhani', sans-serif";
+      ctx.fillStyle = "#e8ecff";
+      ctx.textAlign = "center";
+      ctx.fillText(p.name || "Player", sp.x, sp.y - 36);
+    });
   }
 
   function renderHud() {
     if (!els.hudPlayers || !state.roomState) return;
     els.hudPlayers.innerHTML = "";
     MP.allPlayers().forEach(player => {
+      const remote = MP.remotePlayers.get(player.id);
+      const isMe = player.id === MP.myId;
+      const isDead = isMe ? ARENA.dead : (remote?.state?.alive === false || !player.alive);
       const pill = document.createElement("div");
       pill.className = "hud-player-pill";
-      if (player.id === MP.myId) pill.classList.add("me");
-      if (!player.alive) pill.classList.add("dead");
+      if (isMe) pill.classList.add("me");
+      if (isDead) pill.classList.add("dead");
       pill.innerHTML = `<span>[${player.team}]</span><span>${evoIcon(player.evoStage)}</span><span>${player.name}</span><span style="color:var(--gold)">${player.score ?? 0}</span>`;
       els.hudPlayers.appendChild(pill);
     });
@@ -584,6 +947,9 @@
     });
 
     MP.on("disconnected", () => {
+      stopArenaLoop();
+      hideArena();
+      if (els.mpHud) els.mpHud.classList.add("hidden");
       setConnectStatus("Disconnected. Reconnecting…");
       setScreen("connect");
     });
@@ -593,6 +959,9 @@
     });
 
     MP.on("kicked", (data) => {
+      stopArenaLoop();
+      hideArena();
+      if (els.mpHud) els.mpHud.classList.add("hidden");
       showToast(data?.reason || "Kicked from server", "error");
     });
 
@@ -641,6 +1010,17 @@
     MP.on("gameStart", handleGameStart);
     MP.on("remoteState", () => {
       if (els.mpHud && !els.mpHud.classList.contains("hidden")) renderHud();
+    });
+    MP.on("remoteShoot", spawnRemoteBullet);
+    MP.on("remoteHealth", () => {
+      if (els.mpHud && !els.mpHud.classList.contains("hidden")) renderHud();
+    });
+    MP.on("playerDied", (data) => {
+      if (els.mpHud && !els.mpHud.classList.contains("hidden")) renderHud();
+      if (data?.playerId !== MP.myId) {
+        const p = MP.allPlayers().find(pl => pl.id === data?.playerId);
+        renderChatMessage({ system: true, message: `${p?.name || "A player"} was eliminated.` });
+      }
     });
     MP.on("ping", () => {
       updateHeader();
@@ -694,6 +1074,7 @@
 
     els.btnHostStart?.addEventListener("click", () => MP.hostStart());
     els.btnLeaveRoom?.addEventListener("click", leaveRoom);
+    els.btnLeaveMatch?.addEventListener("click", leaveRoom);
 
     els.btnCopyCode?.addEventListener("click", async () => {
       const code = state.roomState?.code || els.roomCodeDisplay?.textContent || "";
@@ -741,6 +1122,7 @@
     setReadyButton(false);
     setConnectStatus("Connecting to server…");
     initBgCanvas();
+    initArenaControls();
     wireEvents();
     wireUi();
 
