@@ -73,8 +73,8 @@ app.use((req, res, next) => {
   res.setHeader('Permissions-Policy',      'camera=(), microphone=(), geolocation=()');
   res.setHeader('Content-Security-Policy',
     "default-src 'self'; " +
-    "script-src 'self' 'unsafe-inline' https://www.gstatic.com https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://pagead2.googlesyndication.com https://adservice.google.com https://www.googletagservices.com https://www.googletagmanager.com https://cube-game-fnam.onrender.com; " +
-    "connect-src 'self' wss: ws: https://*.firebaseapp.com https://*.googleapis.com https://cubegame.club https://www.cubegame.club https://cube-game-fnam.onrender.com https://pagead2.googlesyndication.com https://adservice.google.com https://*.analytics.google.com https://*.google-analytics.com; " +
+    "script-src 'self' 'unsafe-inline' https://www.gstatic.com https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://pagead2.googlesyndication.com https://adservice.google.com https://www.googletagservices.com; " +
+    "connect-src 'self' wss: ws: https://*.firebaseapp.com https://*.googleapis.com https://cubegame.club https://www.cubegame.club https://pagead2.googlesyndication.com https://adservice.google.com; " +
     "img-src 'self' data: https://*.googleusercontent.com https://pagead2.googlesyndication.com https://tpc.googlesyndication.com; " +
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " +
     "font-src 'self' https://fonts.gstatic.com; " +
@@ -264,15 +264,6 @@ const MAX_SCORE_PER_HIT   = 500;    // points — reject above this per event
 const SOCKET_RATE_LIMIT   = 25;     // events/sec per socket
 const SOCKET_RATE_WINDOW  = 1000;   // ms
 
-// ─── Arena shooter constants (must mirror lobby.js's ARENA values) ────────────
-const ARENA_HIT_RADIUS      = 20;   // world units — bullet-to-player hit distance
-const ARENA_BULLET_RANGE    = 480;  // world units — max shot distance
-const ARENA_RENDER_DELAY_MS = 100;  // matches MP.getInterpolatedPosition's default
-const ARENA_MAX_ONE_WAY_MS  = 150;  // cap on assumed one-way latency for rewind
-const POS_HISTORY_MS        = 600;  // how far back we keep position snapshots
-const ARENA_MAX_ORIGIN_DRIFT = 60;  // units — how far a claimed shot origin may
-                                     // differ from the server's last known position
-
 // ─── Audit log ────────────────────────────────────────────────────────────────
 const auditLog = [];
 const MAX_AUDIT = 5000;
@@ -346,6 +337,54 @@ function isValidTeam(t) {
 }
 
 // ─── Anti-cheat: speed/teleport check ────────────────────────────────────────
+// Must match the client's ARENA constants (lobby.js) — these are the values
+// the server uses to validate hits server-side (Phase 3 lag-compensated
+// hitscan), so they need to describe the same world.
+const ARENA_HIT_RADIUS = 20;
+const ARENA_BULLET_RANGE = 480;
+const ARENA_HISTORY_WINDOW_MS = 500; // how far back we keep position snapshots
+const MAX_REWIND_MS = 300;           // cap on how far we'll rewind for a laggy shooter
+
+function randomDamage() { return 10 + Math.floor(Math.random() * 11); } // 10-20, matches client
+
+/** Interpolated position of `player` at `atTime`, from their buffered
+ *  position history — this is the lag-compensation rewind: "where was this
+ *  player, from the shooter's point of view, when they actually fired?" */
+function getRewoundPosition(player, atTime) {
+  const history = player.history || [];
+  if (history.length === 0) return player.position;
+  if (history.length === 1) return history[0].position;
+  const newest = history[history.length - 1];
+  const oldest = history[0];
+  if (atTime >= newest.t) return newest.position;
+  if (atTime <= oldest.t) return oldest.position;
+  for (let i = history.length - 1; i > 0; i--) {
+    const a = history[i - 1], b = history[i];
+    if (atTime >= a.t && atTime <= b.t) {
+      const span = b.t - a.t;
+      const mix = span > 0 ? (atTime - a.t) / span : 1;
+      return {
+        x: a.position.x + (b.position.x - a.position.x) * mix,
+        y: a.position.y + (b.position.y - a.position.y) * mix,
+      };
+    }
+  }
+  return newest.position;
+}
+
+/** Simplified lag-compensated hitscan: is `target` within HIT_RADIUS of the
+ *  ray from (ox,oy) toward (dx,dy)? Treats the shot as instant rather than
+ *  simulating full projectile travel time — the client still animates a
+ *  travelling bullet for feel, but the server only needs to know whether
+ *  the fired direction would have crossed the (rewound) target. */
+function rayHitsPoint(ox, oy, dx, dy, target) {
+  const vx = target.x - ox, vy = target.y - oy;
+  const proj = vx * dx + vy * dy;
+  if (proj < 0 || proj > ARENA_BULLET_RANGE) return false;
+  const cx = ox + dx * proj, cy = oy + dy * proj;
+  return Math.hypot(target.x - cx, target.y - cy) <= ARENA_HIT_RADIUS;
+}
+
 function checkMovement(player, newPosition, newVelocity) {
   if (!isValidPosition(newPosition)) return { ok: false, reason: 'invalid_position' };
   if (newVelocity && !isValidVelocity(newVelocity)) return { ok: false, reason: 'speed_hack' };
@@ -567,7 +606,7 @@ function joinRoom(socket, code, requestedTeam, profile) {
     velocity:  { x: 0, y: 0 },
     inputs:    {},
     flagCount: 0, // anti-cheat flag counter
-    posHistory: [], // { t, x, y } — recent positions for shot rewind (Phase 3 lag comp)
+    history:   [], // { t, position } — for Phase 3 lag-compensated hit rewind
   };
 
   room.teams[team].set(socket.id, playerState);
@@ -605,37 +644,6 @@ function switchTeam(socketId, requestedTeam) {
 
   io.to(room.code).emit('teamChanged', { playerId: socketId, team: to, roomState: roomPublicState(room) });
   return { success: true, room: roomPublicState(room) };
-}
-
-/**
- * Where a player's hitbox actually was at `targetTime`, per their recorded
- * position history — this is the "rewind" step of lag-compensated hit
- * detection: we resolve shots against where the target appeared to be on
- * the shooter's screen, not where they are on the server right now.
- */
-function getRewoundPosition(player, targetTime) {
-  const hist = player.posHistory;
-  if (!hist || hist.length === 0) return player.position;
-  if (targetTime <= hist[0].t) return { x: hist[0].x, y: hist[0].y };
-  for (let i = 1; i < hist.length; i++) {
-    if (hist[i].t >= targetTime) {
-      const a = hist[i - 1], b = hist[i];
-      const span = b.t - a.t;
-      const frac = span > 0 ? (targetTime - a.t) / span : 0;
-      return { x: a.x + (b.x - a.x) * frac, y: a.y + (b.y - a.y) * frac };
-    }
-  }
-  const last = hist[hist.length - 1];
-  return { x: last.x, y: last.y };
-}
-
-/** Closest distance from point P to the ray segment [origin, origin + dir*range]. */
-function rayPointDistance(origin, dir, range, point) {
-  const vx = point.x - origin.x, vy = point.y - origin.y;
-  let proj = vx * dir.x + vy * dir.y;
-  proj = Math.max(0, Math.min(range, proj));
-  const cx = origin.x + dir.x * proj, cy = origin.y + dir.y * proj;
-  return { dist: Math.hypot(point.x - cx, point.y - cy), proj };
 }
 
 function checkTeamElimination(room) {
@@ -698,8 +706,6 @@ function startGame(room) {
     p.alive = true; p.ready = false;
     p.evoStage = 1; p.flagCount = 0;
     p.hp = 150; p._lastShot = 0;
-    p.posHistory = [];
-    p._posAckCount = 0;
   });
   io.to(room.code).emit('gameStart', { roomState: roomPublicState(room) });
 }
@@ -1042,11 +1048,13 @@ io.on('connection', (socket) => {
         if (player.flagCount >= 5) {
           socket.emit('kicked', { reason: 'Anti-cheat: movement violation' });
           socket.disconnect();
-        } else {
-          // Reconciliation: the client's local prediction just diverged
-          // enough to get rejected (bad input, dropped/reordered packets,
-          // etc.) — tell it exactly where the server still thinks it is so
-          // it snaps back into agreement instead of drifting forever.
+        } else if (player.position) {
+          // Reconciliation: tell the client where the server actually has
+          // them so their local prediction can snap back instead of
+          // silently drifting out of sync with what everyone else (and hit
+          // detection) sees. If we don't have a prior known-good position
+          // yet (e.g. their very first update was malformed), there's
+          // nothing sane to correct to — the client will just try again.
           socket.emit('positionCorrection', { position: player.position });
         }
         return; // reject this update
@@ -1054,22 +1062,13 @@ io.on('connection', (socket) => {
       player.position = state.position;
       if (state.velocity) player.velocity = state.velocity;
 
-      // Position history for server-side shot rewind (Phase 3 lag comp).
-      const t = Date.now();
-      player.posHistory.push({ t, x: player.position.x, y: player.position.y });
-      const cutoff = t - POS_HISTORY_MS;
-      while (player.posHistory.length > 1 && player.posHistory[0].t < cutoff) {
-        player.posHistory.shift();
-      }
-
-      // Reconciliation (Phase 4): occasionally echo the accepted position
-      // back to its own sender. Under normal conditions the client's
-      // prediction already matches this exactly, so it's a no-op — it only
-      // visibly corrects anything after dropped/reordered packets let the
-      // client's local prediction drift from what the server has.
-      player._posAckCount = (player._posAckCount || 0) + 1;
-      if (player._posAckCount % 8 === 0) {
-        socket.emit('positionAck', { position: player.position });
+      const now = Date.now();
+      player.history = player.history || [];
+      player.history.push({ t: now, position: player.position });
+      // Prune anything older than our rewind window so this can't grow
+      // unbounded over a long match.
+      while (player.history.length > 1 && now - player.history[0].t > ARENA_HISTORY_WINDOW_MS) {
+        player.history.shift();
       }
     }
 
@@ -1136,11 +1135,6 @@ io.on('connection', (socket) => {
     checkTeamElimination(room);
   });
 
-  // ── Server-authoritative shooting (Phase 3: lag-compensated hit detection) ─
-  // The shooter's client still only relays where it fired from and which
-  // way — the server decides whether that shot actually hit anyone, using
-  // each potential target's rewound position at the shooter's effective
-  // "saw them here" time. Clients no longer get to self-report damage.
   socket.on('playerShoot', (data = {}) => {
     const pData = players.get(socket.id);
     if (!pData) return;
@@ -1158,56 +1152,48 @@ io.on('connection', (socket) => {
     if (!isFinite(data.x) || !isFinite(data.y) || !isFinite(data.dx) || !isFinite(data.dy)) return;
     const dirLen = Math.hypot(data.dx, data.dy);
     if (dirLen < 0.01) return;
-    const dir = { x: data.dx / dirLen, y: data.dy / dirLen };
-
-    // Don't fully trust the claimed muzzle position — clamp it to near the
-    // player's last server-confirmed position so a modified client can't
-    // claim to be firing from across the map.
-    const serverPos = player.position || { x: 0, y: 0 };
-    const claimed = { x: +data.x, y: +data.y };
-    const drift = Math.hypot(claimed.x - serverPos.x, claimed.y - serverPos.y);
-    const origin = drift <= ARENA_MAX_ORIGIN_DRIFT ? claimed : serverPos;
+    const dx = data.dx / dirLen, dy = data.dy / dirLen;
 
     socket.to(room.code).emit('remoteShoot', {
       playerId: socket.id,
       team: player.team,
-      x: origin.x, y: origin.y,
-      dx: dir.x, dy: dir.y,
+      x: +data.x, y: +data.y,
+      dx, dy,
     });
 
-    // Rewind time: how far in the past the shooter's screen was showing
-    // everyone else when they pulled the trigger — their one-way latency
-    // (shot took that long to reach us) plus the client's render delay
-    // (they were already looking ~100ms into the past for smoothing).
-    const oneWay = Math.min(ARENA_MAX_ONE_WAY_MS, (player.ping || 60) / 2);
-    const shotTime = now - oneWay - ARENA_RENDER_DELAY_MS;
+    // ── Server-authoritative hit detection (lag-compensated) ──────────────
+    // Rewind each opponent to where they were, from the shooter's point of
+    // view, when this shot actually left their gun — instead of trusting
+    // whichever client claims to have been hit.
+    const shooterLatencyMs = Math.min((player.ping || 0) / 2, MAX_REWIND_MS);
+    const rewindTime = now - shooterLatencyMs;
+    const enemyTeam = team === 'A' ? 'B' : 'A';
 
-    const enemyTeam = player.team === 'A' ? 'B' : 'A';
-    const enemies = [...room.teams[enemyTeam].values()].filter(p => p.alive);
+    for (const opponent of room.teams[enemyTeam].values()) {
+      if (!opponent.alive) continue;
+      const rewoundPos = getRewoundPosition(opponent, rewindTime);
+      if (!rewoundPos) continue;
+      if (!rayHitsPoint(+data.x, +data.y, dx, dy, rewoundPos)) continue;
 
-    let best = null; // closest valid hit along the ray
-    for (const target of enemies) {
-      const rewound = getRewoundPosition(target, shotTime);
-      const { dist, proj } = rayPointDistance(origin, dir, ARENA_BULLET_RANGE, rewound);
-      if (dist <= ARENA_HIT_RADIUS && (!best || proj < best.proj)) {
-        best = { target, proj };
-      }
-    }
+      const dmg = randomDamage();
+      opponent.hp = Math.max(0, (typeof opponent.hp === 'number' ? opponent.hp : 150) - dmg);
+      io.to(room.code).emit('remoteHealth', { playerId: opponent.id, hp: opponent.hp, byId: socket.id });
 
-    if (best) {
-      const dmg = 10 + Math.floor(Math.random() * 11); // 10-20 inclusive
-      const target = best.target;
-      target.hp = Math.max(0, (typeof target.hp === 'number' ? target.hp : 150) - dmg);
-      io.to(room.code).emit('remoteHealth', { playerId: target.id, hp: target.hp });
-
-      if (target.hp <= 0 && target.alive) {
-        target.alive = false;
-        io.to(room.code).emit('playerDied', { playerId: target.id, team: target.team });
+      if (opponent.hp <= 0) {
+        opponent.alive = false;
+        io.to(room.code).emit('playerDied', { playerId: opponent.id, team: opponent.team });
         checkTeamElimination(room);
       }
+      break; // one target hit per shot
     }
   });
 
+  // Legacy client-reported damage — no longer trusted (see server-side
+  // hit detection in playerShoot above). Kept as a no-op so an older cached
+  // client sending this doesn't error, but it never touches HP anymore.
+  socket.on('playerDamaged', () => {});
+
+  // (retained below for reference to the old handler shape — unused)
   socket.on('bombExploded', (data) => {
     const pData = players.get(socket.id);
     if (!pData) return;

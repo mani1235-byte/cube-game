@@ -128,6 +128,63 @@
     osc.start(c.currentTime); osc.stop(c.currentTime + 0.08);
   }
 
+  // ── Arena weapon-feel SFX (Phase 2) ───────────────────────────────────
+  function playGunshot(bloom) {
+    if (!settings.sfxOn) return;
+    const c = getCtx();
+    const dur = 0.12;
+    const buf = c.createBuffer(1, c.sampleRate * dur, c.sampleRate);
+    const data = buf.getChannelData(0);
+    for (let i = 0; i < data.length; i++)
+      data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / data.length, 1.6);
+    const src = c.createBufferSource();
+    const gain = c.createGain();
+    const filter = c.createBiquadFilter();
+    filter.type = "bandpass";
+    // Sustained fire opens the filter up slightly for a harsher, hotter tone.
+    filter.frequency.value = 900 + (bloom || 0) * 400;
+    filter.Q.value = 0.7;
+    src.buffer = buf; src.connect(filter); filter.connect(gain); gain.connect(c.destination);
+    gain.gain.setValueAtTime(settings.sfxVol * 0.55, c.currentTime);
+    src.start();
+
+    // Quick low-end thump under the crack for punch.
+    const osc = c.createOscillator(); const oGain = c.createGain();
+    osc.connect(oGain); oGain.connect(c.destination);
+    osc.type = "sine"; osc.frequency.setValueAtTime(140, c.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(60, c.currentTime + 0.08);
+    oGain.gain.setValueAtTime(settings.sfxVol * 0.4, c.currentTime);
+    oGain.gain.exponentialRampToValueAtTime(0.001, c.currentTime + 0.09);
+    osc.start(c.currentTime); osc.stop(c.currentTime + 0.09);
+  }
+
+  function playHitMarker() {
+    if (!settings.sfxOn) return;
+    const c = getCtx();
+    [1400, 1900].forEach((freq, i) => {
+      const osc = c.createOscillator(); const gain = c.createGain();
+      osc.connect(gain); gain.connect(c.destination);
+      osc.type = "square"; osc.frequency.value = freq;
+      const t = c.currentTime + i * 0.035;
+      gain.gain.setValueAtTime(settings.sfxVol * 0.18, t);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.05);
+      osc.start(t); osc.stop(t + 0.05);
+    });
+  }
+
+  function playHurt() {
+    if (!settings.sfxOn) return;
+    const c = getCtx();
+    const osc = c.createOscillator(); const gain = c.createGain();
+    osc.connect(gain); gain.connect(c.destination);
+    osc.type = "sawtooth";
+    osc.frequency.setValueAtTime(220, c.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(70, c.currentTime + 0.22);
+    gain.gain.setValueAtTime(settings.sfxVol * 0.35, c.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, c.currentTime + 0.24);
+    osc.start(c.currentTime); osc.stop(c.currentTime + 0.24);
+  }
+
   function playSlowMo() {
     if (!settings.sfxOn) return;
     const c = getCtx();
@@ -315,6 +372,9 @@
     win:         playWin,
     menuClick:   playMenuClick,
     slowMo:      playSlowMo,
+    gunshot:     playGunshot,
+    hitMarker:   playHitMarker,
+    hurt:        playHurt,
     startMusic,
     stopMusic,
     test: function(name) {

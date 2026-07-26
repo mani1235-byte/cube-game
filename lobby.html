@@ -176,6 +176,10 @@
               <button class="btn-join-team" id="btn-join-b" data-team="B">Join Team B</button>
             </div>
           </div>
+          <div class="map-vote-panel">
+            <div class="map-vote-header">CHOOSE THE ARENA</div>
+            <div id="map-vote-cards" class="map-vote-cards"></div>
+          </div>
           <div class="room-actions">
             <button class="btn-primary" id="btn-ready">READY</button>
             <button class="btn-host-start hidden" id="btn-host-start">START GAME ▶</button>
@@ -234,10 +238,33 @@
       </div>
     </div>
 
+    <!-- ── ARENA (top-down match canvas, shown while playing) ───────────── -->
+    <canvas id="arena-canvas" class="hidden"></canvas>
+
+    <!-- ── Touch joystick (mobile movement during a match) ──────────────── -->
+    <div id="arena-joystick-zone" class="arena-joystick-zone hidden">
+      <div id="arena-joystick-base" class="arena-joystick-base">
+        <div id="arena-joystick-knob" class="arena-joystick-knob"></div>
+      </div>
+    </div>
+
+    <!-- ── Touch joystick (mobile aim & fire during a match) ─────────────── -->
+    <div id="arena-aim-zone" class="arena-aim-zone hidden">
+      <div id="arena-aim-base" class="arena-joystick-base arena-aim-base">
+        <div id="arena-aim-knob" class="arena-joystick-knob arena-aim-knob"></div>
+      </div>
+    </div>
+
+    <!-- ── HP bar (own health while playing) ─────────────────────────────── -->
+    <div id="arena-hp-wrap" class="arena-hp-wrap hidden">
+      <div id="arena-hp-fill" class="arena-hp-fill"></div>
+    </div>
+
     <!-- ── HUD (shown while playing) ──────────────────────────────────── -->
     <div id="mp-hud" class="mp-hud hidden">
       <div class="hud-players" id="hud-players"></div>
       <div class="hud-latency" id="hud-latency">-- ms</div>
+      <button class="btn-secondary btn-leave-match" id="btn-leave-match">Leave Match</button>
     </div>
 
     <!-- ── TOAST ──────────────────────────────────────────────────────── -->
@@ -250,6 +277,7 @@
   <script src="./server-config.js"></script>
   <script src="./firebase-auth.js"></script>
   <script src="./profile-avatar.js"></script>
+  <script src="./sound.js"></script>
   <script src="./transition.js"></script>
   <script>
     // socket.io's client library used to be loaded from cdnjs as a plain

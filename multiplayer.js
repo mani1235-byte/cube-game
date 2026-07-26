@@ -96,6 +96,7 @@ window.CUBE_SERVER = window.CUBE_SERVER || 'https://cube-game-fnam.onrender.com/
     s.on('playerLeft',    d => { MP._removeRemotePlayer(d.playerId); MP._applyRoomState(d.roomState); MP._emit('playerLeft', d); });
     s.on('playerReady',   d => { MP._applyRoomState(d.roomState); MP._emit('playerReady', d); });
     s.on('teamChanged',   d => { MP._applyRoomState(d.roomState); MP._emit('teamChanged', d); });
+    s.on('mapVoteUpdate', d => { MP._applyRoomState(d.roomState); MP._emit('mapVoteUpdate', d); });
     s.on('hostChanged',   d => { MP.isHost = d.newHostId === MP.myId; MP._emit('hostChanged', d); });
     s.on('matchFound',    d => { MP._emit('matchFound', d); });
     s.on('queueStatus',   d => { MP._emit('queueStatus', d); });
@@ -123,16 +124,36 @@ window.CUBE_SERVER = window.CUBE_SERVER || 'https://cube-game-fnam.onrender.com/
 
     s.on('remoteState', d => {
       let rp = MP.remotePlayers.get(d.id);
-      if (!rp) { rp = { state: {}, element: null }; MP.remotePlayers.set(d.id, rp); }
+      if (!rp) { rp = { state: {}, history: [], element: null }; MP.remotePlayers.set(d.id, rp); }
       Object.assign(rp.state, d);
       rp.lastSeen = Date.now();
+
+      // Keep a short timestamped history of positions for render-time
+      // interpolation (see MP.getInterpolatedPosition). Capped so a long
+      // session doesn't grow this unbounded.
+      if (d.position) {
+        rp.history.push({ t: Date.now(), position: d.position, velocity: d.velocity });
+        if (rp.history.length > 12) rp.history.shift();
+      }
+
       MP._emit('remoteState', d);
     });
 
     s.on('remoteInput',   d => { MP._emit('remoteInput', d); });
     s.on('remoteEvo',     d => { MP._emit('remoteEvo', d); });
     s.on('remoteScore',   d => { MP._emit('remoteScore', d); });
-    s.on('playerDied',    d => { MP._emit('playerDied', d); });
+    s.on('playerDied',    d => {
+      const rp = MP.remotePlayers.get(d.playerId);
+      if (rp) rp.state.alive = false;
+      MP._emit('playerDied', d);
+    });
+    s.on('remoteShoot',   d => { MP._emit('remoteShoot', d); });
+    s.on('positionCorrection', d => { MP._emit('positionCorrection', d); });
+    s.on('remoteHealth',  d => {
+      const rp = MP.remotePlayers.get(d.playerId);
+      if (rp) rp.state.hp = d.hp;
+      MP._emit('remoteHealth', d);
+    });
     s.on('bombExploded',  d => { MP._emit('bombExploded', d); });
     s.on('heartCollected',d => { MP._emit('heartCollected', d); });
     s.on('gameEvent',     d => { MP._emit('gameEvent', d); });
@@ -197,6 +218,13 @@ window.CUBE_SERVER = window.CUBE_SERVER || 'https://cube-game-fnam.onrender.com/
         resolve(res);
       });
     });
+  };
+
+  /** Vote for a map while waiting in a room (id must match a MAP_POOL entry
+   *  defined in lobby.js). Can be changed any time before the game starts. */
+  MP.voteMap = function (mapId) {
+    if (!MP.inRoom || !MP.socket) return;
+    MP.socket.emit('voteMap', { mapId });
   };
 
   MP.leaveRoom = function () {
@@ -266,6 +294,16 @@ window.CUBE_SERVER = window.CUBE_SERVER || 'https://cube-game-fnam.onrender.com/
     MP.socket.emit('playerDied', { killedBy });
   };
 
+  MP.sendShoot = function (data) {
+    if (!MP.inRoom || !MP.socket) return;
+    MP.socket.emit('playerShoot', data);
+  };
+
+  MP.sendDamage = function (amount) {
+    if (!MP.inRoom || !MP.socket) return;
+    MP.socket.emit('playerDamaged', { amount });
+  };
+
   MP.sendBomb = function (data) {
     if (!MP.inRoom || !MP.socket) return;
     MP.socket.emit('bombExploded', data);
@@ -294,6 +332,53 @@ window.CUBE_SERVER = window.CUBE_SERVER || 'https://cube-game-fnam.onrender.com/
   // ─── Helpers ──────────────────────────────────────────────────────────────
 
   /** Flat array of everyone in the room, both teams, each tagged with .team */
+  /**
+   * Interpolated (and briefly extrapolated) position for a remote player,
+   * for smooth rendering instead of snapping straight to the latest packet.
+   * Renders `renderDelayMs` in the past, interpolating between the two
+   * buffered snapshots that bracket that time. If we've run out of fresh
+   * snapshots (e.g. a lag spike), extrapolates forward using the last known
+   * velocity for a short window before freezing in place.
+   */
+  MP.getInterpolatedPosition = function (id, renderDelayMs) {
+    const delay = typeof renderDelayMs === 'number' ? renderDelayMs : 100;
+    const rp = MP.remotePlayers.get(id);
+    if (!rp) return null;
+    const history = rp.history || [];
+    if (history.length === 0) return rp.state?.position || null;
+    if (history.length === 1) return history[0].position;
+
+    const renderTime = Date.now() - delay;
+    const newest = history[history.length - 1];
+
+    // Render time is ahead of our newest snapshot — extrapolate briefly.
+    if (renderTime >= newest.t) {
+      const aheadMs = renderTime - newest.t;
+      const MAX_EXTRAPOLATE_MS = 200;
+      const clampedAhead = Math.min(aheadMs, MAX_EXTRAPOLATE_MS);
+      const v = newest.velocity || { x: 0, y: 0 };
+      return {
+        x: newest.position.x + v.x * (clampedAhead / 1000),
+        y: newest.position.y + v.y * (clampedAhead / 1000),
+      };
+    }
+
+    // Find the two snapshots bracketing renderTime and lerp between them.
+    for (let i = history.length - 1; i > 0; i--) {
+      const a = history[i - 1], b = history[i];
+      if (renderTime >= a.t && renderTime <= b.t) {
+        const span = b.t - a.t;
+        const mix = span > 0 ? (renderTime - a.t) / span : 1;
+        return {
+          x: a.position.x + (b.position.x - a.position.x) * mix,
+          y: a.position.y + (b.position.y - a.position.y) * mix,
+        };
+      }
+    }
+    // renderTime is older than our oldest snapshot — just use the oldest.
+    return history[0].position;
+  };
+
   MP.allPlayers = function () {
     if (!MP.roomState) return [];
     return [...(MP.roomState.teams?.A || []), ...(MP.roomState.teams?.B || [])];
