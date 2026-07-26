@@ -345,7 +345,72 @@ const ARENA_BULLET_RANGE = 480;
 const ARENA_HISTORY_WINDOW_MS = 500; // how far back we keep position snapshots
 const MAX_REWIND_MS = 300;           // cap on how far we'll rewind for a laggy shooter
 
+// Mirrors OBSTACLE_LAYOUTS in lobby.js — must stay in sync. Used here only
+// for line-of-sight blocking in the authoritative hit check; the server
+// doesn't need to know about auto-step-up/vault mechanics, just "is there
+// something solid between the shooter and the target at this height?"
+const OBSTACLE_LAYOUTS = {
+  "neon-grid": [
+    { id: "w1", type: "wall",       x: -130, y:  0,   hw: 14, hy: 65, h: 140 },
+    { id: "w2", type: "wall",       x:  130, y:  0,   hw: 14, hy: 65, h: 140 },
+    { id: "c1", type: "crate_low",  x:    0, y: -95,  hw: 22, hy: 22, h:  36 },
+    { id: "c2", type: "crate_tall", x:    0, y:  95,  hw: 26, hy: 26, h:  78 },
+    { id: "c3", type: "crate_low",  x: -170, y: 160,  hw: 20, hy: 20, h:  34 },
+    { id: "c4", type: "crate_low",  x:  170, y: -160, hw: 20, hy: 20, h:  34 },
+  ],
+  "sunset-dune": [
+    { id: "w1", type: "wall",       x:    0, y: -140, hw: 70, hy: 14, h: 130 },
+    { id: "w2", type: "wall",       x:    0, y:  140, hw: 70, hy: 14, h: 130 },
+    { id: "c1", type: "crate_tall", x: -110, y:    0, hw: 24, hy: 24, h:  80 },
+    { id: "c2", type: "crate_tall", x:  110, y:    0, hw: 24, hy: 24, h:  80 },
+    { id: "c3", type: "crate_low",  x:  -60, y:  -60, hw: 20, hy: 20, h:  34 },
+    { id: "c4", type: "crate_low",  x:   60, y:   60, hw: 20, hy: 20, h:  34 },
+  ],
+  "deep-void": [
+    { id: "w1", type: "wall",       x: -90,  y:  90,  hw: 16, hy: 60, h: 150 },
+    { id: "w2", type: "wall",       x:  90,  y: -90,  hw: 16, hy: 60, h: 150 },
+    { id: "c1", type: "crate_tall", x:    0, y:    0, hw: 28, hy: 28, h:  82 },
+    { id: "c2", type: "crate_low",  x: -150, y: -60,  hw: 20, hy: 20, h:  34 },
+  ],
+};
+
+function getObstaclesForMap(mapId) { return OBSTACLE_LAYOUTS[mapId] || OBSTACLE_LAYOUTS['neon-grid']; }
+
+function segmentIntersectsAABB(x1, y1, x2, y2, obs) {
+  const minX = obs.x - obs.hw, maxX = obs.x + obs.hw;
+  const minY = obs.y - obs.hy, maxY = obs.y + obs.hy;
+  let tmin = 0, tmax = 1;
+  const dx = x2 - x1, dy = y2 - y1;
+  for (const [d, lo, hi, p] of [[dx, minX, maxX, x1], [dy, minY, maxY, y1]]) {
+    if (Math.abs(d) < 1e-9) {
+      if (p < lo || p > hi) return false;
+    } else {
+      let t1 = (lo - p) / d, t2 = (hi - p) / d;
+      if (t1 > t2) [t1, t2] = [t2, t1];
+      tmin = Math.max(tmin, t1);
+      tmax = Math.min(tmax, t2);
+      if (tmin > tmax) return false;
+    }
+  }
+  return true;
+}
+
+/** Simplified line-of-sight check: does a wall or un-cleared crate sit
+ *  between the shooter and the (rewound) target? Approximates height by
+ *  only counting the shot as blocked if at least one end is below the
+ *  obstacle's top — full 3D ray tracing isn't worth it for a 2.5D arena. */
+function shotBlockedByObstacles(mapId, ox, oy, tx, ty, shooterElevation, targetElevation) {
+  for (const obs of getObstaclesForMap(mapId)) {
+    const clearOver = obs.type !== 'wall' && Math.min(shooterElevation, targetElevation) >= obs.h - 2;
+    if (clearOver) continue;
+    if (segmentIntersectsAABB(ox, oy, tx, ty, obs)) return true;
+  }
+  return false;
+}
+
 function randomDamage() { return 10 + Math.floor(Math.random() * 11); } // 10-20, matches client
+
+function clampNum(v, min, max) { return Math.max(min, Math.min(max, v)); }
 
 /** Interpolated position of `player` at `atTime`, from their buffered
  *  position history — this is the lag-compensation rewind: "where was this
@@ -1061,6 +1126,9 @@ io.on('connection', (socket) => {
       }
       player.position = state.position;
       if (state.velocity) player.velocity = state.velocity;
+      if (typeof state.elevation === 'number' && isFinite(state.elevation)) {
+        player.elevation = clampNum(state.elevation, 0, 200);
+      }
 
       const now = Date.now();
       player.history = player.history || [];
@@ -1084,6 +1152,7 @@ io.on('connection', (socket) => {
       evoStage: player.evoStage,
       score:    player.score,
       alive:    player.alive,
+      elevation: player.elevation || 0,
     });
   });
 
@@ -1153,12 +1222,15 @@ io.on('connection', (socket) => {
     const dirLen = Math.hypot(data.dx, data.dy);
     if (dirLen < 0.01) return;
     const dx = data.dx / dirLen, dy = data.dy / dirLen;
+    const shooterElevation = (typeof data.elevation === 'number' && isFinite(data.elevation))
+      ? clampNum(data.elevation, 0, 200) : 0;
 
     socket.to(room.code).emit('remoteShoot', {
       playerId: socket.id,
       team: player.team,
       x: +data.x, y: +data.y,
       dx, dy,
+      elevation: shooterElevation,
     });
 
     // ── Server-authoritative hit detection (lag-compensated) ──────────────
@@ -1168,12 +1240,18 @@ io.on('connection', (socket) => {
     const shooterLatencyMs = Math.min((player.ping || 0) / 2, MAX_REWIND_MS);
     const rewindTime = now - shooterLatencyMs;
     const enemyTeam = team === 'A' ? 'B' : 'A';
+    const mapId = room.map || 'neon-grid';
 
     for (const opponent of room.teams[enemyTeam].values()) {
       if (!opponent.alive) continue;
       const rewoundPos = getRewoundPosition(opponent, rewindTime);
       if (!rewoundPos) continue;
       if (!rayHitsPoint(+data.x, +data.y, dx, dy, rewoundPos)) continue;
+
+      // A wall or un-vaulted crate between the shooter and this target
+      // blocks the hit — cover actually matters.
+      const targetElevation = typeof opponent.elevation === 'number' ? opponent.elevation : 0;
+      if (shotBlockedByObstacles(mapId, +data.x, +data.y, rewoundPos.x, rewoundPos.y, shooterElevation, targetElevation)) continue;
 
       const dmg = randomDamage();
       opponent.hp = Math.max(0, (typeof opponent.hp === 'number' ? opponent.hp : 150) - dmg);

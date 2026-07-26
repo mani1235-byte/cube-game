@@ -34,6 +34,142 @@
   const DEFAULT_MAP = MAP_POOL[0];
   function mapById(id) { return MAP_POOL.find(m => m.id === id) || DEFAULT_MAP; }
 
+  // ── Obstacles (Phase A/B/C: cover, verticality, per-map layouts) ─────────
+  // NOTE: this layout data is mirrored in server.js (OBSTACLE_LAYOUTS) so the
+  // server's authoritative hit detection can block shots the same way the
+  // client renders/collides against them. If you change one, change both.
+  //
+  // type: 'wall'      — full height, always blocks movement + line of sight,
+  //                      never climbable regardless of elevation.
+  //       'crate_low' — short enough to step onto automatically, just by
+  //                      walking into its footprint (no vault needed).
+  //       'crate_tall'— needs a vault (jump/climb button) to get on top of;
+  //                      until vaulted, blocks like a wall.
+  // x, y: world-space center. hw, hy: half-width/half-depth footprint.
+  // h: height in the same units as player elevation.
+  const OBSTACLE_LAYOUTS = {
+    "neon-grid": [
+      { id: "w1", type: "wall",       x: -130, y:  0,   hw: 14, hy: 65, h: 140 },
+      { id: "w2", type: "wall",       x:  130, y:  0,   hw: 14, hy: 65, h: 140 },
+      { id: "c1", type: "crate_low",  x:    0, y: -95,  hw: 22, hy: 22, h:  36 },
+      { id: "c2", type: "crate_tall", x:    0, y:  95,  hw: 26, hy: 26, h:  78 },
+      { id: "c3", type: "crate_low",  x: -170, y: 160,  hw: 20, hy: 20, h:  34 },
+      { id: "c4", type: "crate_low",  x:  170, y: -160, hw: 20, hy: 20, h:  34 },
+    ],
+    "sunset-dune": [
+      { id: "w1", type: "wall",       x:    0, y: -140, hw: 70, hy: 14, h: 130 },
+      { id: "w2", type: "wall",       x:    0, y:  140, hw: 70, hy: 14, h: 130 },
+      { id: "c1", type: "crate_tall", x: -110, y:    0, hw: 24, hy: 24, h:  80 },
+      { id: "c2", type: "crate_tall", x:  110, y:    0, hw: 24, hy: 24, h:  80 },
+      { id: "c3", type: "crate_low",  x:  -60, y:  -60, hw: 20, hy: 20, h:  34 },
+      { id: "c4", type: "crate_low",  x:   60, y:   60, hw: 20, hy: 20, h:  34 },
+    ],
+    "deep-void": [
+      // Sparser — the low-visibility theme leans on fewer, bigger silhouettes.
+      { id: "w1", type: "wall",       x: -90,  y:  90,  hw: 16, hy: 60, h: 150 },
+      { id: "w2", type: "wall",       x:  90,  y: -90,  hw: 16, hy: 60, h: 150 },
+      { id: "c1", type: "crate_tall", x:    0, y:    0, hw: 28, hy: 28, h:  82 },
+      { id: "c2", type: "crate_low",  x: -150, y: -60,  hw: 20, hy: 20, h:  34 },
+    ],
+  };
+  // How far a climbable crate's footprint keeps you clear of spawn (0,0) —
+  // just a sanity note, not enforced in code: all layouts above stay clear
+  // of a ~55-unit radius around the origin since that's where players spawn.
+
+  const STEP_HEIGHT = 40;   // crates at or below this: auto climb, no button
+  const VAULT_HEIGHT = 90;  // crates at or below this: climbable with the vault button
+  const VAULT_REACH = 46;   // how close you need to be to a crate to vault it
+  const VAULT_DURATION = 300; // ms for the climb-up arc
+
+  function getObstacles() {
+    const mapId = ARENA.map?.id || (state.roomState?.map) || DEFAULT_MAP.id;
+    return OBSTACLE_LAYOUTS[mapId] || OBSTACLE_LAYOUTS[DEFAULT_MAP.id];
+  }
+
+  function isClimbable(obstacle) { return obstacle.type !== "wall" && obstacle.h <= VAULT_HEIGHT; }
+
+  /** Closest point on an obstacle's AABB footprint to (x,y), and the
+   *  distance to it — used for both collision push-out and vault-reach checks. */
+  function closestPointOnObstacle(obstacle, x, y) {
+    const cx = clamp(x, obstacle.x - obstacle.hw, obstacle.x + obstacle.hw);
+    const cy = clamp(y, obstacle.y - obstacle.hy, obstacle.y + obstacle.hy);
+    return { x: cx, y: cy, dist: Math.hypot(x - cx, y - cy) };
+  }
+
+  function insideFootprint(obstacle, x, y) {
+    return Math.abs(x - obstacle.x) <= obstacle.hw && Math.abs(y - obstacle.y) <= obstacle.hy;
+  }
+
+  /** The height of "the ground" under (x,y) — 0 normally, or a crate's top
+   *  if you're eligible to be standing on it (auto for low crates, only
+   *  after vaulting for tall ones). */
+  function groundHeightAt(x, y) {
+    let ground = 0;
+    for (const obs of getObstacles()) {
+      if (!insideFootprint(obs, x, y)) continue;
+      if (obs.type === "crate_low") ground = Math.max(ground, obs.h);
+      else if (obs.type === "crate_tall" && ARENA.onTopId === obs.id) ground = Math.max(ground, obs.h);
+    }
+    return ground;
+  }
+
+  /** Push (x,y) out of any obstacle footprint the player isn't currently
+   *  elevated above. Walls always apply; crates only if not standing on them. */
+  function resolveObstacleCollision(x, y, elevation) {
+    for (const obs of getObstacles()) {
+      const clearedIt = obs.type !== "wall" && elevation >= obs.h - 2;
+      if (clearedIt) continue;
+      const nearestX = clamp(x, obs.x - obs.hw, obs.x + obs.hw);
+      const nearestY = clamp(y, obs.y - obs.hy, obs.y + obs.hy);
+      const dx = x - nearestX, dy = y - nearestY;
+      const dist = Math.hypot(dx, dy);
+      if (dist < ARENA.HIT_RADIUS && dist > 0.0001) {
+        const push = (ARENA.HIT_RADIUS - dist);
+        x += (dx / dist) * push;
+        y += (dy / dist) * push;
+      } else if (dist <= 0.0001) {
+        // Dead-center inside (rare) — push out along the shortest axis.
+        const overlapX = obs.hw + ARENA.HIT_RADIUS - Math.abs(x - obs.x);
+        const overlapY = obs.hy + ARENA.HIT_RADIUS - Math.abs(y - obs.y);
+        if (overlapX < overlapY) x += (x < obs.x ? -overlapX : overlapX);
+        else y += (y < obs.y ? -overlapY : overlapY);
+      }
+    }
+    return { x, y };
+  }
+
+  /** Does a straight line from (ox,oy) to (tx,ty) pass through any obstacle
+   *  that neither end is high enough to see over? Used to make walls/crates
+   *  actually block shots instead of just being decoration. */
+  function lineOfSightBlocked(ox, oy, tx, ty, shooterElevation, targetElevation) {
+    for (const obs of getObstacles()) {
+      const clearOver = obs.type !== "wall" && Math.min(shooterElevation, targetElevation) >= obs.h - 2;
+      if (clearOver) continue;
+      if (segmentIntersectsAABB(ox, oy, tx, ty, obs)) return true;
+    }
+    return false;
+  }
+
+  /** Standard segment-vs-AABB intersection (slab method). */
+  function segmentIntersectsAABB(x1, y1, x2, y2, obs) {
+    const minX = obs.x - obs.hw, maxX = obs.x + obs.hw;
+    const minY = obs.y - obs.hy, maxY = obs.y + obs.hy;
+    let tmin = 0, tmax = 1;
+    const dx = x2 - x1, dy = y2 - y1;
+    for (const [d, lo, hi, p] of [[dx, minX, maxX, x1], [dy, minY, maxY, y1]]) {
+      if (Math.abs(d) < 1e-9) {
+        if (p < lo || p > hi) return false;
+      } else {
+        let t1 = (lo - p) / d, t2 = (hi - p) / d;
+        if (t1 > t2) [t1, t2] = [t2, t1];
+        tmin = Math.max(tmin, t1);
+        tmax = Math.min(tmax, t2);
+        if (tmin > tmax) return false;
+      }
+    }
+    return true;
+  }
+
   const screens = {
     connect: document.getElementById("screen-connect"),
     home: document.getElementById("screen-home"),
@@ -104,6 +240,7 @@
     aimKnob: document.getElementById("arena-aim-knob"),
     hpWrap: document.getElementById("arena-hp-wrap"),
     hpFill: document.getElementById("arena-hp-fill"),
+    vaultBtn: document.getElementById("arena-vault-btn"),
   };
 
   const state = {
@@ -692,6 +829,9 @@
     hitMarkerUntil: 0,   // crosshair shows a hit marker until this timestamp
     hurtFlashUntil: 0,   // red vignette shown briefly after taking damage
     correctionTarget: null, // server-authoritative position to smoothly pull toward (Phase 4 reconciliation)
+    elevation: 0,        // current height above ground (crates/vaulting)
+    onTopId: null,        // id of the tall crate we're currently standing on, if any
+    vault: null,          // { obstacleId, from, to, startedAt } while a vault is in progress
     dragging: false,     // desktop: mouse-drag-to-look
     lastDragX: 0,
     dragMoved: 0,
@@ -703,6 +843,51 @@
   function getRight()   { return { x: Math.cos(ARENA.yaw), y:  Math.sin(ARENA.yaw) }; }
 
   function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
+
+  /** Each frame: smoothly move elevation toward whatever the ground under
+   *  us currently is (instant-ish for stepping onto a low crate, or a
+   *  gentle "fall" back to 0 when walking off a tall one), unless a vault
+   *  arc is actively in progress. */
+  function updateElevation(dt) {
+    if (ARENA.vault) {
+      const elapsed = performance.now() - ARENA.vault.startedAt;
+      const t = clamp(elapsed / VAULT_DURATION, 0, 1);
+      const eased = 1 - Math.pow(1 - t, 2); // ease-out
+      ARENA.elevation = ARENA.vault.from + (ARENA.vault.to - ARENA.vault.from) * eased;
+      if (t >= 1) {
+        ARENA.onTopId = ARENA.vault.obstacleId;
+        ARENA.vault = null;
+      }
+      return;
+    }
+
+    // Not vaulting — if we're still within a tall crate's footprint we're
+    // on top of, hold that height; otherwise fall back toward whatever's
+    // actually under us (0, or a low crate we just stepped onto/off of).
+    if (ARENA.onTopId) {
+      const obs = getObstacles().find(o => o.id === ARENA.onTopId);
+      if (!obs || !insideFootprint(obs, ARENA.myPos.x, ARENA.myPos.y)) ARENA.onTopId = null;
+    }
+    const target = groundHeightAt(ARENA.myPos.x, ARENA.myPos.y);
+    const diff = target - ARENA.elevation;
+    if (Math.abs(diff) < 0.5) ARENA.elevation = target;
+    else ARENA.elevation += diff * Math.min(1, 10 * dt);
+  }
+
+  /** Vault/climb button — finds the nearest vaultable crate within reach
+   *  and starts a climb arc onto it. No-op if already elevated or nothing
+   *  in reach. */
+  function tryVault() {
+    if (ARENA.dead || !ARENA.running || ARENA.vault || ARENA.elevation > 2) return;
+    let best = null, bestDist = Infinity;
+    for (const obs of getObstacles()) {
+      if (obs.type !== "crate_tall") continue;
+      const { dist } = closestPointOnObstacle(obs, ARENA.myPos.x, ARENA.myPos.y);
+      if (dist <= VAULT_REACH && dist < bestDist) { best = obs; bestDist = dist; }
+    }
+    if (!best) return;
+    ARENA.vault = { obstacleId: best.id, from: ARENA.elevation, to: best.h, startedAt: performance.now() };
+  }
 
   function resizeArenaCanvas() {
     if (!els.arenaCanvas) return;
@@ -743,9 +928,9 @@
 
     ARENA.bullets.push({
       x: ARENA.myPos.x, y: ARENA.myPos.y, dx: sdx, dy: sdy,
-      team: MP.myTeam, ownerId: MP.myId, mine: true, dist: 0,
+      team: MP.myTeam, ownerId: MP.myId, mine: true, dist: 0, elevation: ARENA.elevation,
     });
-    MP.sendShoot({ x: ARENA.myPos.x, y: ARENA.myPos.y, dx: sdx, dy: sdy });
+    MP.sendShoot({ x: ARENA.myPos.x, y: ARENA.myPos.y, dx: sdx, dy: sdy, elevation: ARENA.elevation });
   }
 
   function createJoystick(zone, base, knob, radius, onMove, onEnd) {
@@ -792,6 +977,7 @@
       else if (["s","S","ArrowDown"].includes(e.key)) ARENA.keys.down = true;
       else if (["a","A","ArrowLeft"].includes(e.key)) ARENA.keys.left = true;
       else if (["d","D","ArrowRight"].includes(e.key)) ARENA.keys.right = true;
+      else if (e.key === " ") { e.preventDefault(); tryVault(); }
     });
     window.addEventListener("keyup", e => {
       if (["w","W","ArrowUp"].includes(e.key)) ARENA.keys.up = false;
@@ -804,6 +990,9 @@
     createJoystick(els.joystickZone, els.joystickBase, els.joystickKnob, 50,
       (x, y) => { ARENA.joy.active = true; ARENA.joy.x = x; ARENA.joy.y = y; },
       () => { ARENA.joy.active = false; ARENA.joy.x = 0; ARENA.joy.y = 0; });
+
+    els.vaultBtn?.addEventListener("touchstart", e => { e.preventDefault(); tryVault(); }, { passive: false });
+    els.vaultBtn?.addEventListener("click", () => tryVault());
 
     // Right joystick — look (drag rotates yaw), auto-fires forward while held
     createJoystick(els.aimZone, els.aimBase, els.aimKnob, 50,
@@ -870,12 +1059,14 @@
     if (isTouchDevice()) {
       els.joystickZone?.classList.remove("hidden");
       els.aimZone?.classList.remove("hidden");
+      els.vaultBtn?.classList.remove("hidden");
     }
   }
 
   function hideArena() {
     if (els.arenaCanvas) els.arenaCanvas.classList.add("hidden");
     els.hpWrap?.classList.add("hidden");
+    els.vaultBtn?.classList.add("hidden");
     if (els.joystickZone) {
       els.joystickZone.classList.add("hidden");
       els.joystickBase?.classList.remove("active");
@@ -902,11 +1093,23 @@
     ARENA.yaw = 0;
     ARENA.bullets = [];
     ARENA.dead = false;
+    ARENA.elevation = 0;
+    ARENA.onTopId = null;
+    ARENA.vault = null;
     setHp(ARENA.MAX_HP);
     ARENA.lastFrame = performance.now();
 
     function frame(now) {
       if (!ARENA.running) return;
+      try {
+        runFrame(now);
+      } catch (err) {
+        console.error("Arena frame error (recovered, loop continues):", err);
+      }
+      ARENA.rafId = requestAnimationFrame(frame);
+    }
+
+    function runFrame(now) {
       const dt = Math.min((now - ARENA.lastFrame) / 1000, 0.1);
       ARENA.lastFrame = now;
 
@@ -926,8 +1129,13 @@
         const fwd = getForward(), right = getRight();
         const vx = fwd.x * mForward + right.x * mStrafe;
         const vy = fwd.y * mForward + right.y * mStrafe;
-        ARENA.myPos.x = clamp(ARENA.myPos.x + vx * ARENA.SPEED * dt, -ARENA.WORLD_HALF, ARENA.WORLD_HALF);
-        ARENA.myPos.y = clamp(ARENA.myPos.y + vy * ARENA.SPEED * dt, -ARENA.WORLD_HALF, ARENA.WORLD_HALF);
+        let nx = clamp(ARENA.myPos.x + vx * ARENA.SPEED * dt, -ARENA.WORLD_HALF, ARENA.WORLD_HALF);
+        let ny = clamp(ARENA.myPos.y + vy * ARENA.SPEED * dt, -ARENA.WORLD_HALF, ARENA.WORLD_HALF);
+        const resolved = resolveObstacleCollision(nx, ny, ARENA.elevation);
+        ARENA.myPos.x = clamp(resolved.x, -ARENA.WORLD_HALF, ARENA.WORLD_HALF);
+        ARENA.myPos.y = clamp(resolved.y, -ARENA.WORLD_HALF, ARENA.WORLD_HALF);
+
+        updateElevation(dt);
 
         // Reconciliation — if the server rejected a recent move (e.g. a lag
         // spike briefly looked like a teleport), gently pull our locally
@@ -947,7 +1155,7 @@
 
         // Position-only — omits velocity so the server's optional speed
         // check never applies; deltas per send are already small/clamped.
-        MP.updateMyState({ position: { x: ARENA.myPos.x, y: ARENA.myPos.y }, yaw: ARENA.yaw });
+        MP.updateMyState({ position: { x: ARENA.myPos.x, y: ARENA.myPos.y }, yaw: ARENA.yaw, elevation: ARENA.elevation });
 
         // Aim-stick: dragging it rotates the view, and holding it fires
         // forward — the touch equivalent of mouse-drag-to-look.
@@ -962,7 +1170,6 @@
       ARENA.shake = Math.max(0, ARENA.shake - 40 * dt);
       updateBullets(dt);
       drawArena();
-      ARENA.rafId = requestAnimationFrame(frame);
     }
     ARENA.rafId = requestAnimationFrame(frame);
   }
@@ -983,8 +1190,20 @@
     if (d.playerId === MP.myId) return;
     ARENA.bullets.push({
       x: d.x, y: d.y, dx: d.dx, dy: d.dy,
-      team: d.team, ownerId: d.playerId, mine: false, dist: 0,
+      team: d.team, ownerId: d.playerId, mine: false, dist: 0, elevation: d.elevation || 0,
     });
+  }
+
+  /** Is a point blocked by an obstacle, given the elevation of whatever is
+   *  passing through it (a bullet, typically)? Walls always block; crates
+   *  only block things below their top. */
+  function obstacleBlocksAt(x, y, elevation) {
+    for (const obs of getObstacles()) {
+      if (!insideFootprint(obs, x, y)) continue;
+      if (obs.type === "wall") return true;
+      if (elevation < obs.h - 2) return true;
+    }
+    return false;
   }
 
   function updateBullets(dt) {
@@ -995,6 +1214,7 @@
       b.dist += step;
       if (b.dist > ARENA.BULLET_RANGE) return false;
       if (Math.abs(b.x) > ARENA.WORLD_HALF || Math.abs(b.y) > ARENA.WORLD_HALF) return false;
+      if (obstacleBlocksAt(b.x, b.y, b.elevation || 0)) return false; // stopped by cover
 
       // Only bullets fired by someone else can hit me, and only if I'm alive.
       if (!b.mine && !ARENA.dead && b.team !== MP.myTeam) {
@@ -1196,26 +1416,62 @@
       ctx.shadowBlur = 0;
     });
 
-    // Other players, far-to-near so nearer ones draw on top
+    // Camera height cue — a rough sense of "up" when elevated (climbed a
+    // crate), not a true pitch/tilt, just a vertical shift of the horizon.
+    const camElevation = ARENA.elevation || 0;
+    const shiftedHorizon = horizon - clamp(camElevation * 0.35, 0, 60);
+
+    // World objects (obstacles + other players), far-to-near so nearer ones
+    // draw on top and correctly occlude anything behind them.
     const renderList = [];
+    getObstacles().forEach(obs => {
+      const { d, r } = toCameraSpace(obs.x, obs.y);
+      if (d <= 1) return; // behind camera / on top of us
+      renderList.push({ kind: "obstacle", obs, d, r });
+    });
     MP.allPlayers().forEach(p => {
       if (p.id === MP.myId) return; // first-person: don't render self
       const remote = MP.remotePlayers.get(p.id);
       const pos = MP.getInterpolatedPosition(p.id) || remote?.state?.position || { x: 0, y: 0 };
       const hp = typeof remote?.state?.hp === "number" ? remote.state.hp : (p.hp ?? ARENA.MAX_HP);
       const isDead = remote?.state?.alive === false || !p.alive;
+      const elevation = typeof remote?.state?.elevation === "number" ? remote.state.elevation : 0;
       const { d, r } = toCameraSpace(pos.x, pos.y);
       if (d <= 2) return;
-      renderList.push({ p, hp, isDead, d, r });
+      renderList.push({ kind: "player", p, hp, isDead, elevation, d, r });
     });
     renderList.sort((a, b) => b.d - a.d);
 
-    renderList.forEach(({ p, hp, isDead, d, r }) => {
+    renderList.forEach(entry => {
+      const { d, r } = entry;
       const scale = fov / d;
       const sx = cx + r * scale;
+
+      if (entry.kind === "obstacle") {
+        const obs = entry.obs;
+        const boxH = clamp(scale * (obs.h / 60), 8, h * 0.9);
+        const boxW = clamp(scale * ((obs.hw + obs.hy) / 1.2), 10, w * 0.5);
+        const sy = shiftedHorizon + Math.min(boxH * 0.35, (h - shiftedHorizon) * 0.6);
+        const baseColor = obs.type === "wall" ? "#3a3f52" : (activeMap.accent || "#7b6cff");
+        const grad = ctx.createLinearGradient(0, sy - boxH, 0, sy);
+        grad.addColorStop(0, baseColor);
+        grad.addColorStop(1, "rgba(10,11,18,0.9)");
+        ctx.fillStyle = grad;
+        roundRect(ctx, sx - boxW / 2, sy - boxH, boxW, boxH, Math.min(6, boxW * 0.15));
+        ctx.fill();
+        ctx.strokeStyle = "rgba(255,255,255,0.12)";
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+        return;
+      }
+
+      const { p, hp, isDead, elevation } = entry;
       const bodyH = clamp(scale * 1.15, 10, h * 0.62);
       const bodyW = bodyH * 0.42;
-      const sy = horizon + Math.min(bodyH * 0.35, (h - horizon) * 0.55);
+      // Raise/lower on screen based on their elevation relative to ours —
+      // an approximation of height, not a true 3D projection.
+      const elevOffset = clamp((elevation - camElevation) * scale * 0.35, -h * 0.3, h * 0.3);
+      const sy = shiftedHorizon + Math.min(bodyH * 0.35, (h - shiftedHorizon) * 0.55) - elevOffset;
       const color = p.team === "A" ? "#00e5a0" : "#ff4466";
 
       ctx.globalAlpha = isDead ? 0.22 : 1;
