@@ -78,7 +78,7 @@
   // just a sanity note, not enforced in code: all layouts above stay clear
   // of a ~55-unit radius around the origin since that's where players spawn.
 
-  const STEP_HEIGHT = 40;   // crates at or below this: auto climb, no button
+  const STEP_HEIGHT = 30;   // crates at or below this: auto climb, no button (lowered from 40 to fix climbing)
   const VAULT_HEIGHT = 140; // crates at or below this: climbable with the vault button —
                              // bumped up alongside crate_tall's new height so the tall
                              // crates are a genuine high-ground climb, not just a step-up.
@@ -915,10 +915,10 @@
     els.carBtn.classList.toggle("car-cooldown", onCooldown);
     els.carBtn.textContent = onCooldown
       ? `CAR ${Math.ceil((ARENA.carCooldownUntil - now) / 60000)}m`
-      : "CALL CAR";
+      : "CALL CAR (50 coins)";
   }
 
-  /** The "phone" — calls your own car (1-hour cooldown, enforced server-side)
+  /** The "phone" — calls your own car (1-hour cooldown, costs 50 coins, enforced server-side)
    *  if you don't have one out, or steps out of it if you're driving. */
   function toggleCar() {
     if (ARENA.dead || !ARENA.running) return;
@@ -948,6 +948,10 @@
       } else if (result?.error === "cooldown" && result.availableAt) {
         ARENA.carCooldownUntil = result.availableAt;
         showToast(`Car ready in ${Math.ceil((result.availableAt - Date.now()) / 60000)} min.`, "error");
+      } else if (result?.error === "insufficient_coins") {
+        showToast(`Need ${result.required} coins to call car. You have ${result.balance}.`, "error");
+      } else if (result?.error === "payment_failed") {
+        showToast("Payment failed. Try again.", "error");
       } else {
         showToast("Couldn't call the car right now.", "error");
       }
@@ -1178,6 +1182,8 @@
       els.hpFill.style.width = `${(ARENA.hp / ARENA.MAX_HP) * 100}%`;
       els.hpFill.style.background = ARENA.hp > ARENA.MAX_HP * 0.4 ? "var(--coop)" : "var(--versus)";
     }
+    // Ensure HP never goes below 0 - additional safety check
+    if (ARENA.hp < 0) ARENA.hp = 0;
   }
 
   function startArenaLoop() {

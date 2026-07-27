@@ -268,6 +268,7 @@ const SOCKET_RATE_WINDOW  = 1000;   // ms
 
 // ─── "Phone" (call-a-car) constants ────────────────────────────────────────
 const CAR_COOLDOWN_MS     = 60 * 60 * 1000; // 1 hour between calls, per account
+const CAR_COST            = 50;     // coins required to call a car
 const CAR_DAMAGE          = 100;    // flat HP a car hit deals — massive but not always lethal (max HP 150)
 const CAR_HIT_RADIUS      = 34;     // units — bigger than a player's HIT_RADIUS, cars are big
 const CAR_HIT_COOLDOWN_MS = 1000;   // don't re-damage the same target every tick while overlapping
@@ -1226,7 +1227,7 @@ io.on('connection', (socket) => {
     });
   });
 
-  // ── "Phone": call your own car (1-hour cooldown per account) ────────────
+  // ── "Phone": call your own car (1-hour cooldown per account, costs 50 coins) ────────────
   socket.on('callCar', async (data, cb) => {
     const reply = (result) => { if (typeof cb === 'function') cb(result); };
     const pData = players.get(socket.id);
@@ -1239,17 +1240,32 @@ io.on('connection', (socket) => {
     if (!isValidName(player.name)) return reply({ success: false, error: 'invalid_name' });
 
     try {
+      // Check cooldown first
       const lastUsed = await getCarLastUsed(player.name);
       const now = Date.now();
       const availableAt = lastUsed + CAR_COOLDOWN_MS;
       if (lastUsed && now < availableAt) {
         return reply({ success: false, error: 'cooldown', availableAt });
       }
+
+      // Check if player has enough coins
+      const balance = await getWalletBalance(player.name);
+      if (balance < CAR_COST) {
+        return reply({ success: false, error: 'insufficient_coins', required: CAR_COST, balance });
+      }
+
+      // Deduct coins
+      const txnId = `car:${player.name}:${now}`;
+      const deducted = await creditWallet(player.name, -CAR_COST, txnId, { method: 'car', room: room.code });
+      if (!deducted) {
+        return reply({ success: false, error: 'payment_failed' });
+      }
+
       await setCarLastUsed(player.name, now);
       player.carGranted = true;
       player.carActive = true;
       io.to(room.code).emit('carSpawned', { playerId: socket.id, team: player.team });
-      reply({ success: true, availableAt: now + CAR_COOLDOWN_MS });
+      reply({ success: true, availableAt: now + CAR_COOLDOWN_MS, cost: CAR_COST, newBalance: balance - CAR_COST });
     } catch (e) {
       console.error('[car] call error:', e.message);
       reply({ success: false, error: 'server_error' });
