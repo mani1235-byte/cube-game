@@ -259,10 +259,20 @@ const TEAMS                 = ['A', 'B'];
 
 // ─── Anti-cheat constants ─────────────────────────────────────────────────────
 const MAX_SPEED           = 25;     // units/tick — reject above this
-const MAX_TELEPORT_DIST   = 80;     // units — flag if jumped further
+const MAX_TELEPORT_DIST   = 110;    // units — flag if jumped further (was 80; loosened to
+                                     // cut down false positives from ordinary send-loop/frame
+                                     // jitter, which used to read as stuttery walking)
 const MAX_SCORE_PER_HIT   = 500;    // points — reject above this per event
 const SOCKET_RATE_LIMIT   = 25;     // events/sec per socket
 const SOCKET_RATE_WINDOW  = 1000;   // ms
+
+// ─── "Phone" (call-a-car) constants ────────────────────────────────────────
+const CAR_COOLDOWN_MS     = 60 * 60 * 1000; // 1 hour between calls, per account
+const CAR_DAMAGE          = 100;    // flat HP a car hit deals — massive but not always lethal (max HP 150)
+const CAR_HIT_RADIUS      = 34;     // units — bigger than a player's HIT_RADIUS, cars are big
+const CAR_HIT_COOLDOWN_MS = 1000;   // don't re-damage the same target every tick while overlapping
+const MAX_SPEED_CAR       = 55;     // units/tick while driving — faster cap than walking
+const MAX_TELEPORT_DIST_CAR = 235;  // units — scaled up teleport-flag threshold for car speed
 
 // ─── Audit log ────────────────────────────────────────────────────────────────
 const auditLog = [];
@@ -306,11 +316,11 @@ function isValidPosition(pos) {
     && Math.abs(pos.x) < 100000 && Math.abs(pos.y) < 100000;
 }
 
-function isValidVelocity(vel) {
+function isValidVelocity(vel, speedCap = MAX_SPEED) {
   if (!vel) return true; // optional
   return typeof vel.x === 'number' && typeof vel.y === 'number'
     && isFinite(vel.x) && isFinite(vel.y)
-    && Math.abs(vel.x) <= MAX_SPEED && Math.abs(vel.y) <= MAX_SPEED;
+    && Math.abs(vel.x) <= speedCap && Math.abs(vel.y) <= speedCap;
 }
 
 function isValidScore(score) {
@@ -354,22 +364,22 @@ const OBSTACLE_LAYOUTS = {
     { id: "w1", type: "wall",       x: -130, y:  0,   hw: 14, hy: 65, h: 140 },
     { id: "w2", type: "wall",       x:  130, y:  0,   hw: 14, hy: 65, h: 140 },
     { id: "c1", type: "crate_low",  x:    0, y: -95,  hw: 22, hy: 22, h:  36 },
-    { id: "c2", type: "crate_tall", x:    0, y:  95,  hw: 26, hy: 26, h:  78 },
+    { id: "c2", type: "crate_tall", x:    0, y:  95,  hw: 26, hy: 26, h: 130 },
     { id: "c3", type: "crate_low",  x: -170, y: 160,  hw: 20, hy: 20, h:  34 },
     { id: "c4", type: "crate_low",  x:  170, y: -160, hw: 20, hy: 20, h:  34 },
   ],
   "sunset-dune": [
     { id: "w1", type: "wall",       x:    0, y: -140, hw: 70, hy: 14, h: 130 },
     { id: "w2", type: "wall",       x:    0, y:  140, hw: 70, hy: 14, h: 130 },
-    { id: "c1", type: "crate_tall", x: -110, y:    0, hw: 24, hy: 24, h:  80 },
-    { id: "c2", type: "crate_tall", x:  110, y:    0, hw: 24, hy: 24, h:  80 },
+    { id: "c1", type: "crate_tall", x: -110, y:    0, hw: 24, hy: 24, h: 128 },
+    { id: "c2", type: "crate_tall", x:  110, y:    0, hw: 24, hy: 24, h: 128 },
     { id: "c3", type: "crate_low",  x:  -60, y:  -60, hw: 20, hy: 20, h:  34 },
     { id: "c4", type: "crate_low",  x:   60, y:   60, hw: 20, hy: 20, h:  34 },
   ],
   "deep-void": [
     { id: "w1", type: "wall",       x: -90,  y:  90,  hw: 16, hy: 60, h: 150 },
     { id: "w2", type: "wall",       x:  90,  y: -90,  hw: 16, hy: 60, h: 150 },
-    { id: "c1", type: "crate_tall", x:    0, y:    0, hw: 28, hy: 28, h:  82 },
+    { id: "c1", type: "crate_tall", x:    0, y:  110, hw: 28, hy: 28, h: 135 },
     { id: "c2", type: "crate_low",  x: -150, y: -60,  hw: 20, hy: 20, h:  34 },
   ],
 };
@@ -450,15 +460,17 @@ function rayHitsPoint(ox, oy, dx, dy, target) {
   return Math.hypot(target.x - cx, target.y - cy) <= ARENA_HIT_RADIUS;
 }
 
-function checkMovement(player, newPosition, newVelocity) {
+function checkMovement(player, newPosition, newVelocity, carActive = false) {
   if (!isValidPosition(newPosition)) return { ok: false, reason: 'invalid_position' };
-  if (newVelocity && !isValidVelocity(newVelocity)) return { ok: false, reason: 'speed_hack' };
+  const speedCap = carActive ? MAX_SPEED_CAR : MAX_SPEED;
+  if (newVelocity && !isValidVelocity(newVelocity, speedCap)) return { ok: false, reason: 'speed_hack' };
 
   if (player.position && isValidPosition(player.position)) {
     const dx = newPosition.x - player.position.x;
     const dy = newPosition.y - player.position.y;
     const dist = Math.hypot(dx, dy);
-    if (dist > MAX_TELEPORT_DIST) {
+    const teleportCap = carActive ? MAX_TELEPORT_DIST_CAR : MAX_TELEPORT_DIST;
+    if (dist > teleportCap) {
       return { ok: false, reason: 'teleport', dist };
     }
   }
@@ -672,6 +684,10 @@ function joinRoom(socket, code, requestedTeam, profile) {
     inputs:    {},
     flagCount: 0, // anti-cheat flag counter
     history:   [], // { t, position } — for Phase 3 lag-compensated hit rewind
+    carGranted: false, // server has approved a car for this player (set by 'callCar')
+    carActive:  false, // they're currently driving it — cleared together with carGranted
+                        // when they call 'exitCar' (see that handler below)
+    _carHits:  {},      // { targetPlayerId: lastHitTimestamp } — per-target car-hit cooldown
   };
 
   room.teams[team].set(socket.id, playerState);
@@ -771,6 +787,7 @@ function startGame(room) {
     p.alive = true; p.ready = false;
     p.evoStage = 1; p.flagCount = 0;
     p.hp = 150; p._lastShot = 0;
+    p.carGranted = false; p.carActive = false; p._carHits = {};
   });
   io.to(room.code).emit('gameStart', { roomState: roomPublicState(room) });
 }
@@ -1100,9 +1117,15 @@ io.on('connection', (socket) => {
     const player = team ? room.teams[team].get(socket.id) : null;
     if (!player || !player.alive) return;
 
+    // The client can only claim to be driving if we actually granted them a
+    // car via 'callCar' — a modified client just sending car:true otherwise
+    // gets ignored (carActive stays false, normal speed caps apply).
+    const carActive = !!(player.carGranted && state.car === true);
+    player.carActive = carActive;
+
     // Validate movement — anti-cheat
     if (state.position) {
-      const check = checkMovement(player, state.position, state.velocity);
+      const check = checkMovement(player, state.position, state.velocity, carActive);
       if (!check.ok) {
         player.flagCount = (player.flagCount || 0) + 1;
         audit('cheat:movement', {
@@ -1113,13 +1136,28 @@ io.on('connection', (socket) => {
         if (player.flagCount >= 5) {
           socket.emit('kicked', { reason: 'Anti-cheat: movement violation' });
           socket.disconnect();
-        } else if (player.position) {
-          // Reconciliation: tell the client where the server actually has
-          // them so their local prediction can snap back instead of
-          // silently drifting out of sync with what everyone else (and hit
-          // detection) sees. If we don't have a prior known-good position
-          // yet (e.g. their very first update was malformed), there's
-          // nothing sane to correct to — the client will just try again.
+        } else if (player.position && isValidPosition(player.position)) {
+          // Soft-correct instead of freezing position outright. Freezing
+          // used to mean: reject this update, leave player.position exactly
+          // where it was, and the CLIENT keeps moving locally each frame —
+          // so the very next update looks even further from the (now more
+          // stale) server position, gets rejected too, and so on. That
+          // cascade is what made ordinary walking look stuttery/rubber-
+          // banded any time a single update got flagged (e.g. a brief lag
+          // spike bunching two ticks of movement into one).
+          //
+          // Instead, advance the server's position toward the claimed one
+          // by at most the allowed cap, every tick — so a single blip can't
+          // snowball, while a sustained speed-hack still can't outrun the
+          // cap and still accumulates flags toward a kick.
+          const dx = state.position.x - player.position.x;
+          const dy = state.position.y - player.position.y;
+          const dist = Math.hypot(dx, dy) || 1;
+          const cap = carActive ? MAX_TELEPORT_DIST_CAR : MAX_TELEPORT_DIST;
+          player.position = {
+            x: player.position.x + (dx / dist) * cap,
+            y: player.position.y + (dy / dist) * cap,
+          };
           socket.emit('positionCorrection', { position: player.position });
         }
         return; // reject this update
@@ -1138,6 +1176,37 @@ io.on('connection', (socket) => {
       while (player.history.length > 1 && now - player.history[0].t > ARENA_HISTORY_WINDOW_MS) {
         player.history.shift();
       }
+
+      // ── Car-vs-player collision (server-authoritative) ──────────────────
+      // Anyone driving a car damages any other player (either team — a
+      // vehicle doesn't care about teams) whose position is within
+      // CAR_HIT_RADIUS of the car. Per-target cooldown stops one continued
+      // overlap from deleting someone's HP bar in a single second.
+      if (carActive) {
+        player._carHits = player._carHits || {};
+        for (const t of TEAMS) {
+          for (const other of room.teams[t].values()) {
+            if (other.id === socket.id || !other.alive) continue;
+            if (!isValidPosition(other.position)) continue;
+            const dist = Math.hypot(other.position.x - player.position.x, other.position.y - player.position.y);
+            if (dist > CAR_HIT_RADIUS) continue;
+            const lastHit = player._carHits[other.id] || 0;
+            if (now - lastHit < CAR_HIT_COOLDOWN_MS) continue;
+            player._carHits[other.id] = now;
+
+            other.hp = Math.max(0, (typeof other.hp === 'number' ? other.hp : 150) - CAR_DAMAGE);
+            io.to(room.code).emit('remoteHealth', { playerId: other.id, hp: other.hp, byId: socket.id, source: 'car' });
+
+            if (other.hp <= 0) {
+              other.alive = false;
+              other.carGranted = false;
+              other.carActive = false;
+              io.to(room.code).emit('playerDied', { playerId: other.id, team: other.team });
+              checkTeamElimination(room);
+            }
+          }
+        }
+      }
     }
 
     // NEVER trust score from client — score comes from cubeSliced events
@@ -1153,7 +1222,51 @@ io.on('connection', (socket) => {
       score:    player.score,
       alive:    player.alive,
       elevation: player.elevation || 0,
+      car:      !!player.carActive,
     });
+  });
+
+  // ── "Phone": call your own car (1-hour cooldown per account) ────────────
+  socket.on('callCar', async (data, cb) => {
+    const reply = (result) => { if (typeof cb === 'function') cb(result); };
+    const pData = players.get(socket.id);
+    if (!pData) return reply({ success: false, error: 'not_in_room' });
+    const room = rooms.get(pData.roomCode);
+    if (!room || room.state !== 'playing') return reply({ success: false, error: 'not_playing' });
+    const team = teamOfSocket(room, socket.id);
+    const player = team ? room.teams[team].get(socket.id) : null;
+    if (!player || !player.alive) return reply({ success: false, error: 'dead' });
+    if (!isValidName(player.name)) return reply({ success: false, error: 'invalid_name' });
+
+    try {
+      const lastUsed = await getCarLastUsed(player.name);
+      const now = Date.now();
+      const availableAt = lastUsed + CAR_COOLDOWN_MS;
+      if (lastUsed && now < availableAt) {
+        return reply({ success: false, error: 'cooldown', availableAt });
+      }
+      await setCarLastUsed(player.name, now);
+      player.carGranted = true;
+      player.carActive = true;
+      io.to(room.code).emit('carSpawned', { playerId: socket.id, team: player.team });
+      reply({ success: true, availableAt: now + CAR_COOLDOWN_MS });
+    } catch (e) {
+      console.error('[car] call error:', e.message);
+      reply({ success: false, error: 'server_error' });
+    }
+  });
+
+  socket.on('exitCar', () => {
+    const pData = players.get(socket.id);
+    if (!pData) return;
+    const room = rooms.get(pData.roomCode);
+    if (!room) return;
+    const team = teamOfSocket(room, socket.id);
+    const player = team ? room.teams[team].get(socket.id) : null;
+    if (!player) return;
+    player.carGranted = false;
+    player.carActive = false;
+    io.to(room.code).emit('carRemoved', { playerId: socket.id });
   });
 
   // ── Server-authoritative scoring ─────────────────────────────────────────
@@ -1199,6 +1312,8 @@ io.on('connection', (socket) => {
     if (!player) return;
 
     player.alive = false;
+    player.carGranted = false;
+    player.carActive = false;
     io.to(room.code).emit('playerDied', { playerId: socket.id, team: player.team });
 
     checkTeamElimination(room);
@@ -1259,6 +1374,8 @@ io.on('connection', (socket) => {
 
       if (opponent.hp <= 0) {
         opponent.alive = false;
+        opponent.carGranted = false;
+        opponent.carActive = false;
         io.to(room.code).emit('playerDied', { playerId: opponent.id, team: opponent.team });
         checkTeamElimination(room);
       }
@@ -1458,6 +1575,56 @@ async function getWalletBalance(username) {
     }
   }
   return (walletLocal[username] && walletLocal[username].coins) || 0;
+}
+
+// ─── "Phone" (call-a-car) cooldown ─────────────────────────────────────────
+// Each account can call their car once, then has to wait CAR_COOLDOWN_MS
+// (1 hour) before calling it again. Persisted the same way the wallet is —
+// Firestore when available, a local JSON file otherwise — so refreshing the
+// page or reconnecting doesn't reset the timer.
+const CAR_PHONE_FILE = path.join(__dirname, 'car-phone-ledger.json');
+let carPhoneLocal = {}; // { username: lastUsedAtMs } — fallback only
+try {
+  if (fs.existsSync(CAR_PHONE_FILE)) {
+    carPhoneLocal = JSON.parse(fs.readFileSync(CAR_PHONE_FILE, 'utf8'));
+  }
+} catch (e) {
+  console.warn('[car] could not load car-phone-ledger.json — starting fresh:', e.message);
+  carPhoneLocal = {};
+}
+function saveCarPhoneLocal() {
+  try {
+    fs.writeFileSync(CAR_PHONE_FILE, JSON.stringify(carPhoneLocal));
+  } catch (e) {
+    console.warn('[car] could not persist car-phone-ledger.json:', e.message);
+  }
+}
+
+async function getCarLastUsed(username) {
+  if (db) {
+    try {
+      const doc = await db.collection('carPhone').doc(username).get();
+      return doc.exists ? (doc.data().lastUsedAt || 0) : 0;
+    } catch (e) {
+      console.error('[car] Firestore read failed, falling back to local file:', e.message);
+    }
+  }
+  return carPhoneLocal[username] || 0;
+}
+
+async function setCarLastUsed(username, ts) {
+  if (db) {
+    try {
+      await db.collection('carPhone').doc(username).set({
+        username, lastUsedAt: ts, updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      }, { merge: true });
+      return;
+    } catch (e) {
+      console.error('[car] Firestore write failed, falling back to local file:', e.message);
+    }
+  }
+  carPhoneLocal[username] = ts;
+  saveCarPhoneLocal();
 }
 
 // ─── Shop spend gate (anti-cheat) ──────────────────────────────────────────
@@ -2048,6 +2215,23 @@ app.post('/api/coins/earn', async (req, res) => {
 // applies it locally (coins/XP/chest), same as before. Keeping the actual
 // counter here means logging in from a phone and then a laptop the same day
 // can't double-claim, and a missed day resets the same way everywhere.
+// ─── Car ("phone") cooldown status — lets the UI show a countdown even
+// before the player is in a match, without spending the call. ──────────────
+app.get('/api/car/status/:username', async (req, res) => {
+  const username = req.params.username || '';
+  if (!isValidName(username)) {
+    return res.status(400).json({ error: 'Invalid username.' });
+  }
+  try {
+    const lastUsed = await getCarLastUsed(username);
+    const availableAt = lastUsed ? lastUsed + CAR_COOLDOWN_MS : 0;
+    res.json({ ready: Date.now() >= availableAt, availableAt });
+  } catch (e) {
+    console.error('[car] status error:', e.message);
+    res.status(500).json({ error: 'Could not fetch car status.' });
+  }
+});
+
 app.post('/api/streak/checkin', async (req, res) => {
   const username = (req.body && req.body.username) || '';
   if (!isValidName(username)) {

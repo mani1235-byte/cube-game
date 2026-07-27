@@ -12,6 +12,8 @@
     return;
   }
 
+  const LOBBY_SERVER_URL = (window.CUBE_SERVER || window.location.origin || "").replace(/\/$/, "");
+
   // Map pool for the pre-match vote. Server only validates ids and tallies
   // votes (see MAP_IDS in server.js) — all visuals live here.
   const MAP_POOL = [
@@ -52,15 +54,15 @@
       { id: "w1", type: "wall",       x: -130, y:  0,   hw: 14, hy: 65, h: 140 },
       { id: "w2", type: "wall",       x:  130, y:  0,   hw: 14, hy: 65, h: 140 },
       { id: "c1", type: "crate_low",  x:    0, y: -95,  hw: 22, hy: 22, h:  36 },
-      { id: "c2", type: "crate_tall", x:    0, y:  95,  hw: 26, hy: 26, h:  78 },
+      { id: "c2", type: "crate_tall", x:    0, y:  95,  hw: 26, hy: 26, h: 130 },
       { id: "c3", type: "crate_low",  x: -170, y: 160,  hw: 20, hy: 20, h:  34 },
       { id: "c4", type: "crate_low",  x:  170, y: -160, hw: 20, hy: 20, h:  34 },
     ],
     "sunset-dune": [
       { id: "w1", type: "wall",       x:    0, y: -140, hw: 70, hy: 14, h: 130 },
       { id: "w2", type: "wall",       x:    0, y:  140, hw: 70, hy: 14, h: 130 },
-      { id: "c1", type: "crate_tall", x: -110, y:    0, hw: 24, hy: 24, h:  80 },
-      { id: "c2", type: "crate_tall", x:  110, y:    0, hw: 24, hy: 24, h:  80 },
+      { id: "c1", type: "crate_tall", x: -110, y:    0, hw: 24, hy: 24, h: 128 },
+      { id: "c2", type: "crate_tall", x:  110, y:    0, hw: 24, hy: 24, h: 128 },
       { id: "c3", type: "crate_low",  x:  -60, y:  -60, hw: 20, hy: 20, h:  34 },
       { id: "c4", type: "crate_low",  x:   60, y:   60, hw: 20, hy: 20, h:  34 },
     ],
@@ -68,7 +70,7 @@
       // Sparser — the low-visibility theme leans on fewer, bigger silhouettes.
       { id: "w1", type: "wall",       x: -90,  y:  90,  hw: 16, hy: 60, h: 150 },
       { id: "w2", type: "wall",       x:  90,  y: -90,  hw: 16, hy: 60, h: 150 },
-      { id: "c1", type: "crate_tall", x:    0, y:    0, hw: 28, hy: 28, h:  82 },
+      { id: "c1", type: "crate_tall", x:    0, y:  110, hw: 28, hy: 28, h: 135 },
       { id: "c2", type: "crate_low",  x: -150, y: -60,  hw: 20, hy: 20, h:  34 },
     ],
   };
@@ -77,9 +79,11 @@
   // of a ~55-unit radius around the origin since that's where players spawn.
 
   const STEP_HEIGHT = 40;   // crates at or below this: auto climb, no button
-  const VAULT_HEIGHT = 90;  // crates at or below this: climbable with the vault button
+  const VAULT_HEIGHT = 140; // crates at or below this: climbable with the vault button —
+                             // bumped up alongside crate_tall's new height so the tall
+                             // crates are a genuine high-ground climb, not just a step-up.
   const VAULT_REACH = 46;   // how close you need to be to a crate to vault it
-  const VAULT_DURATION = 300; // ms for the climb-up arc
+  const VAULT_DURATION = 460; // ms for the climb-up arc — longer now that it's a bigger climb
 
   function getObstacles() {
     const mapId = ARENA.map?.id || (state.roomState?.map) || DEFAULT_MAP.id;
@@ -241,6 +245,7 @@
     hpWrap: document.getElementById("arena-hp-wrap"),
     hpFill: document.getElementById("arena-hp-fill"),
     vaultBtn: document.getElementById("arena-vault-btn"),
+    carBtn: document.getElementById("arena-car-btn"),
   };
 
   const state = {
@@ -805,6 +810,9 @@
   const ARENA = {
     WORLD_HALF: 320,     // arena spans -320..320 on each axis
     SPEED: 180,          // world units per second
+    CAR_SPEED: 380,      // world units per second while driving the car
+    CAR_HIT_RADIUS: 34,  // world units — car-to-player visual/collision clearance
+    CAR_COOLDOWN_MS: 60 * 60 * 1000, // 1 hour — must match server's CAR_COOLDOWN_MS
     BULLET_SPEED: 460,   // world units per second
     BULLET_RANGE: 480,   // max travel distance before a bullet expires
     HIT_RADIUS: 20,      // world units — bullet-to-player hit distance
@@ -837,6 +845,9 @@
     dragMoved: 0,
     lastFrame: 0,
     rafId: null,
+    inCar: false,        // am I currently driving my car
+    carPending: false,   // waiting on the server's response to a call-car request
+    carCooldownUntil: 0, // ms epoch — when I can call the car again (UI display only, server enforces)
   };
 
   function getForward() { return { x: Math.sin(ARENA.yaw), y: -Math.cos(ARENA.yaw) }; }
@@ -878,7 +889,7 @@
    *  and starts a climb arc onto it. No-op if already elevated or nothing
    *  in reach. */
   function tryVault() {
-    if (ARENA.dead || !ARENA.running || ARENA.vault || ARENA.elevation > 2) return;
+    if (ARENA.dead || !ARENA.running || ARENA.inCar || ARENA.vault || ARENA.elevation > 2) return;
     let best = null, bestDist = Infinity;
     for (const obs of getObstacles()) {
       if (obs.type !== "crate_tall") continue;
@@ -887,6 +898,62 @@
     }
     if (!best) return;
     ARENA.vault = { obstacleId: best.id, from: ARENA.elevation, to: best.h, startedAt: performance.now() };
+  }
+
+  /** Updates the on-screen "CALL CAR" / "EXIT CAR" button to reflect current
+   *  state (driving, waiting on the server, or on cooldown). */
+  function updateCarBtn() {
+    if (!els.carBtn) return;
+    els.carBtn.classList.toggle("car-active", ARENA.inCar);
+    if (ARENA.inCar) {
+      els.carBtn.textContent = "EXIT CAR";
+      els.carBtn.classList.remove("car-cooldown");
+      return;
+    }
+    const now = Date.now();
+    const onCooldown = ARENA.carCooldownUntil > now;
+    els.carBtn.classList.toggle("car-cooldown", onCooldown);
+    els.carBtn.textContent = onCooldown
+      ? `CAR ${Math.ceil((ARENA.carCooldownUntil - now) / 60000)}m`
+      : "CALL CAR";
+  }
+
+  /** The "phone" — calls your own car (1-hour cooldown, enforced server-side)
+   *  if you don't have one out, or steps out of it if you're driving. */
+  function toggleCar() {
+    if (ARENA.dead || !ARENA.running) return;
+
+    if (ARENA.inCar) {
+      ARENA.inCar = false;
+      MP.exitCar();
+      updateCarBtn();
+      showToast("You stepped out of the car.", "success");
+      return;
+    }
+
+    if (ARENA.carPending) return;
+    const now = Date.now();
+    if (ARENA.carCooldownUntil > now) {
+      showToast(`Car ready in ${Math.ceil((ARENA.carCooldownUntil - now) / 60000)} min.`, "error");
+      return;
+    }
+
+    ARENA.carPending = true;
+    MP.callCar((result) => {
+      ARENA.carPending = false;
+      if (result?.success) {
+        ARENA.inCar = true;
+        ARENA.carCooldownUntil = result.availableAt || (Date.now() + ARENA.CAR_COOLDOWN_MS);
+        showToast("Car called — run someone over!", "success");
+      } else if (result?.error === "cooldown" && result.availableAt) {
+        ARENA.carCooldownUntil = result.availableAt;
+        showToast(`Car ready in ${Math.ceil((result.availableAt - Date.now()) / 60000)} min.`, "error");
+      } else {
+        showToast("Couldn't call the car right now.", "error");
+      }
+      updateCarBtn();
+    });
+    updateCarBtn();
   }
 
   function resizeArenaCanvas() {
@@ -901,7 +968,7 @@
 
   /** Fire a shot from my current position toward a world-space direction. */
   function fireShot(dx, dy) {
-    if (ARENA.dead || !ARENA.running) return;
+    if (ARENA.dead || !ARENA.running || ARENA.inCar) return;
     const now = performance.now();
     if (now - ARENA.lastShotAt < ARENA.FIRE_COOLDOWN) return;
     const len = Math.hypot(dx, dy);
@@ -978,6 +1045,7 @@
       else if (["a","A","ArrowLeft"].includes(e.key)) ARENA.keys.left = true;
       else if (["d","D","ArrowRight"].includes(e.key)) ARENA.keys.right = true;
       else if (e.key === " ") { e.preventDefault(); tryVault(); }
+      else if (e.key === "c" || e.key === "C") { e.preventDefault(); toggleCar(); }
     });
     window.addEventListener("keyup", e => {
       if (["w","W","ArrowUp"].includes(e.key)) ARENA.keys.up = false;
@@ -993,6 +1061,9 @@
 
     els.vaultBtn?.addEventListener("touchstart", e => { e.preventDefault(); tryVault(); }, { passive: false });
     els.vaultBtn?.addEventListener("click", () => tryVault());
+
+    els.carBtn?.addEventListener("touchstart", e => { e.preventDefault(); toggleCar(); }, { passive: false });
+    els.carBtn?.addEventListener("click", () => toggleCar());
 
     // Right joystick — look (drag rotates yaw), auto-fires forward while held
     createJoystick(els.aimZone, els.aimBase, els.aimKnob, 50,
@@ -1051,6 +1122,26 @@
     });
   }
 
+  /** Pulls the current car cooldown from the server so a returning/refreshed
+   *  player sees an accurate countdown immediately, not just after their
+   *  next call attempt. Best-effort — failures just leave the button as
+   *  "ready", and the server still enforces the real cooldown regardless. */
+  async function fetchCarStatus() {
+    const username = getProfile().name;
+    if (!username || username === "Guest") return;
+    try {
+      const res = await fetch(`${LOBBY_SERVER_URL}/api/car/status/${encodeURIComponent(username)}`);
+      if (!res.ok) return;
+      const data = await res.json();
+      if (typeof data.availableAt === "number") {
+        ARENA.carCooldownUntil = data.availableAt;
+        updateCarBtn();
+      }
+    } catch {
+      // Non-fatal — button just shows "CALL CAR" until we know otherwise.
+    }
+  }
+
   function showArena() {
     if (!els.arenaCanvas) return;
     resizeArenaCanvas();
@@ -1060,13 +1151,17 @@
       els.joystickZone?.classList.remove("hidden");
       els.aimZone?.classList.remove("hidden");
       els.vaultBtn?.classList.remove("hidden");
+      els.carBtn?.classList.remove("hidden");
     }
+    updateCarBtn();
+    fetchCarStatus();
   }
 
   function hideArena() {
     if (els.arenaCanvas) els.arenaCanvas.classList.add("hidden");
     els.hpWrap?.classList.add("hidden");
     els.vaultBtn?.classList.add("hidden");
+    els.carBtn?.classList.add("hidden");
     if (els.joystickZone) {
       els.joystickZone.classList.add("hidden");
       els.joystickBase?.classList.remove("active");
@@ -1096,6 +1191,11 @@
     ARENA.elevation = 0;
     ARENA.onTopId = null;
     ARENA.vault = null;
+    ARENA.inCar = false;
+    ARENA.carPending = false;
+    updateCarBtn();
+    if (ARENA.carBtnInterval) clearInterval(ARENA.carBtnInterval);
+    ARENA.carBtnInterval = setInterval(updateCarBtn, 1000);
     setHp(ARENA.MAX_HP);
     ARENA.lastFrame = performance.now();
 
@@ -1129,13 +1229,16 @@
         const fwd = getForward(), right = getRight();
         const vx = fwd.x * mForward + right.x * mStrafe;
         const vy = fwd.y * mForward + right.y * mStrafe;
-        let nx = clamp(ARENA.myPos.x + vx * ARENA.SPEED * dt, -ARENA.WORLD_HALF, ARENA.WORLD_HALF);
-        let ny = clamp(ARENA.myPos.y + vy * ARENA.SPEED * dt, -ARENA.WORLD_HALF, ARENA.WORLD_HALF);
+        const speed = ARENA.inCar ? ARENA.CAR_SPEED : ARENA.SPEED;
+        let nx = clamp(ARENA.myPos.x + vx * speed * dt, -ARENA.WORLD_HALF, ARENA.WORLD_HALF);
+        let ny = clamp(ARENA.myPos.y + vy * speed * dt, -ARENA.WORLD_HALF, ARENA.WORLD_HALF);
         const resolved = resolveObstacleCollision(nx, ny, ARENA.elevation);
         ARENA.myPos.x = clamp(resolved.x, -ARENA.WORLD_HALF, ARENA.WORLD_HALF);
         ARENA.myPos.y = clamp(resolved.y, -ARENA.WORLD_HALF, ARENA.WORLD_HALF);
 
-        updateElevation(dt);
+        // Cars don't climb — stay grounded instead of chasing crate heights.
+        if (ARENA.inCar) ARENA.elevation = 0;
+        else updateElevation(dt);
 
         // Reconciliation — if the server rejected a recent move (e.g. a lag
         // spike briefly looked like a teleport), gently pull our locally
@@ -1155,10 +1258,11 @@
 
         // Position-only — omits velocity so the server's optional speed
         // check never applies; deltas per send are already small/clamped.
-        MP.updateMyState({ position: { x: ARENA.myPos.x, y: ARENA.myPos.y }, yaw: ARENA.yaw, elevation: ARENA.elevation });
+        MP.updateMyState({ position: { x: ARENA.myPos.x, y: ARENA.myPos.y }, yaw: ARENA.yaw, elevation: ARENA.elevation, car: ARENA.inCar });
 
         // Aim-stick: dragging it rotates the view, and holding it fires
-        // forward — the touch equivalent of mouse-drag-to-look.
+        // forward — the touch equivalent of mouse-drag-to-look. No shooting
+        // while driving — running someone over is the car's job.
         if (ARENA.aimJoy.active) {
           ARENA.yaw += ARENA.aimJoy.x * ARENA.TURN_SPEED * dt;
           const f = getForward();
@@ -1178,6 +1282,8 @@
     ARENA.running = false;
     if (ARENA.rafId) cancelAnimationFrame(ARENA.rafId);
     ARENA.rafId = null;
+    if (ARENA.carBtnInterval) clearInterval(ARENA.carBtnInterval);
+    ARENA.carBtnInterval = null;
     ARENA.keys = { up: false, down: false, left: false, right: false };
     ARENA.joy = { active: false, x: 0, y: 0 };
     ARENA.aimJoy = { active: false, x: 0, y: 0 };
@@ -1436,9 +1542,10 @@
       const hp = typeof remote?.state?.hp === "number" ? remote.state.hp : (p.hp ?? ARENA.MAX_HP);
       const isDead = remote?.state?.alive === false || !p.alive;
       const elevation = typeof remote?.state?.elevation === "number" ? remote.state.elevation : 0;
+      const inCar = remote?.state?.car === true;
       const { d, r } = toCameraSpace(pos.x, pos.y);
       if (d <= 2) return;
-      renderList.push({ kind: "player", p, hp, isDead, elevation, d, r });
+      renderList.push({ kind: "player", p, hp, isDead, elevation, inCar, d, r });
     });
     renderList.sort((a, b) => b.d - a.d);
 
@@ -1465,19 +1572,35 @@
         return;
       }
 
-      const { p, hp, isDead, elevation } = entry;
+      const { p, hp, isDead, elevation, inCar } = entry;
       const bodyH = clamp(scale * 1.15, 10, h * 0.62);
       const bodyW = bodyH * 0.42;
       // Raise/lower on screen based on their elevation relative to ours —
       // an approximation of height, not a true 3D projection.
       const elevOffset = clamp((elevation - camElevation) * scale * 0.35, -h * 0.3, h * 0.3);
       const sy = shiftedHorizon + Math.min(bodyH * 0.35, (h - shiftedHorizon) * 0.55) - elevOffset;
-      const color = p.team === "A" ? "#00e5a0" : "#ff4466";
 
       ctx.globalAlpha = isDead ? 0.22 : 1;
-      ctx.fillStyle = color;
-      roundRect(ctx, sx - bodyW / 2, sy - bodyH, bodyW, bodyH, bodyW * 0.3);
-      ctx.fill();
+      if (inCar) {
+        // Cars are wide and low rather than tall and narrow — makes them
+        // instantly readable as "get out of the way" rather than "shoot me".
+        const carW = bodyH * 1.7;
+        const carH = bodyH * 0.55;
+        const grad = ctx.createLinearGradient(0, sy - carH, 0, sy);
+        grad.addColorStop(0, "#ffdd66");
+        grad.addColorStop(1, "#cc8f00");
+        ctx.fillStyle = grad;
+        roundRect(ctx, sx - carW / 2, sy - carH, carW, carH, carH * 0.35);
+        ctx.fill();
+        ctx.strokeStyle = "rgba(0,0,0,0.35)";
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      } else {
+        const color = p.team === "A" ? "#00e5a0" : "#ff4466";
+        ctx.fillStyle = color;
+        roundRect(ctx, sx - bodyW / 2, sy - bodyH, bodyW, bodyH, bodyW * 0.3);
+        ctx.fill();
+      }
       ctx.globalAlpha = 1;
 
       if (!isDead) {
@@ -1491,7 +1614,7 @@
       ctx.font = `${clamp(scale * 0.22, 10, 15)}px 'Rajdhani', sans-serif`;
       ctx.fillStyle = "#e8ecff";
       ctx.textAlign = "center";
-      ctx.fillText(p.name || "Player", sx, sy - bodyH - 18);
+      ctx.fillText(inCar ? `${p.name || "Player"} 🚗` : (p.name || "Player"), sx, sy - bodyH - 18);
     });
 
     ctx.restore(); // end screen-shake — crosshair/gun/HUD stay steady
@@ -1648,10 +1771,19 @@
     });
     MP.on("playerDied", (data) => {
       if (els.mpHud && !els.mpHud.classList.contains("hidden")) renderHud();
+      if (data?.playerId === MP.myId && ARENA.inCar) {
+        ARENA.inCar = false;
+        updateCarBtn();
+      }
       if (data?.playerId !== MP.myId) {
         const p = MP.allPlayers().find(pl => pl.id === data?.playerId);
         renderChatMessage({ system: true, message: `${p?.name || "A player"} was eliminated.` });
       }
+    });
+    MP.on("carSpawned", (data) => {
+      if (data?.playerId === MP.myId) return; // handled directly by toggleCar's own callback
+      const p = MP.allPlayers().find(pl => pl.id === data?.playerId);
+      showToast(`${p?.name || "A player"} called in a car!`, "error");
     });
     MP.on("ping", () => {
       updateHeader();

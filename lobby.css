@@ -543,6 +543,14 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: var(--bg);
 .arena-vault-btn:active { background: rgba(255,216,77,.2); transform: scale(0.95); }
 .arena-vault-btn.hidden { display: none; }
 
+.arena-car-btn {
+  bottom: 180px; /* stacked above the vault button so neither overlaps */
+  border-color: #ffcc33; color: #ffcc33; font-size: .62rem;
+}
+.arena-car-btn:active { background: rgba(255,204,51,.2); }
+.arena-car-btn.car-active { border-color: var(--versus, #ff4466); color: var(--versus, #ff4466); }
+.arena-car-btn.car-cooldown { opacity: .45; }
+
 /* ─── HUD ─────────────────────────────────────────────────────────────────── */
 .mp-hud {
   position: fixed; top: 12px; right: 12px; z-index: 100;

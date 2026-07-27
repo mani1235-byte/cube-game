@@ -144,8 +144,14 @@ window.CUBE_SERVER = window.CUBE_SERVER || 'https://cube-game-fnam.onrender.com/
     s.on('remoteScore',   d => { MP._emit('remoteScore', d); });
     s.on('playerDied',    d => {
       const rp = MP.remotePlayers.get(d.playerId);
-      if (rp) rp.state.alive = false;
+      if (rp) { rp.state.alive = false; rp.state.car = false; }
       MP._emit('playerDied', d);
+    });
+    s.on('carSpawned',    d => { MP._emit('carSpawned', d); });
+    s.on('carRemoved',    d => {
+      const rp = MP.remotePlayers.get(d.playerId);
+      if (rp) rp.state.car = false;
+      MP._emit('carRemoved', d);
     });
     s.on('remoteShoot',   d => { MP._emit('remoteShoot', d); });
     s.on('positionCorrection', d => { MP._emit('positionCorrection', d); });
@@ -327,6 +333,18 @@ window.CUBE_SERVER = window.CUBE_SERVER || 'https://cube-game-fnam.onrender.com/
   MP.sendCubeSliced = function (event) {
     if (!MP.inRoom || !MP.socket) return;
     MP.socket.emit('cubeSliced', event);
+  };
+
+  /** Ask the server to spawn your car (the "phone"). cb receives
+   *  { success:true, availableAt } or { success:false, error, availableAt? }. */
+  MP.callCar = function (cb) {
+    if (!MP.inRoom || !MP.socket) { if (typeof cb === 'function') cb({ success: false, error: 'not_in_room' }); return; }
+    MP.socket.emit('callCar', {}, (result) => { if (typeof cb === 'function') cb(result); });
+  };
+
+  MP.exitCar = function () {
+    if (!MP.inRoom || !MP.socket) return;
+    MP.socket.emit('exitCar');
   };
 
   // ─── Helpers ──────────────────────────────────────────────────────────────
