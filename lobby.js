@@ -12,8 +12,6 @@
     return;
   }
 
-  const LOBBY_SERVER_URL = (window.CUBE_SERVER || window.location.origin || "").replace(/\/$/, "");
-
   // Map pool for the pre-match vote. Server only validates ids and tallies
   // votes (see MAP_IDS in server.js) — all visuals live here.
   const MAP_POOL = [
@@ -54,15 +52,15 @@
       { id: "w1", type: "wall",       x: -130, y:  0,   hw: 14, hy: 65, h: 140 },
       { id: "w2", type: "wall",       x:  130, y:  0,   hw: 14, hy: 65, h: 140 },
       { id: "c1", type: "crate_low",  x:    0, y: -95,  hw: 22, hy: 22, h:  36 },
-      { id: "c2", type: "crate_tall", x:    0, y:  95,  hw: 26, hy: 26, h: 130 },
+      { id: "c2", type: "crate_tall", x:    0, y:  95,  hw: 26, hy: 26, h:  78 },
       { id: "c3", type: "crate_low",  x: -170, y: 160,  hw: 20, hy: 20, h:  34 },
       { id: "c4", type: "crate_low",  x:  170, y: -160, hw: 20, hy: 20, h:  34 },
     ],
     "sunset-dune": [
       { id: "w1", type: "wall",       x:    0, y: -140, hw: 70, hy: 14, h: 130 },
       { id: "w2", type: "wall",       x:    0, y:  140, hw: 70, hy: 14, h: 130 },
-      { id: "c1", type: "crate_tall", x: -110, y:    0, hw: 24, hy: 24, h: 128 },
-      { id: "c2", type: "crate_tall", x:  110, y:    0, hw: 24, hy: 24, h: 128 },
+      { id: "c1", type: "crate_tall", x: -110, y:    0, hw: 24, hy: 24, h:  80 },
+      { id: "c2", type: "crate_tall", x:  110, y:    0, hw: 24, hy: 24, h:  80 },
       { id: "c3", type: "crate_low",  x:  -60, y:  -60, hw: 20, hy: 20, h:  34 },
       { id: "c4", type: "crate_low",  x:   60, y:   60, hw: 20, hy: 20, h:  34 },
     ],
@@ -70,7 +68,7 @@
       // Sparser — the low-visibility theme leans on fewer, bigger silhouettes.
       { id: "w1", type: "wall",       x: -90,  y:  90,  hw: 16, hy: 60, h: 150 },
       { id: "w2", type: "wall",       x:  90,  y: -90,  hw: 16, hy: 60, h: 150 },
-      { id: "c1", type: "crate_tall", x:    0, y:  110, hw: 28, hy: 28, h: 135 },
+      { id: "c1", type: "crate_tall", x:    0, y:    0, hw: 28, hy: 28, h:  82 },
       { id: "c2", type: "crate_low",  x: -150, y: -60,  hw: 20, hy: 20, h:  34 },
     ],
   };
@@ -78,12 +76,17 @@
   // just a sanity note, not enforced in code: all layouts above stay clear
   // of a ~55-unit radius around the origin since that's where players spawn.
 
-  const STEP_HEIGHT = 30;   // crates at or below this: auto climb, no button (lowered from 40 to fix climbing)
-  const VAULT_HEIGHT = 140; // crates at or below this: climbable with the vault button —
-                             // bumped up alongside crate_tall's new height so the tall
-                             // crates are a genuine high-ground climb, not just a step-up.
+  const STEP_HEIGHT = 40;   // crates at or below this: auto climb, no button
+  const VAULT_HEIGHT = 90;  // crates at or below this: climbable with the vault button
   const VAULT_REACH = 46;   // how close you need to be to a crate to vault it
-  const VAULT_DURATION = 460; // ms for the climb-up arc — longer now that it's a bigger climb
+  const VAULT_DURATION = 300; // ms for the climb-up arc
+
+  // "Summon car" ultimate — must match server.js (CAR_COOLDOWN_MS etc).
+  const CAR_COOLDOWN_MS = 60 * 60 * 1000; // 1 hour
+  const CAR_SPEED = 320;   // world units/sec — faster than a bullet
+  const CAR_RANGE = 900;   // crosses the whole arena
+  const CAR_HIT_RADIUS = 40;
+  const CAR_DAMAGE = 100;
 
   function getObstacles() {
     const mapId = ARENA.map?.id || (state.roomState?.map) || DEFAULT_MAP.id;
@@ -121,8 +124,16 @@
    *  elevated above. Walls always apply; crates only if not standing on them. */
   function resolveObstacleCollision(x, y, elevation) {
     for (const obs of getObstacles()) {
-      const clearedIt = obs.type !== "wall" && elevation >= obs.h - 2;
+      // "Cleared" must be specific to *this* obstacle, not just "elevation
+      // is high enough" — otherwise standing on one tall crate would let
+      // you clip straight through a different, unrelated crate elsewhere
+      // that happens to be a similar height.
+      let clearedIt;
+      if (obs.type === "wall") clearedIt = false;
+      else if (obs.type === "crate_low") clearedIt = elevation >= obs.h - 2 && insideFootprint(obs, x, y);
+      else clearedIt = ARENA.onTopId === obs.id; // crate_tall: only the one actually vaulted
       if (clearedIt) continue;
+
       const nearestX = clamp(x, obs.x - obs.hw, obs.x + obs.hw);
       const nearestY = clamp(y, obs.y - obs.hy, obs.y + obs.hy);
       const dx = x - nearestX, dy = y - nearestY;
@@ -245,7 +256,7 @@
     hpWrap: document.getElementById("arena-hp-wrap"),
     hpFill: document.getElementById("arena-hp-fill"),
     vaultBtn: document.getElementById("arena-vault-btn"),
-    carBtn: document.getElementById("arena-car-btn"),
+    phoneBtn: document.getElementById("arena-phone-btn"),
   };
 
   const state = {
@@ -810,9 +821,6 @@
   const ARENA = {
     WORLD_HALF: 320,     // arena spans -320..320 on each axis
     SPEED: 180,          // world units per second
-    CAR_SPEED: 380,      // world units per second while driving the car
-    CAR_HIT_RADIUS: 34,  // world units — car-to-player visual/collision clearance
-    CAR_COOLDOWN_MS: 60 * 60 * 1000, // 1 hour — must match server's CAR_COOLDOWN_MS
     BULLET_SPEED: 460,   // world units per second
     BULLET_RANGE: 480,   // max travel distance before a bullet expires
     HIT_RADIUS: 20,      // world units — bullet-to-player hit distance
@@ -840,14 +848,13 @@
     elevation: 0,        // current height above ground (crates/vaulting)
     onTopId: null,        // id of the tall crate we're currently standing on, if any
     vault: null,          // { obstacleId, from, to, startedAt } while a vault is in progress
+    cars: [],             // summon-car ultimate: traveling car objects, same shape idea as bullets
+    lastCarSummonAt: 0,   // client-side optimistic guess — server is authoritative (carSummonDenied corrects us)
     dragging: false,     // desktop: mouse-drag-to-look
     lastDragX: 0,
     dragMoved: 0,
     lastFrame: 0,
     rafId: null,
-    inCar: false,        // am I currently driving my car
-    carPending: false,   // waiting on the server's response to a call-car request
-    carCooldownUntil: 0, // ms epoch — when I can call the car again (UI display only, server enforces)
   };
 
   function getForward() { return { x: Math.sin(ARENA.yaw), y: -Math.cos(ARENA.yaw) }; }
@@ -889,7 +896,7 @@
    *  and starts a climb arc onto it. No-op if already elevated or nothing
    *  in reach. */
   function tryVault() {
-    if (ARENA.dead || !ARENA.running || ARENA.inCar || ARENA.vault || ARENA.elevation > 2) return;
+    if (ARENA.dead || !ARENA.running || ARENA.vault || ARENA.elevation > 2) return;
     let best = null, bestDist = Infinity;
     for (const obs of getObstacles()) {
       if (obs.type !== "crate_tall") continue;
@@ -898,66 +905,6 @@
     }
     if (!best) return;
     ARENA.vault = { obstacleId: best.id, from: ARENA.elevation, to: best.h, startedAt: performance.now() };
-  }
-
-  /** Updates the on-screen "CALL CAR" / "EXIT CAR" button to reflect current
-   *  state (driving, waiting on the server, or on cooldown). */
-  function updateCarBtn() {
-    if (!els.carBtn) return;
-    els.carBtn.classList.toggle("car-active", ARENA.inCar);
-    if (ARENA.inCar) {
-      els.carBtn.textContent = "EXIT CAR";
-      els.carBtn.classList.remove("car-cooldown");
-      return;
-    }
-    const now = Date.now();
-    const onCooldown = ARENA.carCooldownUntil > now;
-    els.carBtn.classList.toggle("car-cooldown", onCooldown);
-    els.carBtn.textContent = onCooldown
-      ? `CAR ${Math.ceil((ARENA.carCooldownUntil - now) / 60000)}m`
-      : "CALL CAR (50 coins)";
-  }
-
-  /** The "phone" — calls your own car (1-hour cooldown, costs 50 coins, enforced server-side)
-   *  if you don't have one out, or steps out of it if you're driving. */
-  function toggleCar() {
-    if (ARENA.dead || !ARENA.running) return;
-
-    if (ARENA.inCar) {
-      ARENA.inCar = false;
-      MP.exitCar();
-      updateCarBtn();
-      showToast("You stepped out of the car.", "success");
-      return;
-    }
-
-    if (ARENA.carPending) return;
-    const now = Date.now();
-    if (ARENA.carCooldownUntil > now) {
-      showToast(`Car ready in ${Math.ceil((ARENA.carCooldownUntil - now) / 60000)} min.`, "error");
-      return;
-    }
-
-    ARENA.carPending = true;
-    MP.callCar((result) => {
-      ARENA.carPending = false;
-      if (result?.success) {
-        ARENA.inCar = true;
-        ARENA.carCooldownUntil = result.availableAt || (Date.now() + ARENA.CAR_COOLDOWN_MS);
-        showToast("Car called — run someone over!", "success");
-      } else if (result?.error === "cooldown" && result.availableAt) {
-        ARENA.carCooldownUntil = result.availableAt;
-        showToast(`Car ready in ${Math.ceil((result.availableAt - Date.now()) / 60000)} min.`, "error");
-      } else if (result?.error === "insufficient_coins") {
-        showToast(`Need ${result.required} coins to call car. You have ${result.balance}.`, "error");
-      } else if (result?.error === "payment_failed") {
-        showToast("Payment failed. Try again.", "error");
-      } else {
-        showToast("Couldn't call the car right now.", "error");
-      }
-      updateCarBtn();
-    });
-    updateCarBtn();
   }
 
   function resizeArenaCanvas() {
@@ -972,7 +919,7 @@
 
   /** Fire a shot from my current position toward a world-space direction. */
   function fireShot(dx, dy) {
-    if (ARENA.dead || !ARENA.running || ARENA.inCar) return;
+    if (ARENA.dead || !ARENA.running) return;
     const now = performance.now();
     if (now - ARENA.lastShotAt < ARENA.FIRE_COOLDOWN) return;
     const len = Math.hypot(dx, dy);
@@ -1002,6 +949,35 @@
       team: MP.myTeam, ownerId: MP.myId, mine: true, dist: 0, elevation: ARENA.elevation,
     });
     MP.sendShoot({ x: ARENA.myPos.x, y: ARENA.myPos.y, dx: sdx, dy: sdy, elevation: ARENA.elevation });
+  }
+
+  function formatDuration(ms) {
+    const totalMin = Math.ceil(ms / 60000);
+    const h = Math.floor(totalMin / 60), m = totalMin % 60;
+    if (h > 0) return `${h}h ${m}m`;
+    return `${m}m`;
+  }
+
+  /** "Summon car" ultimate — fires a heavy-hitting car straight ahead.
+   *  Gated behind a long cooldown enforced by the server; this is just an
+   *  optimistic local check so the button feels responsive, but
+   *  'carSummonDenied' (with the server's real remaining time) always wins. */
+  function trySummonCar() {
+    if (ARENA.dead || !ARENA.running) return;
+    const now = Date.now();
+    const elapsed = now - ARENA.lastCarSummonAt;
+    if (elapsed < CAR_COOLDOWN_MS) {
+      showToast(`Car summon on cooldown — ${formatDuration(CAR_COOLDOWN_MS - elapsed)} left`, "error");
+      return;
+    }
+    const f = getForward();
+    ARENA.lastCarSummonAt = now;
+    ARENA.cars.push({
+      x: ARENA.myPos.x, y: ARENA.myPos.y, dx: f.x, dy: f.y,
+      team: MP.myTeam, ownerId: MP.myId, mine: true, dist: 0, elevation: ARENA.elevation,
+    });
+    MP.summonCar({ x: ARENA.myPos.x, y: ARENA.myPos.y, dx: f.x, dy: f.y, elevation: ARENA.elevation });
+    showToast("Car summoned!", "success");
   }
 
   function createJoystick(zone, base, knob, radius, onMove, onEnd) {
@@ -1049,7 +1025,7 @@
       else if (["a","A","ArrowLeft"].includes(e.key)) ARENA.keys.left = true;
       else if (["d","D","ArrowRight"].includes(e.key)) ARENA.keys.right = true;
       else if (e.key === " ") { e.preventDefault(); tryVault(); }
-      else if (e.key === "c" || e.key === "C") { e.preventDefault(); toggleCar(); }
+      else if (e.key === "c" || e.key === "C") trySummonCar();
     });
     window.addEventListener("keyup", e => {
       if (["w","W","ArrowUp"].includes(e.key)) ARENA.keys.up = false;
@@ -1066,8 +1042,8 @@
     els.vaultBtn?.addEventListener("touchstart", e => { e.preventDefault(); tryVault(); }, { passive: false });
     els.vaultBtn?.addEventListener("click", () => tryVault());
 
-    els.carBtn?.addEventListener("touchstart", e => { e.preventDefault(); toggleCar(); }, { passive: false });
-    els.carBtn?.addEventListener("click", () => toggleCar());
+    els.phoneBtn?.addEventListener("touchstart", e => { e.preventDefault(); trySummonCar(); }, { passive: false });
+    els.phoneBtn?.addEventListener("click", () => trySummonCar());
 
     // Right joystick — look (drag rotates yaw), auto-fires forward while held
     createJoystick(els.aimZone, els.aimBase, els.aimKnob, 50,
@@ -1126,26 +1102,6 @@
     });
   }
 
-  /** Pulls the current car cooldown from the server so a returning/refreshed
-   *  player sees an accurate countdown immediately, not just after their
-   *  next call attempt. Best-effort — failures just leave the button as
-   *  "ready", and the server still enforces the real cooldown regardless. */
-  async function fetchCarStatus() {
-    const username = getProfile().name;
-    if (!username || username === "Guest") return;
-    try {
-      const res = await fetch(`${LOBBY_SERVER_URL}/api/car/status/${encodeURIComponent(username)}`);
-      if (!res.ok) return;
-      const data = await res.json();
-      if (typeof data.availableAt === "number") {
-        ARENA.carCooldownUntil = data.availableAt;
-        updateCarBtn();
-      }
-    } catch {
-      // Non-fatal — button just shows "CALL CAR" until we know otherwise.
-    }
-  }
-
   function showArena() {
     if (!els.arenaCanvas) return;
     resizeArenaCanvas();
@@ -1155,17 +1111,15 @@
       els.joystickZone?.classList.remove("hidden");
       els.aimZone?.classList.remove("hidden");
       els.vaultBtn?.classList.remove("hidden");
-      els.carBtn?.classList.remove("hidden");
+      els.phoneBtn?.classList.remove("hidden");
     }
-    updateCarBtn();
-    fetchCarStatus();
   }
 
   function hideArena() {
     if (els.arenaCanvas) els.arenaCanvas.classList.add("hidden");
     els.hpWrap?.classList.add("hidden");
     els.vaultBtn?.classList.add("hidden");
-    els.carBtn?.classList.add("hidden");
+    els.phoneBtn?.classList.add("hidden");
     if (els.joystickZone) {
       els.joystickZone.classList.add("hidden");
       els.joystickBase?.classList.remove("active");
@@ -1182,8 +1136,6 @@
       els.hpFill.style.width = `${(ARENA.hp / ARENA.MAX_HP) * 100}%`;
       els.hpFill.style.background = ARENA.hp > ARENA.MAX_HP * 0.4 ? "var(--coop)" : "var(--versus)";
     }
-    // Ensure HP never goes below 0 - additional safety check
-    if (ARENA.hp < 0) ARENA.hp = 0;
   }
 
   function startArenaLoop() {
@@ -1193,15 +1145,11 @@
     ARENA.myPos = { x: 0, y: 0 };
     ARENA.yaw = 0;
     ARENA.bullets = [];
+    ARENA.cars = [];
     ARENA.dead = false;
     ARENA.elevation = 0;
     ARENA.onTopId = null;
     ARENA.vault = null;
-    ARENA.inCar = false;
-    ARENA.carPending = false;
-    updateCarBtn();
-    if (ARENA.carBtnInterval) clearInterval(ARENA.carBtnInterval);
-    ARENA.carBtnInterval = setInterval(updateCarBtn, 1000);
     setHp(ARENA.MAX_HP);
     ARENA.lastFrame = performance.now();
 
@@ -1235,16 +1183,13 @@
         const fwd = getForward(), right = getRight();
         const vx = fwd.x * mForward + right.x * mStrafe;
         const vy = fwd.y * mForward + right.y * mStrafe;
-        const speed = ARENA.inCar ? ARENA.CAR_SPEED : ARENA.SPEED;
-        let nx = clamp(ARENA.myPos.x + vx * speed * dt, -ARENA.WORLD_HALF, ARENA.WORLD_HALF);
-        let ny = clamp(ARENA.myPos.y + vy * speed * dt, -ARENA.WORLD_HALF, ARENA.WORLD_HALF);
+        let nx = clamp(ARENA.myPos.x + vx * ARENA.SPEED * dt, -ARENA.WORLD_HALF, ARENA.WORLD_HALF);
+        let ny = clamp(ARENA.myPos.y + vy * ARENA.SPEED * dt, -ARENA.WORLD_HALF, ARENA.WORLD_HALF);
         const resolved = resolveObstacleCollision(nx, ny, ARENA.elevation);
         ARENA.myPos.x = clamp(resolved.x, -ARENA.WORLD_HALF, ARENA.WORLD_HALF);
         ARENA.myPos.y = clamp(resolved.y, -ARENA.WORLD_HALF, ARENA.WORLD_HALF);
 
-        // Cars don't climb — stay grounded instead of chasing crate heights.
-        if (ARENA.inCar) ARENA.elevation = 0;
-        else updateElevation(dt);
+        updateElevation(dt);
 
         // Reconciliation — if the server rejected a recent move (e.g. a lag
         // spike briefly looked like a teleport), gently pull our locally
@@ -1264,11 +1209,10 @@
 
         // Position-only — omits velocity so the server's optional speed
         // check never applies; deltas per send are already small/clamped.
-        MP.updateMyState({ position: { x: ARENA.myPos.x, y: ARENA.myPos.y }, yaw: ARENA.yaw, elevation: ARENA.elevation, car: ARENA.inCar });
+        MP.updateMyState({ position: { x: ARENA.myPos.x, y: ARENA.myPos.y }, yaw: ARENA.yaw, elevation: ARENA.elevation });
 
         // Aim-stick: dragging it rotates the view, and holding it fires
-        // forward — the touch equivalent of mouse-drag-to-look. No shooting
-        // while driving — running someone over is the car's job.
+        // forward — the touch equivalent of mouse-drag-to-look.
         if (ARENA.aimJoy.active) {
           ARENA.yaw += ARENA.aimJoy.x * ARENA.TURN_SPEED * dt;
           const f = getForward();
@@ -1279,6 +1223,7 @@
       ARENA.gunRecoil = Math.max(0, ARENA.gunRecoil - 90 * dt);
       ARENA.shake = Math.max(0, ARENA.shake - 40 * dt);
       updateBullets(dt);
+      updateCars(dt);
       drawArena();
     }
     ARENA.rafId = requestAnimationFrame(frame);
@@ -1288,8 +1233,6 @@
     ARENA.running = false;
     if (ARENA.rafId) cancelAnimationFrame(ARENA.rafId);
     ARENA.rafId = null;
-    if (ARENA.carBtnInterval) clearInterval(ARENA.carBtnInterval);
-    ARENA.carBtnInterval = null;
     ARENA.keys = { up: false, down: false, left: false, right: false };
     ARENA.joy = { active: false, x: 0, y: 0 };
     ARENA.aimJoy = { active: false, x: 0, y: 0 };
@@ -1318,6 +1261,15 @@
     return false;
   }
 
+  /** Like obstacleBlocksAt, but only walls count — used by the car ultimate,
+   *  which is heavy enough to just smash through crates. */
+  function wallBlocksAt(x, y) {
+    for (const obs of getObstacles()) {
+      if (obs.type === "wall" && insideFootprint(obs, x, y)) return true;
+    }
+    return false;
+  }
+
   function updateBullets(dt) {
     const step = ARENA.BULLET_SPEED * dt;
     ARENA.bullets = ARENA.bullets.filter(b => {
@@ -1338,9 +1290,8 @@
       }
 
       // My own bullets: purely cosmetic hit-marker feedback for the shooter.
-      // The opponent's own client is still the one that actually applies and
-      // reports the real damage — this never touches HP, just gives instant
-      // feedback instead of waiting on a round-trip.
+      // The server is the actual authority on damage (see remoteHealth) —
+      // this is just instant feedback instead of waiting on the round trip.
       if (b.mine) {
         for (const p of MP.opponents()) {
           const remote = MP.remotePlayers.get(p.id);
@@ -1350,6 +1301,41 @@
           if (Math.hypot(b.x - pos.x, b.y - pos.y) <= ARENA.HIT_RADIUS) {
             registerHitMarker();
             return false; // bullet consumed on cosmetic hit
+          }
+        }
+      }
+      return true;
+    });
+  }
+
+  /** Same idea as updateBullets, for the summon-car ultimate: bigger, faster,
+   *  fixed 100 damage, and only stopped by walls (crates get run over). */
+  function updateCars(dt) {
+    const step = CAR_SPEED * dt;
+    ARENA.cars = ARENA.cars.filter(c => {
+      c.x += c.dx * step;
+      c.y += c.dy * step;
+      c.dist += step;
+      if (c.dist > CAR_RANGE) return false;
+      if (Math.abs(c.x) > ARENA.WORLD_HALF * 1.6 || Math.abs(c.y) > ARENA.WORLD_HALF * 1.6) return false;
+      if (wallBlocksAt(c.x, c.y)) return false; // stopped by a wall (crates don't stop it)
+
+      if (!c.mine && !ARENA.dead && c.team !== MP.myTeam) {
+        if (Math.hypot(c.x - ARENA.myPos.x, c.y - ARENA.myPos.y) <= CAR_HIT_RADIUS) {
+          registerLocalHit();
+          return false;
+        }
+      }
+
+      if (c.mine) {
+        for (const p of MP.opponents()) {
+          const remote = MP.remotePlayers.get(p.id);
+          if (remote?.state?.alive === false) continue;
+          const pos = MP.getInterpolatedPosition(p.id);
+          if (!pos) continue;
+          if (Math.hypot(c.x - pos.x, c.y - pos.y) <= CAR_HIT_RADIUS) {
+            registerHitMarker();
+            return false;
           }
         }
       }
@@ -1467,6 +1453,16 @@
     }
 
     const activeMap = ARENA.map || DEFAULT_MAP;
+    // Camera height cue — how high we currently are (from climbing a crate).
+    // We don't have real camera pitch, so instead of moving the horizon
+    // (which nothing else agreed with), every object gets its *own* small
+    // vertical offset based on its elevation relative to ours. Ground-level
+    // things (elevation 0) offset the same amount either way, so this stays
+    // consistent between bullets, players, and obstacles.
+    const camElevation = ARENA.elevation || 0;
+    function elevOffset(objElevation, scale) {
+      return clamp((objElevation - camElevation) * scale * 0.35, -h * 0.3, h * 0.3);
+    }
 
     // Sky
     const sky = ctx.createLinearGradient(0, 0, 0, horizon);
@@ -1498,14 +1494,14 @@
       if (d <= 2) return;
       const scale = fov / d;
       const sx = cx + r * scale;
-      const sy = horizon + (h - horizon) * clamp(1 - d / ARENA.BULLET_RANGE, 0.08, 0.85);
+      const sy = horizon + (h - horizon) * clamp(1 - d / ARENA.BULLET_RANGE, 0.08, 0.85) - elevOffset(b.elevation || 0, scale);
       const size = clamp(scale * 0.06, 1.5, 8);
 
       // Tail point: slightly behind the bullet along its travel direction.
       const { d: dTail, r: rTail } = toCameraSpace(b.x - b.dx * 14, b.y - b.dy * 14);
       const tailScale = fov / Math.max(dTail, 2);
       const tsx = cx + rTail * tailScale;
-      const tsy = horizon + (h - horizon) * clamp(1 - dTail / ARENA.BULLET_RANGE, 0.08, 0.85);
+      const tsy = horizon + (h - horizon) * clamp(1 - dTail / ARENA.BULLET_RANGE, 0.08, 0.85) - elevOffset(b.elevation || 0, tailScale);
 
       const color = b.team === "A" ? "#00e5a0" : "#ff4466";
       const grad = ctx.createLinearGradient(tsx, tsy, sx, sy);
@@ -1528,11 +1524,6 @@
       ctx.shadowBlur = 0;
     });
 
-    // Camera height cue — a rough sense of "up" when elevated (climbed a
-    // crate), not a true pitch/tilt, just a vertical shift of the horizon.
-    const camElevation = ARENA.elevation || 0;
-    const shiftedHorizon = horizon - clamp(camElevation * 0.35, 0, 60);
-
     // World objects (obstacles + other players), far-to-near so nearer ones
     // draw on top and correctly occlude anything behind them.
     const renderList = [];
@@ -1541,6 +1532,11 @@
       if (d <= 1) return; // behind camera / on top of us
       renderList.push({ kind: "obstacle", obs, d, r });
     });
+    ARENA.cars.forEach(c => {
+      const { d, r } = toCameraSpace(c.x, c.y);
+      if (d <= 1) return;
+      renderList.push({ kind: "car", car: c, d, r });
+    });
     MP.allPlayers().forEach(p => {
       if (p.id === MP.myId) return; // first-person: don't render self
       const remote = MP.remotePlayers.get(p.id);
@@ -1548,10 +1544,9 @@
       const hp = typeof remote?.state?.hp === "number" ? remote.state.hp : (p.hp ?? ARENA.MAX_HP);
       const isDead = remote?.state?.alive === false || !p.alive;
       const elevation = typeof remote?.state?.elevation === "number" ? remote.state.elevation : 0;
-      const inCar = remote?.state?.car === true;
       const { d, r } = toCameraSpace(pos.x, pos.y);
       if (d <= 2) return;
-      renderList.push({ kind: "player", p, hp, isDead, elevation, inCar, d, r });
+      renderList.push({ kind: "player", p, hp, isDead, elevation, d, r });
     });
     renderList.sort((a, b) => b.d - a.d);
 
@@ -1564,7 +1559,9 @@
         const obs = entry.obs;
         const boxH = clamp(scale * (obs.h / 60), 8, h * 0.9);
         const boxW = clamp(scale * ((obs.hw + obs.hy) / 1.2), 10, w * 0.5);
-        const sy = shiftedHorizon + Math.min(boxH * 0.35, (h - shiftedHorizon) * 0.6);
+        // Obstacles sit at ground level (elevation 0) — offset the same way
+        // a ground-level player would be.
+        const sy = horizon + Math.min(boxH * 0.35, (h - horizon) * 0.6) - elevOffset(0, scale);
         const baseColor = obs.type === "wall" ? "#3a3f52" : (activeMap.accent || "#7b6cff");
         const grad = ctx.createLinearGradient(0, sy - boxH, 0, sy);
         grad.addColorStop(0, baseColor);
@@ -1578,35 +1575,37 @@
         return;
       }
 
-      const { p, hp, isDead, elevation, inCar } = entry;
+      if (entry.kind === "car") {
+        const c = entry.car;
+        const boxH = clamp(scale * 0.9, 14, h * 0.7);
+        const boxW = clamp(scale * 1.6, 20, w * 0.6);
+        const sy = horizon + Math.min(boxH * 0.35, (h - horizon) * 0.6) - elevOffset(c.elevation || 0, scale);
+        const color = c.team === "A" ? "#00e5a0" : "#ff4466";
+        ctx.save();
+        ctx.shadowColor = color;
+        ctx.shadowBlur = 18;
+        ctx.fillStyle = "#1a1d2b";
+        roundRect(ctx, sx - boxW / 2, sy - boxH, boxW, boxH, boxW * 0.12);
+        ctx.fill();
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 3;
+        ctx.stroke();
+        ctx.restore();
+        return;
+      }
+
+      const { p, hp, isDead, elevation } = entry;
       const bodyH = clamp(scale * 1.15, 10, h * 0.62);
       const bodyW = bodyH * 0.42;
       // Raise/lower on screen based on their elevation relative to ours —
       // an approximation of height, not a true 3D projection.
-      const elevOffset = clamp((elevation - camElevation) * scale * 0.35, -h * 0.3, h * 0.3);
-      const sy = shiftedHorizon + Math.min(bodyH * 0.35, (h - shiftedHorizon) * 0.55) - elevOffset;
+      const sy = horizon + Math.min(bodyH * 0.35, (h - horizon) * 0.55) - elevOffset(elevation, scale);
+      const color = p.team === "A" ? "#00e5a0" : "#ff4466";
 
       ctx.globalAlpha = isDead ? 0.22 : 1;
-      if (inCar) {
-        // Cars are wide and low rather than tall and narrow — makes them
-        // instantly readable as "get out of the way" rather than "shoot me".
-        const carW = bodyH * 1.7;
-        const carH = bodyH * 0.55;
-        const grad = ctx.createLinearGradient(0, sy - carH, 0, sy);
-        grad.addColorStop(0, "#ffdd66");
-        grad.addColorStop(1, "#cc8f00");
-        ctx.fillStyle = grad;
-        roundRect(ctx, sx - carW / 2, sy - carH, carW, carH, carH * 0.35);
-        ctx.fill();
-        ctx.strokeStyle = "rgba(0,0,0,0.35)";
-        ctx.lineWidth = 2;
-        ctx.stroke();
-      } else {
-        const color = p.team === "A" ? "#00e5a0" : "#ff4466";
-        ctx.fillStyle = color;
-        roundRect(ctx, sx - bodyW / 2, sy - bodyH, bodyW, bodyH, bodyW * 0.3);
-        ctx.fill();
-      }
+      ctx.fillStyle = color;
+      roundRect(ctx, sx - bodyW / 2, sy - bodyH, bodyW, bodyH, bodyW * 0.3);
+      ctx.fill();
       ctx.globalAlpha = 1;
 
       if (!isDead) {
@@ -1620,7 +1619,7 @@
       ctx.font = `${clamp(scale * 0.22, 10, 15)}px 'Rajdhani', sans-serif`;
       ctx.fillStyle = "#e8ecff";
       ctx.textAlign = "center";
-      ctx.fillText(inCar ? `${p.name || "Player"} 🚗` : (p.name || "Player"), sx, sy - bodyH - 18);
+      ctx.fillText(p.name || "Player", sx, sy - bodyH - 18);
     });
 
     ctx.restore(); // end screen-shake — crosshair/gun/HUD stay steady
@@ -1764,6 +1763,20 @@
       if (els.mpHud && !els.mpHud.classList.contains("hidden")) renderHud();
     });
     MP.on("remoteShoot", spawnRemoteBullet);
+    MP.on("carSummoned", (d) => {
+      if (!d || d.playerId === MP.myId) return;
+      ARENA.cars.push({
+        x: d.x, y: d.y, dx: d.dx, dy: d.dy,
+        team: d.team, ownerId: d.playerId, mine: false, dist: 0, elevation: d.elevation || 0,
+      });
+    });
+    MP.on("carSummonDenied", (d) => {
+      const remaining = typeof d?.remainingMs === "number" ? d.remainingMs : CAR_COOLDOWN_MS;
+      // Server is authoritative — correct our optimistic local timer so the
+      // button reflects reality (matters most right after reconnecting).
+      ARENA.lastCarSummonAt = Date.now() - (CAR_COOLDOWN_MS - remaining);
+      showToast(`Car summon on cooldown — ${formatDuration(remaining)} left`, "error");
+    });
     MP.on("positionCorrection", (data) => {
       if (data?.position && isFinite(data.position.x) && isFinite(data.position.y)) {
         ARENA.correctionTarget = { x: data.position.x, y: data.position.y };
@@ -1777,19 +1790,10 @@
     });
     MP.on("playerDied", (data) => {
       if (els.mpHud && !els.mpHud.classList.contains("hidden")) renderHud();
-      if (data?.playerId === MP.myId && ARENA.inCar) {
-        ARENA.inCar = false;
-        updateCarBtn();
-      }
       if (data?.playerId !== MP.myId) {
         const p = MP.allPlayers().find(pl => pl.id === data?.playerId);
         renderChatMessage({ system: true, message: `${p?.name || "A player"} was eliminated.` });
       }
-    });
-    MP.on("carSpawned", (data) => {
-      if (data?.playerId === MP.myId) return; // handled directly by toggleCar's own callback
-      const p = MP.allPlayers().find(pl => pl.id === data?.playerId);
-      showToast(`${p?.name || "A player"} called in a car!`, "error");
     });
     MP.on("ping", () => {
       updateHeader();

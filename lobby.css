@@ -543,13 +543,16 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: var(--bg);
 .arena-vault-btn:active { background: rgba(255,216,77,.2); transform: scale(0.95); }
 .arena-vault-btn.hidden { display: none; }
 
-.arena-car-btn {
-  bottom: 180px; /* stacked above the vault button so neither overlaps */
-  border-color: #ffcc33; color: #ffcc33; font-size: .62rem;
+.arena-phone-btn {
+  position: fixed; right: 18px; bottom: 180px; z-index: 106;
+  width: 60px; height: 60px; border-radius: 50%;
+  background: rgba(20,23,40,.75); border: 2px solid var(--accent);
+  color: var(--accent); font-size: 1.5rem;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: none; user-select: none;
 }
-.arena-car-btn:active { background: rgba(255,204,51,.2); }
-.arena-car-btn.car-active { border-color: var(--versus, #ff4466); color: var(--versus, #ff4466); }
-.arena-car-btn.car-cooldown { opacity: .45; }
+.arena-phone-btn:active { background: rgba(139,124,255,.2); transform: scale(0.95); }
+.arena-phone-btn.hidden { display: none; }
 
 /* ─── HUD ─────────────────────────────────────────────────────────────────── */
 .mp-hud {
