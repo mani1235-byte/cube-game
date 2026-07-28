@@ -308,6 +308,13 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: var(--bg);
 }
 .copy-btn:hover { color: var(--gold); border-color: var(--gold); }
 
+.series-score-badge {
+  font-family: var(--font-mono); font-size: .85rem; font-weight: 700;
+  color: var(--gold); background: rgba(255,216,77,.08);
+  border: 1px solid var(--gold); border-radius: 10px; padding: .15rem .5rem;
+}
+.series-score-badge.hidden { display: none; }
+
 /* Player list */
 .player-list { flex: 1; overflow-y: auto; padding: .5rem; }
 .player-list::-webkit-scrollbar { width: 4px; }
@@ -601,6 +608,11 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: var(--bg);
 .score-name { flex: 1; text-align: left; font-weight: 600; }
 .score-val  { font-family: var(--font-mono); color: var(--gold); }
 .score-row.winner { border: 1px solid var(--gold); }
+.score-row.series-summary {
+  justify-content: center; background: rgba(255,216,77,.08);
+  border: 1px solid var(--gold); font-family: var(--font-mono);
+}
+.score-row.series-summary .score-name { flex: none; color: var(--gold); text-align: center; }
 
 .end-actions { display: flex; gap: .75rem; justify-content: center; }
 

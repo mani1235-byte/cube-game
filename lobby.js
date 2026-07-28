@@ -207,6 +207,7 @@
     roomModeBadge: document.getElementById("room-mode-badge"),
     roomCodeDisplay: document.getElementById("room-code-display"),
     mapVoteCards: document.getElementById("map-vote-cards"),
+    seriesScoreBadge: document.getElementById("room-series-score"),
     teamAList: document.getElementById("team-a-list"),
     teamBList: document.getElementById("team-b-list"),
     teamACount: document.getElementById("team-a-count"),
@@ -689,6 +690,14 @@
     if (els.endScoreboard) {
       els.endScoreboard.innerHTML = "";
 
+      // Series score across rematches in this room, e.g. "1-0"
+      if (data.seriesScore) {
+        const series = document.createElement("div");
+        series.className = "score-row series-summary";
+        series.innerHTML = `<span class="score-name">SERIES — TEAM A ${data.seriesScore.A ?? 0} - ${data.seriesScore.B ?? 0} TEAM B</span>`;
+        els.endScoreboard.appendChild(series);
+      }
+
       // Team score summary at the top
       if (data.teamScores) {
         const summary = document.createElement("div");
@@ -789,6 +798,12 @@
     updateHeader();
     renderTeams(roomState);
     renderMapVotes(roomState);
+    if (els.seriesScoreBadge) {
+      const s = roomState.seriesScore;
+      const hasScore = s && (s.A > 0 || s.B > 0);
+      els.seriesScoreBadge.classList.toggle("hidden", !hasScore);
+      if (hasScore) els.seriesScoreBadge.textContent = `${s.A} - ${s.B}`;
+    }
     setScreen("room");
   }
 
@@ -1757,6 +1772,12 @@
     MP.on("mapVoteUpdate", (data) => {
       if (data?.roomState) { state.roomState = data.roomState; renderMapVotes(data.roomState); }
     });
+    MP.on("roomReset", (data) => {
+      if (data?.roomState) {
+        handleRoomState(data.roomState);
+        setReadyButton(false);
+      }
+    });
     MP.on("countdown", handleCountdown);
     MP.on("gameStart", handleGameStart);
     MP.on("remoteState", () => {
@@ -1866,13 +1887,9 @@
     });
 
     els.btnPlayAgain?.addEventListener("click", () => {
+      MP.playAgain();
       hideEndOverlay();
-      if (MP.inRoom) {
-        setReadyButton(false);
-        setScreen("room");
-      } else {
-        setScreen("home");
-      }
+      showToast("Waiting for the room to reset...", "success");
     });
 
     els.btnEndLobby?.addEventListener("click", () => {

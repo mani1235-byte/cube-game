@@ -530,6 +530,7 @@ function createRoom(code, hostId, teamSize) {
     gameData:     { events: [] },
     mapVotes:     {},        // socketId -> mapId, tallied for roomPublicState
     map:          null,      // locked in once the game actually starts
+    seriesScore:  { A: 0, B: 0 }, // wins this room's teams have racked up across rematches
   };
 }
 
@@ -594,6 +595,7 @@ function roomPublicState(room) {
     gameData:  room.gameData,
     mapVotes:  mapVoteTally(room),
     map:       room.map,
+    seriesScore: room.seriesScore || { A: 0, B: 0 },
   };
 }
 
@@ -798,6 +800,9 @@ async function endGame(room, winnerTeam) {
   if (room.state === 'ended') return;
   room.state = 'ended';
 
+  room.seriesScore = room.seriesScore || { A: 0, B: 0 };
+  if (winnerTeam === 'A' || winnerTeam === 'B') room.seriesScore[winnerTeam]++;
+
   const scoreOf = (team) => [...room.teams[team].values()].reduce((s, p) => s + p.score, 0);
   const teamScores = { A: scoreOf('A'), B: scoreOf('B') };
 
@@ -832,6 +837,7 @@ async function endGame(room, winnerTeam) {
     mode:     room.mode,
     teamSize: room.teamSize,
     duration: Date.now() - (room.gameData.startedAt || room.createdAt),
+    seriesScore: room.seriesScore,
   });
 }
 
@@ -1061,6 +1067,25 @@ io.on('connection', (socket) => {
       return;
     }
     startCountdown(room);
+  });
+
+  // Any player can propose a rematch — idempotent, so if more than one
+  // client sends it (e.g. everyone tapping "Play Again" at once) only the
+  // first one actually does anything.
+  socket.on('playAgain', () => {
+    const pData = players.get(socket.id);
+    if (!pData) return;
+    const room = rooms.get(pData.roomCode);
+    if (!room || room.state !== 'ended') return;
+
+    room.state = 'waiting';
+    room.map = null;
+    room.mapVotes = {}; // fresh map vote for the rematch
+    [...room.teams.A.values(), ...room.teams.B.values()].forEach(p => {
+      p.ready = false; p.alive = true; p.hp = 150; p.score = 0;
+    });
+
+    io.to(room.code).emit('roomReset', { roomState: roomPublicState(room) });
   });
 
   socket.on('chat', ({ message } = {}) => {

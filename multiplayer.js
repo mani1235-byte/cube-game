@@ -97,6 +97,7 @@ window.CUBE_SERVER = window.CUBE_SERVER || 'https://cube-game-fnam.onrender.com/
     s.on('playerReady',   d => { MP._applyRoomState(d.roomState); MP._emit('playerReady', d); });
     s.on('teamChanged',   d => { MP._applyRoomState(d.roomState); MP._emit('teamChanged', d); });
     s.on('mapVoteUpdate', d => { MP._applyRoomState(d.roomState); MP._emit('mapVoteUpdate', d); });
+    s.on('roomReset',     d => { MP._applyRoomState(d.roomState); MP._emit('roomReset', d); });
     s.on('hostChanged',   d => { MP.isHost = d.newHostId === MP.myId; MP._emit('hostChanged', d); });
     s.on('matchFound',    d => { MP._emit('matchFound', d); });
     s.on('queueStatus',   d => { MP._emit('queueStatus', d); });
@@ -227,6 +228,13 @@ window.CUBE_SERVER = window.CUBE_SERVER || 'https://cube-game-fnam.onrender.com/
   MP.voteMap = function (mapId) {
     if (!MP.inRoom || !MP.socket) return;
     MP.socket.emit('voteMap', { mapId });
+  };
+
+  /** Propose a rematch after a match ends — server resets the room back to
+   *  'waiting' (keeping the series score) and everyone gets a 'roomReset'. */
+  MP.playAgain = function () {
+    if (!MP.inRoom || !MP.socket) return;
+    MP.socket.emit('playAgain');
   };
 
   MP.leaveRoom = function () {
