@@ -78,7 +78,7 @@
 
   const STEP_HEIGHT = 40;   // crates at or below this: auto climb, no button
   const VAULT_HEIGHT = 90;  // crates at or below this: climbable with the vault button
-  const VAULT_REACH = 58;   // how close you need to be to a crate to vault it (was 46 — widened for reliability)
+  const VAULT_REACH = 46;   // how close you need to be to a crate to vault it
   const VAULT_DURATION = 300; // ms for the climb-up arc
 
   // "Summon car" ultimate — must match server.js (CAR_COOLDOWN_MS etc).
@@ -835,7 +835,7 @@
 
   const ARENA = {
     WORLD_HALF: 320,     // arena spans -320..320 on each axis
-    SPEED: 150,          // world units per second (was 180 — slowed ~17%)
+    SPEED: 180,          // world units per second
     BULLET_SPEED: 460,   // world units per second
     BULLET_RANGE: 480,   // max travel distance before a bullet expires
     HIT_RADIUS: 20,      // world units — bullet-to-player hit distance

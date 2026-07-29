@@ -212,7 +212,7 @@
     compBtn.type = "button";
     compBtn.className = "play-comp-btn";
     compBtn.textContent = "⚔️ Competition";
-    compBtn.addEventListener("click", startCompetition);
+    compBtn.addEventListener("click", () => { window.location.href = "./competition.html"; });
     mainMenu.appendChild(compBtn);
   }
 
@@ -311,10 +311,12 @@
     prevHits.forEach(({ ref, wasHit }) => {
       if (!wasHit && ref.hit) {
         if (ref.isBomb) {
-          // NOTE: script.js's native tick already applies real HP damage
-          // for this same isBomb hit — don't double-process it here with
-          // a second, private heart counter (that used to end the game
-          // early). Just keep the sound cue.
+          // In split-screen competition, destroying a bomb immediately loses.
+          // Normal gameplay keeps its existing heart/HP behavior.
+          if (window.CGCompetitionChild) {
+            window._cgCompetitionLossReason = "bomb";
+            endGame();
+          }
           if (window.SOUND) window.SOUND.bombHit();
         } else {
           if (Math.random() < HEART_CHANCE) {

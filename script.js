@@ -1415,7 +1415,7 @@ function renderSessionTimer() {
 }
 
 function tickSessionTimer() {
-  if (state.game.mode !== GAME_MODE_RANKED || !isInGame() || !sessionStartTime) return;
+  if (window._cgCompetitionNoSession || state.game.mode !== GAME_MODE_RANKED || !isInGame() || !sessionStartTime) return;
   const limit   = getSessionLimit();
   if (limit === Infinity) return;
   const elapsed = (Date.now() - sessionStartTime) / 1000;
