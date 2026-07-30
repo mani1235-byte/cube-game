@@ -32,15 +32,18 @@ jobs:
         working-directory: "mobile app"
         run: npx cap sync ios
 
-      - name: Install CocoaPods dependencies
-        working-directory: "mobile app/ios/App"
-        run: pod install
+      - name: Resolve Swift Package dependencies
+        working-directory: "mobile app"
+        run: |
+          xcodebuild \
+            -resolvePackageDependencies \
+            -project ios/App/App.xcodeproj
 
       - name: Build iOS app
         working-directory: "mobile app"
         run: |
           xcodebuild \
-            -workspace ios/App/App.xcworkspace \
+            -project ios/App/App.xcodeproj \
             -scheme App \
             -configuration Debug \
             -sdk iphoneos \
@@ -50,12 +53,13 @@ jobs:
             build
 
       - name: Package iOS app
+        working-directory: "mobile app"
         run: |
-          cd "mobile app/build/Build/Products/Debug-iphoneos"
-          zip -r "../../../Cube-Game-iOS.zip" App.app
+          cd build/Build/Products/Debug-iphoneos
+          zip -r ../../../../Cube-Game-iOS.zip App.app
 
       - name: Upload iOS build
         uses: actions/upload-artifact@v4
         with:
           name: Cube-Game-iOS
-          path: "mobile app/build/Cube-Game-iOS.zip"
+          path: "mobile app/Cube-Game-iOS.zip"
