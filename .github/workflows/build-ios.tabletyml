@@ -1,0 +1,59 @@
+name: Build iPad App
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-ios:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: "mobile app and tablet app/package-lock.json"
+
+      - name: Install dependencies
+        working-directory: "mobile app and tablet app"
+        run: npm ci
+
+      - name: Sync Capacitor iOS
+        working-directory: "mobile app and tablet app"
+        run: npx cap sync ios
+
+      - name: Resolve Swift packages
+        working-directory: "mobile app and tablet app"
+        run: |
+          xcodebuild \
+            -resolvePackageDependencies \
+            -project ios/App/App.xcodeproj
+
+      - name: Build iOS/iPad app
+        working-directory: "mobile app and tablet app"
+        run: |
+          xcodebuild \
+            -project ios/App/App.xcodeproj \
+            -scheme App \
+            -configuration Debug \
+            -sdk iphoneos \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            build
+
+      - name: Package iPad app
+        working-directory: "mobile app and tablet app"
+        run: |
+          cd build/Build/Products/Debug-iphoneos
+          zip -r ../../../../Cube-Game-iPad.zip App.app
+
+      - name: Upload iPad build
+        uses: actions/upload-artifact@v4
+        with:
+          name: Cube-Game-iPad
+          path: "mobile app and tablet app/Cube-Game-iPad.zip"
