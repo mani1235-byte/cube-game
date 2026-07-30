@@ -1,0 +1,65 @@
+name: Build iOS App
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-ios:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: "mobile app/package-lock.json"
+
+      - name: Install npm dependencies
+        working-directory: "mobile app"
+        run: npm ci
+
+      - name: Install Capacitor iOS
+        working-directory: "mobile app"
+        run: |
+          npm install @capacitor/ios
+          npx cap add ios
+
+      - name: Sync Capacitor
+        working-directory: "mobile app"
+        run: npx cap sync ios
+
+      - name: Resolve Swift Package dependencies
+        working-directory: "mobile app"
+        run: |
+          xcodebuild \
+            -resolvePackageDependencies \
+            -project ios/App/App.xcodeproj
+
+      - name: Build iOS app
+        working-directory: "mobile app"
+        run: |
+          xcodebuild \
+            -project ios/App/App.xcodeproj \
+            -scheme App \
+            -configuration Debug \
+            -sdk iphoneos \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            build
+
+      - name: Package iOS app
+        working-directory: "mobile app"
+        run: |
+          cd build/Build/Products/Debug-iphoneos
+          zip -r ../../../../Cube-Game-iOS.zip App.app
+
+      - name: Upload iOS build
+        uses: actions/upload-artifact@v4
+        with:
+          name: Cube-Game-iOS
+          path: "mobile app/Cube-Game-iOS.zip"
