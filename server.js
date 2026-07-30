@@ -24,10 +24,15 @@ const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS
       'https://cubegame.club',
       'https://www.cubegame.club',
       'https://cube-game-fnam.onrender.com',
+      'https://mani1235-byte.github.io',
+      'https://cube-game-515d7.web.app',
+      'https://cube-game-515d7.firebaseapp.com', // Firebase Hosting's other default domain — same site, add for safety
       'http://localhost:3000',
       'http://127.0.0.1:3000',
       'http://localhost:5500',   // VS Code "Live Server" default — local dev only
       'http://127.0.0.1:5500',
+      'http://localhost:5501',   // Live Server sometimes falls back to this port if 5500 is busy
+      'http://127.0.0.1:5501',
     ];
 
 // Firebase client config — served to the browser via /config (never in static JS)
