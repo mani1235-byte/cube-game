@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  build-ios:
+  build-ipad:
     runs-on: macos-latest
 
     steps:
@@ -26,14 +26,14 @@ jobs:
         working-directory: "mobile app and tablet app"
         run: npx cap sync ios
 
-      - name: Resolve Swift packages
+      - name: Resolve Swift Package dependencies
         working-directory: "mobile app and tablet app"
         run: |
           xcodebuild \
             -resolvePackageDependencies \
             -project ios/App/App.xcodeproj
 
-      - name: Build iOS/iPad app
+      - name: Build iPad App
         working-directory: "mobile app and tablet app"
         run: |
           xcodebuild \
@@ -41,18 +41,19 @@ jobs:
             -scheme App \
             -configuration Debug \
             -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
             -derivedDataPath build \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             build
 
-      - name: Package iPad app
+      - name: Package iPad App
         working-directory: "mobile app and tablet app"
         run: |
           cd build/Build/Products/Debug-iphoneos
           zip -r ../../../../Cube-Game-iPad.zip App.app
 
-      - name: Upload iPad build
+      - name: Upload iPad App
         uses: actions/upload-artifact@v4
         with:
           name: Cube-Game-iPad
