@@ -1,0 +1,44 @@
+name: Build Android App
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-android:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Install Capacitor dependencies
+        working-directory: "mobile app"
+        run: npm ci
+
+      - name: Sync Capacitor Android project
+        working-directory: "mobile app"
+        run: npx cap sync android
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Build Android APK
+        working-directory: "mobile app/android"
+        run: chmod +x gradlew && ./gradlew assembleDebug
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Cube-Game-Android
+          path: "mobile app/android/app/build/outputs/apk/debug/app-debug.apk"
