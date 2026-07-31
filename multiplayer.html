@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cube Game — Multiplayer</title>
+  <style>
+    * { box-sizing: border-box; }
+    html, body { margin: 0; min-height: 100%; }
+    body {
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      background: #070b12;
+      color: #fff;
+      font-family: Arial, sans-serif;
+    }
+    .card {
+      width: min(92vw, 520px);
+      padding: 34px 28px;
+      border: 1px solid rgba(103,215,240,.25);
+      border-radius: 18px;
+      background: rgba(12,18,28,.96);
+      box-shadow: 0 18px 60px rgba(0,0,0,.45);
+      text-align: center;
+    }
+    h1 { margin: 0 0 10px; font-size: 28px; letter-spacing: .08em; }
+    p { margin: 8px 0; color: rgba(255,255,255,.65); }
+    #status { margin-top: 22px; font-size: 18px; font-weight: 700; }
+    #details { min-height: 24px; margin-top: 8px; color: rgba(255,255,255,.55); }
+    .dot {
+      display: inline-block;
+      width: 10px;
+      height: 10px;
+      margin-right: 8px;
+      border-radius: 50%;
+      background: #777;
+      vertical-align: middle;
+    }
+    .dot.ok { background: #43e37b; box-shadow: 0 0 14px rgba(67,227,123,.65); }
+    .dot.wait { background: #ffd54a; box-shadow: 0 0 14px rgba(255,213,74,.5); }
+    .dot.bad { background: #ff5d6c; box-shadow: 0 0 14px rgba(255,93,108,.5); }
+  </style>
+</head>
+<body>
+  <main class="card">
+    <h1>CUBE GAME</h1>
+    <p>Multiplayer</p>
+    <div id="status"><span class="dot"></span>Connecting…</div>
+    <div id="details"></div>
+  </main>
+
+  <script src="./server-config.js"></script>
+  <script>
+    (() => {
+      const statusEl = document.getElementById('status');
+      const detailsEl = document.getElementById('details');
+      const server = String(window.CUBE_SERVER || '').replace(/\/$/, '');
+
+      function setStatus(text, type = '') {
+        statusEl.innerHTML = `<span class="dot ${type}"></span>${text}`;
+      }
+
+      function randomName() {
+        return `Player${Math.floor(1000 + Math.random() * 9000)}`;
+      }
+
+      function start() {
+        if (!server) {
+          setStatus('Server URL is missing', 'bad');
+          detailsEl.textContent = 'Check server-config.js';
+          return;
+        }
+
+        setStatus('Loading multiplayer connection…', 'wait');
+        detailsEl.textContent = server;
+
+        const playerName = randomName();
+
+        const script = document.createElement('script');
+        script.src = `${server}/socket.io/socket.io.js`;
+        script.onload = connect;
+        script.onerror = () => {
+          setStatus('Could not load multiplayer server', 'bad');
+          detailsEl.textContent = 'The Socket.IO client could not be loaded.';
+        };
+        document.head.appendChild(script);
+
+        function connect() {
+          if (typeof io !== 'function') {
+            setStatus('Socket.IO is unavailable', 'bad');
+            return;
+          }
+
+          const socket = io(server, {
+            transports: ['websocket', 'polling'],
+            reconnection: true,
+            reconnectionAttempts: Infinity,
+            timeout: 10000
+          });
+
+          socket.on('connect', () => {
+            setStatus('Connected — finding a match…', 'ok');
+            detailsEl.textContent = `Player: ${playerName}`;
+
+            socket.emit('joinQueue', {
+              size: 1,
+              profile: { name: playerName, avatar: 'cube' }
+            });
+          });
+
+          socket.on('queueStatus', ({ position, total, size }) => {
+            setStatus('Searching for a player…', 'wait');
+            detailsEl.textContent = `${size}v${size} queue • Position ${position} of ${total}`;
+          });
+
+          socket.on('matchFound', ({ code, teamSize }) => {
+            setStatus('Match found!', 'ok');
+            detailsEl.textContent = `Room ${code} • ${teamSize}v${teamSize}`;
+          });
+
+          socket.on('countdown', ({ count }) => {
+            setStatus(`Match starts in ${count}…`, 'wait');
+            detailsEl.textContent = 'Both players are connected.';
+          });
+
+          socket.on('gameStart', () => {
+            setStatus('Connected to multiplayer match', 'ok');
+            detailsEl.textContent = 'Multiplayer connection is ready.';
+          });
+
+          socket.on('disconnect', () => {
+            setStatus('Disconnected — reconnecting…', 'bad');
+            detailsEl.textContent = '';
+          });
+
+          socket.on('connect_error', (error) => {
+            setStatus('Connection error — retrying…', 'bad');
+            detailsEl.textContent = error?.message || 'Unable to connect.';
+          });
+
+          socket.on('error', (data) => {
+            setStatus('Multiplayer error', 'bad');
+            detailsEl.textContent = data?.message || 'The server rejected the request.';
+          });
+        }
+      }
+
+      start();
+    })();
+  </script>
+</body>
+</html>
