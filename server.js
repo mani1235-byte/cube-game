@@ -33,6 +33,8 @@ const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS
       'http://127.0.0.1:5500',
       'http://localhost:5501',   // Live Server sometimes falls back to this port if 5500 is busy
       'http://127.0.0.1:5501',
+      'http://localhost:8080',   // npm "live-server" package default port
+      'http://127.0.0.1:8080',
     ];
 
 // Firebase client config — served to the browser via /config (never in static JS)
@@ -417,6 +419,10 @@ function randomDamage() { return 10 + Math.floor(Math.random() * 11); } // 10-20
 
 // ── "Summon car" ultimate ability ──────────────────────────────────────────
 const CAR_COOLDOWN_MS = 60 * 60 * 1000; // 1 hour per player
+
+// Cube-slicing matches have no HP/elimination — they end after a fixed
+// timer, winner decided by combined team score (see startGame/endGame).
+const MATCH_DURATION_MS = 90 * 1000; // 90 seconds per match
 const CAR_DAMAGE = 100;
 const CAR_HIT_RADIUS = 40;   // wider than a bullet
 const CAR_RANGE = 900;       // crosses the whole arena
@@ -536,6 +542,7 @@ function createRoom(code, hostId, teamSize) {
     mapVotes:     {},        // socketId -> mapId, tallied for roomPublicState
     map:          null,      // locked in once the game actually starts
     seriesScore:  { A: 0, B: 0 }, // wins this room's teams have racked up across rematches
+    matchTimer:   null,      // handle for the score-based match-end timeout
   };
 }
 
@@ -799,11 +806,21 @@ function startGame(room) {
     p.hp = 150; p._lastShot = 0;
   });
   io.to(room.code).emit('gameStart', { roomState: roomPublicState(room) });
+
+  if (room.matchTimer) clearTimeout(room.matchTimer);
+  room.matchTimer = setTimeout(() => {
+    if (room.state !== 'playing') return; // already ended some other way
+    const scoreOf = (team) => [...room.teams[team].values()].reduce((s, p) => s + p.score, 0);
+    const scoreA = scoreOf('A'), scoreB = scoreOf('B');
+    const winnerTeam = scoreA === scoreB ? null : (scoreA > scoreB ? 'A' : 'B');
+    endGame(room, winnerTeam);
+  }, MATCH_DURATION_MS);
 }
 
 async function endGame(room, winnerTeam) {
   if (room.state === 'ended') return;
   room.state = 'ended';
+  if (room.matchTimer) { clearTimeout(room.matchTimer); room.matchTimer = null; }
 
   room.seriesScore = room.seriesScore || { A: 0, B: 0 };
   if (winnerTeam === 'A' || winnerTeam === 'B') room.seriesScore[winnerTeam]++;

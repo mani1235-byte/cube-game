@@ -239,33 +239,24 @@
       </div>
     </div>
 
-    <!-- ── ARENA (top-down match canvas, shown while playing) ───────────── -->
-    <canvas id="arena-canvas" class="hidden"></canvas>
-
-    <!-- ── Touch joystick (mobile movement during a match) ──────────────── -->
-    <div id="arena-joystick-zone" class="arena-joystick-zone hidden">
-      <div id="arena-joystick-base" class="arena-joystick-base">
-        <div id="arena-joystick-knob" class="arena-joystick-knob"></div>
+    <!-- ── SLICE ARENA (local split-screen, shown while playing) ─────────── -->
+    <div id="slice-arena" class="slice-arena hidden">
+      <div class="slice-half slice-half--p1">
+        <div class="slice-hud">
+          <span class="slice-hud-score" id="slice-score-p1">0</span>
+          <span class="slice-hud-combo" id="slice-combo-p1"></span>
+        </div>
+        <canvas id="slice-canvas-p1"></canvas>
+      </div>
+      <div class="slice-divider"></div>
+      <div class="slice-half slice-half--p2">
+        <div class="slice-hud">
+          <span class="slice-hud-score" id="slice-score-p2">0</span>
+          <span class="slice-hud-combo" id="slice-combo-p2"></span>
+        </div>
+        <canvas id="slice-canvas-p2"></canvas>
       </div>
     </div>
-
-    <!-- ── Touch joystick (mobile aim & fire during a match) ─────────────── -->
-    <div id="arena-aim-zone" class="arena-aim-zone hidden">
-      <div id="arena-aim-base" class="arena-joystick-base arena-aim-base">
-        <div id="arena-aim-knob" class="arena-joystick-knob arena-aim-knob"></div>
-      </div>
-    </div>
-
-    <!-- ── HP bar (own health while playing) ─────────────────────────────── -->
-    <div id="arena-hp-wrap" class="arena-hp-wrap hidden">
-      <div id="arena-hp-fill" class="arena-hp-fill"></div>
-    </div>
-
-    <!-- ── Vault/climb button (mobile — Space bar equivalent on desktop) ─── -->
-    <button id="arena-vault-btn" class="arena-vault-btn hidden" type="button">VAULT</button>
-
-    <!-- ── Summon-car ultimate (mobile — C key equivalent on desktop) ────── -->
-    <button id="arena-phone-btn" class="arena-phone-btn hidden" type="button">📱</button>
 
     <!-- ── HUD (shown while playing) ──────────────────────────────────── -->
     <div id="mp-hud" class="mp-hud hidden">

@@ -143,6 +143,7 @@ window.CUBE_SERVER = window.CUBE_SERVER || 'https://cube-game-fnam.onrender.com/
     s.on('remoteInput',   d => { MP._emit('remoteInput', d); });
     s.on('remoteEvo',     d => { MP._emit('remoteEvo', d); });
     s.on('remoteScore',   d => { MP._emit('remoteScore', d); });
+    s.on('scoreUpdate',   d => { MP._emit('scoreUpdate', d); });
     s.on('playerDied',    d => {
       const rp = MP.remotePlayers.get(d.playerId);
       if (rp) rp.state.alive = false;

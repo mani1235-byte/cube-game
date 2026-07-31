@@ -34,117 +34,125 @@
   const DEFAULT_MAP = MAP_POOL[0];
   function mapById(id) { return MAP_POOL.find(m => m.id === id) || DEFAULT_MAP; }
 
-  // ── Obstacles (Phase A/B/C: cover, verticality, per-map layouts) ─────────
-  // NOTE: this layout data is mirrored in server.js (OBSTACLE_LAYOUTS) so the
-  // server's authoritative hit detection can block shots the same way the
-  // client renders/collides against them. If you change one, change both.
-  //
-  // type: 'wall'      — full height, always blocks movement + line of sight,
-  //                      never climbable regardless of elevation.
-  //       'crate_low' — short enough to step onto automatically, just by
-  //                      walking into its footprint (no vault needed).
-  //       'crate_tall'— needs a vault (jump/climb button) to get on top of;
-  //                      until vaulted, blocks like a wall.
-  // x, y: world-space center. hw, hy: half-width/half-depth footprint.
-  // h: height in the same units as player elevation.
-  const OBSTACLE_LAYOUTS = {
-    "neon-grid": [
-      { id: "w1", type: "wall",       x: -130, y:  0,   hw: 14, hy: 65, h: 140 },
-      { id: "w2", type: "wall",       x:  130, y:  0,   hw: 14, hy: 65, h: 140 },
-      { id: "c1", type: "crate_low",  x:    0, y: -95,  hw: 22, hy: 22, h:  36 },
-      { id: "c2", type: "crate_tall", x:    0, y:  95,  hw: 26, hy: 26, h:  78 },
-      { id: "c3", type: "crate_low",  x: -170, y: 160,  hw: 20, hy: 20, h:  34 },
-      { id: "c4", type: "crate_low",  x:  170, y: -160, hw: 20, hy: 20, h:  34 },
-    ],
-    "sunset-dune": [
-      { id: "w1", type: "wall",       x:    0, y: -140, hw: 70, hy: 14, h: 130 },
-      { id: "w2", type: "wall",       x:    0, y:  140, hw: 70, hy: 14, h: 130 },
-      { id: "c1", type: "crate_tall", x: -110, y:    0, hw: 24, hy: 24, h:  80 },
-      { id: "c2", type: "crate_tall", x:  110, y:    0, hw: 24, hy: 24, h:  80 },
-      { id: "c3", type: "crate_low",  x:  -60, y:  -60, hw: 20, hy: 20, h:  34 },
-      { id: "c4", type: "crate_low",  x:   60, y:   60, hw: 20, hy: 20, h:  34 },
-    ],
-    "deep-void": [
-      // Sparser — the low-visibility theme leans on fewer, bigger silhouettes.
-      { id: "w1", type: "wall",       x: -90,  y:  90,  hw: 16, hy: 60, h: 150 },
-      { id: "w2", type: "wall",       x:  90,  y: -90,  hw: 16, hy: 60, h: 150 },
-      { id: "c1", type: "crate_tall", x:    0, y:    0, hw: 28, hy: 28, h:  82 },
-      { id: "c2", type: "crate_low",  x: -150, y: -60,  hw: 20, hy: 20, h:  34 },
-    ],
+  // ── Core DOM refs, state, and screen switching ────────────────────────────
+  // Every id below must match lobby.html exactly.
+  const els = {
+    bgCanvas:         document.getElementById("bg-canvas"),
+    badgeName:        document.getElementById("badge-name"),
+    badgeEvo:         document.getElementById("badge-evo"),
+    badgePing:        document.getElementById("badge-ping"),
+    connectStatus:    document.getElementById("connect-status"),
+
+    btnBrowse:        document.getElementById("btn-browse"),
+    btnBackBrowse:    document.getElementById("btn-back-browse"),
+    btnRefreshRooms:  document.getElementById("btn-refresh-rooms"),
+    roomList:         document.getElementById("room-list"),
+
+    btnJoinCode:      document.getElementById("btn-join-code"),
+    joinCodeInput:    document.getElementById("join-code-input"),
+    btnJoinA:         document.getElementById("btn-join-a"),
+    btnJoinB:         document.getElementById("btn-join-b"),
+
+    btnCancelQueue:   document.getElementById("btn-cancel-queue"),
+    queuePos:         document.getElementById("queue-pos"),
+    queueSub:         document.getElementById("queue-sub"),
+    queueCount:       document.getElementById("queue-count"),
+    queueTimer:       document.getElementById("queue-timer"),
+    queueTitle:       document.getElementById("queue-title"),
+
+    btnReady:         document.getElementById("btn-ready"),
+    btnHostStart:     document.getElementById("btn-host-start"),
+    btnLeaveRoom:     document.getElementById("btn-leave-room"),
+    btnLeaveMatch:    document.getElementById("btn-leave-match"),
+    btnCopyCode:      document.getElementById("btn-copy-code"),
+    roomCodeDisplay:  document.getElementById("room-code-display"),
+    roomModeBadge:    document.getElementById("room-mode-badge"),
+    roomPlayerCount:  document.getElementById("room-player-count"),
+    roomMaxCount:     document.getElementById("room-max-count"),
+    seriesScoreBadge: document.getElementById("room-series-score"),
+    teamAList:        document.getElementById("team-a-list"),
+    teamBList:        document.getElementById("team-b-list"),
+    teamACount:       document.getElementById("team-a-count"),
+    teamBCount:       document.getElementById("team-b-count"),
+    mapVoteCards:     document.getElementById("map-vote-cards"),
+
+    chatMessages:     document.getElementById("chat-messages"),
+    chatInput:        document.getElementById("chat-input"),
+    btnSendChat:      document.getElementById("btn-send-chat"),
+
+    countdownNum:     document.getElementById("countdown-num"),
+
+    overlayEnd:       document.getElementById("overlay-end"),
+    endTitle:         document.getElementById("end-title"),
+    endTrophy:        document.getElementById("end-trophy"),
+    endScoreboard:    document.getElementById("end-scoreboard"),
+    btnPlayAgain:     document.getElementById("btn-play-again"),
+    btnEndLobby:      document.getElementById("btn-end-lobby"),
+
+    mpHud:            document.getElementById("mp-hud"),
+    hudPlayers:       document.getElementById("hud-players"),
+    hudLatency:       document.getElementById("hud-latency"),
+
+    toast:            document.getElementById("toast"),
+
+    // Slice arena (local split-screen)
+    sliceArena:       document.getElementById("slice-arena"),
+    sliceCanvasP1:    document.getElementById("slice-canvas-p1"),
+    sliceCanvasP2:    document.getElementById("slice-canvas-p2"),
+    sliceScoreP1:     document.getElementById("slice-score-p1"),
+    sliceScoreP2:     document.getElementById("slice-score-p2"),
+    sliceComboP1:     document.getElementById("slice-combo-p1"),
+    sliceComboP2:     document.getElementById("slice-combo-p2"),
   };
-  // How far a climbable crate's footprint keeps you clear of spawn (0,0) —
-  // just a sanity note, not enforced in code: all layouts above stay clear
-  // of a ~55-unit radius around the origin since that's where players spawn.
 
-  const STEP_HEIGHT = 40;   // crates at or below this: auto climb, no button
-  const VAULT_HEIGHT = 90;  // crates at or below this: climbable with the vault button
-  const VAULT_REACH = 46;   // how close you need to be to a crate to vault it
-  const VAULT_DURATION = 300; // ms for the climb-up arc
+  const screens = {
+    connect:   document.getElementById("screen-connect"),
+    home:      document.getElementById("screen-home"),
+    browse:    document.getElementById("screen-browse"),
+    queue:     document.getElementById("screen-queue"),
+    room:      document.getElementById("screen-room"),
+    countdown: document.getElementById("screen-countdown"),
+  };
 
-  // "Summon car" ultimate — must match server.js (CAR_COOLDOWN_MS etc).
-  const CAR_COOLDOWN_MS = 60 * 60 * 1000; // 1 hour
-  const CAR_SPEED = 320;   // world units/sec — faster than a bullet
-  const CAR_RANGE = 900;   // crosses the whole arena
-  const CAR_HIT_RADIUS = 40;
-  const CAR_DAMAGE = 100;
-
-  function getObstacles() {
-    const mapId = ARENA.map?.id || (state.roomState?.map) || DEFAULT_MAP.id;
-    return OBSTACLE_LAYOUTS[mapId] || OBSTACLE_LAYOUTS[DEFAULT_MAP.id];
+  function setScreen(name) {
+    Object.values(screens).forEach(el => el?.classList.remove("active"));
+    screens[name]?.classList.add("active");
   }
 
-  function isClimbable(obstacle) { return obstacle.type !== "wall" && obstacle.h <= VAULT_HEIGHT; }
-
-  /** Closest point on an obstacle's AABB footprint to (x,y), and the
-   *  distance to it — used for both collision push-out and vault-reach checks. */
-  function closestPointOnObstacle(obstacle, x, y) {
-    const cx = clamp(x, obstacle.x - obstacle.hw, obstacle.x + obstacle.hw);
-    const cy = clamp(y, obstacle.y - obstacle.hy, obstacle.y + obstacle.hy);
-    return { x: cx, y: cy, dist: Math.hypot(x - cx, y - cy) };
+  function setConnectStatus(msg) {
+    if (els.connectStatus) els.connectStatus.textContent = msg;
   }
 
-  function insideFootprint(obstacle, x, y) {
-    return Math.abs(x - obstacle.x) <= obstacle.hw && Math.abs(y - obstacle.y) <= obstacle.hy;
+  let toastTimer = null;
+  function showToast(msg, type) {
+    if (!els.toast) return;
+    els.toast.textContent = msg;
+    els.toast.classList.remove("hidden", "success", "error");
+    els.toast.classList.add(type === "error" ? "error" : "success");
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => els.toast?.classList.add("hidden"), 2600);
   }
 
-  /** The height of "the ground" under (x,y) — 0 normally, or a crate's top
-   *  if you're eligible to be standing on it (auto for low crates, only
-   *  after vaulting for tall ones). */
-  function groundHeightAt(x, y) {
-    let ground = 0;
-    for (const obs of getObstacles()) {
-      if (!insideFootprint(obs, x, y)) continue;
-      if (obs.type === "crate_low") ground = Math.max(ground, obs.h);
-      else if (obs.type === "crate_tall" && ARENA.onTopId === obs.id) ground = Math.max(ground, obs.h);
-    }
-    return ground;
+  /** Local player identity, pulled from the same localStorage profile the
+   *  rest of the site uses (see profile.js / firebase-auth.js). */
+  function buildProfile() {
+    let user = null;
+    try { user = JSON.parse(localStorage.getItem("cg_current_user")); } catch (_) {}
+    return {
+      name:      (user && user.username) || `Player${Math.floor(Math.random() * 9999)}`,
+      badgeIcon: (user && user.equippedBadgeIcon) || "",
+      evoStage:  (user && user.evoStage) || 1,
+    };
   }
 
-  /** Push (x,y) out of any obstacle footprint the player isn't currently
-   *  elevated above. Walls always apply; crates only if not standing on them. */
-  function resolveObstacleCollision(x, y, elevation) {
-    for (const obs of getObstacles()) {
-      // "Cleared" must be specific to *this* obstacle, not just "elevation
-      // is high enough" — otherwise standing on one tall crate would let
-      // you clip straight through a different, unrelated crate elsewhere
-      // that happens to be a similar height.
-      let clearedIt;
-      if (obs.type === "wall") clearedIt = false;
-      else if (obs.type === "crate_low") clearedIt = elevation >= obs.h - 2 && insideFootprint(obs, x, y);
-      else clearedIt = ARENA.onTopId === obs.id; // crate_tall: only the one actually vaulted
-      if (clearedIt) continue;
-
-      const nearestX = clamp(x, obs.x - obs.hw, obs.x + obs.hw);
-      const nearestY = clamp(y, obs.y - obs.hy, obs.y + obs.hy);
-      const dx = x - nearestX, dy = y - nearestY;
-      const dist = Math.hypot(dx, dy);
-      if (dist < ARENA.HIT_RADIUS && dist > 0.0001) {
-        const push = (ARENA.HIT_RADIUS - dist);
-        x += (dx / dist) * push;
-        y += (dy / dist) * push;
-      } else if (dist  ${message}`;
-    }
-  }
+  const state = {
+    profile:        buildProfile(),
+    roomState:      null,
+    ready:          false,
+    queueSize:      null,
+    queueStartedAt: null,
+    queueTimerId:   null,
+  };
 
   function setReadyButton(ready) {
     state.ready = ready;
@@ -652,8 +660,7 @@
 
   function handleGameStart() {
     showToast("Game starting!", "success");
-    ARENA.map = mapById(state.roomState?.map);
-    // Hide all lobby screens; the arena canvas takes over
+    // Hide all lobby screens; the slice arena takes over
     Object.values(screens).forEach(el => el?.classList.remove("active"));
     if (els.overlayEnd) els.overlayEnd.classList.add("hidden");
     if (els.mpHud) {
@@ -664,117 +671,276 @@
     startArenaLoop();
   }
 
-  // ── Arena (top-down in-match view) ───────────────────────────────────────
-  // Movement + shooting placeholder. Positions are synced through the
-  // server (already anti-cheat checked there). Shots are relayed by the
-  // server but hit-detected locally by whoever gets hit — same trust model
-  // the codebase already uses for playerDied — the server just clamps the
-  // damage amount so a modified client can't one-shot people.
-
-  const ARENA = {
-    WORLD_HALF: 320,     // arena spans -320..320 on each axis
-    SPEED: 180,          // world units per second
-    BULLET_SPEED: 460,   // world units per second
-    BULLET_RANGE: 480,   // max travel distance before a bullet expires
-    HIT_RADIUS: 20,      // world units — bullet-to-player hit distance
-    MAX_HP: 150,
-    FIRE_COOLDOWN: 220,  // ms between local shots
-    TURN_SPEED: 2.4,     // rad/sec applied by the touch aim-stick
-    running: false,
-    ctx: null,
-    keys: { up: false, down: false, left: false, right: false },
-    joy: { active: false, x: 0, y: 0 },     // -1..1 movement vector
-    aimJoy: { active: false, x: 0, y: 0 },  // -1..1 look/fire vector (mobile)
-    myPos: { x: 0, y: 0 },
-    yaw: 0,              // facing angle — first-person look direction
-    hp: 150,
-    dead: false,
-    bullets: [],         // { x, y, dx, dy, team, ownerId, mine, dist, hitConfirmed }
-    lastShotAt: 0,
-    gunRecoil: 0,
-    muzzleFlashUntil: 0,
-    shotStreak: 0,       // consecutive shots without a pause — drives recoil/bloom
-    shake: 0,            // screen-shake magnitude, decays every frame
-    hitMarkerUntil: 0,   // crosshair shows a hit marker until this timestamp
-    hurtFlashUntil: 0,   // red vignette shown briefly after taking damage
-    correctionTarget: null, // server-authoritative position to smoothly pull toward (Phase 4 reconciliation)
-    elevation: 0,        // current height above ground (crates/vaulting)
-    onTopId: null,        // id of the tall crate we're currently standing on, if any
-    vault: null,          // { obstacleId, from, to, startedAt } while a vault is in progress
-    cars: [],             // summon-car ultimate: traveling car objects, same shape idea as bullets
-    lastCarSummonAt: 0,   // client-side optimistic guess — server is authoritative (carSummonDenied corrects us)
-    dragging: false,     // desktop: mouse-drag-to-look
-    lastDragX: 0,
-    dragMoved: 0,
-    lastFrame: 0,
-    rafId: null,
-  };
-
-  function getForward() { return { x: Math.sin(ARENA.yaw), y: -Math.cos(ARENA.yaw) }; }
-  function getRight()   { return { x: Math.cos(ARENA.yaw), y:  Math.sin(ARENA.yaw) }; }
+  // ── Slice Arena (local split-screen — two players, one device) ──────────
+  // Each half runs its own falling-cube mini-game and its own touch input,
+  // so two people can play side by side on the same screen. Every slice is
+  // reported to the server via MP.sendCubeSliced (server.js is authoritative
+  // on score — see calculateScoreDelta there).
+  const CUBE_TYPES = [
+    { type: "normal", weight: 60, color: "#7b6cff", icon: "◆" },
+    { type: "double",  weight: 20, color: "#00e5a0", icon: "◆◆" },
+    { type: "golden",  weight: 8,  color: "#ffd84d", icon: "★" },
+    { type: "bomb",    weight: 12, color: "#ff4466", icon: "●" },
+  ];
+  const CUBE_SPAWN_MS = 700;      // avg time between spawns per half
+  const CUBE_LIFETIME_MS = 2400;  // how long an unsliced cube lives
+  const CUBE_RADIUS = 32;
+  const COMBO_WINDOW_MS = 900;    // slice again within this window to keep the combo
 
   function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
 
-  /** Each frame: smoothly move elevation toward whatever the ground under
-   *  us currently is (instant-ish for stepping onto a low crate, or a
-   *  gentle "fall" back to 0 when walking off a tall one), unless a vault
-   *  arc is actively in progress. */
-  function updateElevation(dt) {
-    if (ARENA.vault) {
-      const elapsed = performance.now() - ARENA.vault.startedAt;
-      const t = clamp(elapsed / VAULT_DURATION, 0, 1);
-      const eased = 1 - Math.pow(1 - t, 2); // ease-out
-      ARENA.elevation = ARENA.vault.from + (ARENA.vault.to - ARENA.vault.from) * eased;
-      if (t >= 1) {
-        ARENA.onTopId = ARENA.vault.obstacleId;
-        ARENA.vault = null;
+  function pickCubeType() {
+    const total = CUBE_TYPES.reduce((s, c) => s + c.weight, 0);
+    let r = Math.random() * total;
+    for (const c of CUBE_TYPES) { if (r < c.weight) return c; r -= c.weight; }
+    return CUBE_TYPES[0];
+  }
+
+  function makeHalf(canvasEl, scoreEl, comboEl) {
+    return {
+      canvas: canvasEl,
+      ctx: canvasEl ? canvasEl.getContext("2d") : null,
+      scoreEl, comboEl,
+      cubes: [],
+      particles: [],
+      activePointers: new Map(), // pointerId -> { points: [{x,y}] }
+      combo: 0,
+      comboResetAt: 0,
+      lastSpawnAt: 0,
+      localHits: 0,
+      nextCubeId: 1,
+    };
+  }
+
+  let sliceHalves = null;   // { p1, p2 }
+  let sliceRunning = false;
+  let sliceRafId = null;
+  let sliceLastFrame = 0;
+
+  function showArena() {
+    els.sliceArena?.classList.remove("hidden");
+    resizeSliceCanvases();
+  }
+  function hideArena() {
+    els.sliceArena?.classList.add("hidden");
+  }
+
+  function resizeSliceCanvases() {
+    [sliceHalves?.p1, sliceHalves?.p2].forEach(half => {
+      if (!half?.canvas) return;
+      const rect = half.canvas.getBoundingClientRect();
+      half.canvas.width = Math.max(1, Math.round(rect.width || 1));
+      half.canvas.height = Math.max(1, Math.round(rect.height || 1));
+    });
+  }
+
+  function startArenaLoop() {
+    if (!sliceHalves) {
+      sliceHalves = {
+        p1: makeHalf(els.sliceCanvasP1, els.sliceScoreP1, els.sliceComboP1),
+        p2: makeHalf(els.sliceCanvasP2, els.sliceScoreP2, els.sliceComboP2),
+      };
+      wireSliceInput(sliceHalves.p1);
+      wireSliceInput(sliceHalves.p2);
+      window.addEventListener("resize", resizeSliceCanvases);
+    }
+    [sliceHalves.p1, sliceHalves.p2].forEach(half => {
+      half.cubes = []; half.particles = []; half.combo = 0; half.localHits = 0;
+      half.lastSpawnAt = 0;
+      updateSliceScoreDisplay(half);
+    });
+    resizeSliceCanvases();
+    sliceRunning = true;
+    sliceLastFrame = performance.now();
+    sliceRafId = requestAnimationFrame(sliceLoop);
+  }
+
+  function stopArenaLoop() {
+    sliceRunning = false;
+    if (sliceRafId) cancelAnimationFrame(sliceRafId);
+    sliceRafId = null;
+  }
+
+  function sliceLoop(now) {
+    if (!sliceRunning) return;
+    const dt = Math.min(0.05, (now - sliceLastFrame) / 1000);
+    sliceLastFrame = now;
+    updateHalf(sliceHalves.p1, now, dt);
+    updateHalf(sliceHalves.p2, now, dt);
+    sliceRafId = requestAnimationFrame(sliceLoop);
+  }
+
+  function updateHalf(half, now, dt) {
+    if (!half.ctx) return;
+    const w = half.canvas.width, h = half.canvas.height;
+
+    if (now - half.lastSpawnAt > CUBE_SPAWN_MS) {
+      half.lastSpawnAt = now;
+      const t = pickCubeType();
+      half.cubes.push({
+        id: half.nextCubeId++,
+        x: CUBE_RADIUS + Math.random() * Math.max(1, w - CUBE_RADIUS * 2),
+        y: h + CUBE_RADIUS,
+        vy: -(90 + Math.random() * 70),
+        r: CUBE_RADIUS,
+        type: t,
+        spawnedAt: now,
+      });
+    }
+
+    half.cubes = half.cubes.filter(c => {
+      c.y += c.vy * dt;
+      return (now - c.spawnedAt) < CUBE_LIFETIME_MS && c.y > -c.r * 2;
+    });
+
+    half.particles = half.particles.filter(p => {
+      p.x += p.vx * dt; p.y += p.vy * dt; p.vy += 260 * dt; p.life -= dt;
+      return p.life > 0;
+    });
+
+    if (half.combo > 0 && now > half.comboResetAt) {
+      half.combo = 0;
+      updateSliceScoreDisplay(half);
+    }
+
+    renderHalf(half, w, h);
+  }
+
+  function renderHalf(half, w, h) {
+    const ctx = half.ctx;
+    ctx.clearRect(0, 0, w, h);
+
+    for (const c of half.cubes) {
+      ctx.save();
+      ctx.translate(c.x, c.y);
+      ctx.fillStyle = c.type.color;
+      ctx.shadowColor = c.type.color;
+      ctx.shadowBlur = 16;
+      const s = c.r;
+      ctx.fillRect(-s, -s, s * 2, s * 2);
+      ctx.shadowBlur = 0;
+      ctx.font = `${Math.round(s * 0.9)}px sans-serif`;
+      ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      ctx.fillStyle = "rgba(0,0,0,.45)";
+      ctx.fillText(c.type.icon, 0, 2);
+      ctx.restore();
+    }
+
+    for (const p of half.particles) {
+      ctx.globalAlpha = Math.max(0, p.life / p.maxLife);
+      ctx.fillStyle = p.color;
+      ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+
+    for (const [, pt] of half.activePointers) {
+      if (pt.points.length < 2) continue;
+      ctx.beginPath();
+      ctx.moveTo(pt.points[0].x, pt.points[0].y);
+      for (let i = 1; i < pt.points.length; i++) ctx.lineTo(pt.points[i].x, pt.points[i].y);
+      ctx.strokeStyle = "rgba(255,255,255,.85)";
+      ctx.lineWidth = 4;
+      ctx.lineCap = "round";
+      ctx.stroke();
+    }
+  }
+
+  function spawnBurst(half, x, y, color) {
+    for (let i = 0; i < 10; i++) {
+      const ang = Math.random() * Math.PI * 2;
+      const spd = 60 + Math.random() * 120;
+      half.particles.push({
+        x, y, vx: Math.cos(ang) * spd, vy: Math.sin(ang) * spd,
+        r: 2 + Math.random() * 3, color, life: 0.5, maxLife: 0.5,
+      });
+    }
+  }
+
+  function updateSliceScoreDisplay(half) {
+    if (half.scoreEl) half.scoreEl.textContent = String(half.localHits);
+    if (half.comboEl) {
+      if (half.combo > 1) {
+        half.comboEl.textContent = `x${half.combo} combo`;
+        half.comboEl.classList.add("show");
+      } else {
+        half.comboEl.classList.remove("show");
       }
-      return;
+    }
+  }
+
+  function sliceCubeAt(half, x, y, now) {
+    for (let i = half.cubes.length - 1; i >= 0; i--) {
+      const c = half.cubes[i];
+      if (Math.hypot(c.x - x, c.y - y) <= c.r * 1.3) {
+        half.cubes.splice(i, 1);
+        spawnBurst(half, c.x, c.y, c.type.color);
+
+        if (c.type.type === "bomb") {
+          half.combo = 0;
+          half.comboResetAt = now;
+        } else {
+          half.combo += 1;
+          half.comboResetAt = now + COMBO_WINDOW_MS;
+          half.localHits += 1;
+        }
+
+        MP.sendCubeSliced({ cubeType: c.type.type, combo: half.combo });
+        updateSliceScoreDisplay(half);
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /** Pointer input scoped to one half's own canvas. Uses the Pointer Events
+   *  API (not mouse/touch separately) so two simultaneous touches — one per
+   *  half — both work naturally on a single touchscreen. */
+  function wireSliceInput(half) {
+    const canvas = half.canvas;
+    if (!canvas) return;
+
+    function pointFromEvent(e) {
+      const rect = canvas.getBoundingClientRect();
+      return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+    }
+    function onDown(e) {
+      const p = pointFromEvent(e);
+      half.activePointers.set(e.pointerId, { points: [p] });
+      sliceCubeAt(half, p.x, p.y, performance.now());
+      canvas.setPointerCapture?.(e.pointerId);
+      e.preventDefault();
+    }
+    function onMove(e) {
+      const pt = half.activePointers.get(e.pointerId);
+      if (!pt) return;
+      const p = pointFromEvent(e);
+      pt.points.push(p);
+      if (pt.points.length > 8) pt.points.shift();
+      sliceCubeAt(half, p.x, p.y, performance.now());
+    }
+    function onUp(e) {
+      half.activePointers.delete(e.pointerId);
     }
 
-    // Not vaulting — if we're still within a tall crate's footprint we're
-    // on top of, hold that height; otherwise fall back toward whatever's
-    // actually under us (0, or a low crate we just stepped onto/off of).
-    if (ARENA.onTopId) {
-      const obs = getObstacles().find(o => o.id === ARENA.onTopId);
-      if (!obs || !insideFootprint(obs, ARENA.myPos.x, ARENA.myPos.y)) ARENA.onTopId = null;
-    }
-    const target = groundHeightAt(ARENA.myPos.x, ARENA.myPos.y);
-    const diff = target - ARENA.elevation;
-    if (Math.abs(diff) < 0.5) ARENA.elevation = target;
-    else ARENA.elevation += diff * Math.min(1, 10 * dt);
+    canvas.addEventListener("pointerdown", onDown);
+    canvas.addEventListener("pointermove", onMove);
+    canvas.addEventListener("pointerup", onUp);
+    canvas.addEventListener("pointercancel", onUp);
+    canvas.addEventListener("pointerleave", onUp);
   }
 
-  /** Vault/climb button — finds the nearest vaultable crate within reach
-   *  and starts a climb arc onto it. No-op if already elevated or nothing
-   *  in reach. */
-  function tryVault() {
-    if (ARENA.dead || !ARENA.running || ARENA.vault || ARENA.elevation > 2) return;
-    let best = null, bestDist = Infinity;
-    for (const obs of getObstacles()) {
-      if (obs.type !== "crate_tall") continue;
-      const { dist } = closestPointOnObstacle(obs, ARENA.myPos.x, ARENA.myPos.y);
-      if (dist <= VAULT_REACH && dist < bestDist) { best = obs; bestDist = dist; }
-    }
-    if (!best) return;
-    ARENA.vault = { obstacleId: best.id, from: ARENA.elevation, to: best.h, startedAt: performance.now() };
-  }
-
-  function resizeArenaCanvas() {
-    if (!els.arenaCanvas) return;
-    els.arenaCanvas.width = window.innerWidth;
-    els.arenaCanvas.height = window.innerHeight;
-  }
-
-  function isTouchDevice() {
-    return ("ontouchstart" in window) || navigator.maxTouchPoints > 0;
-  }
-
-  /** Fire a shot from my current position toward a world-space direction. */
-  function fireShot(dx, dy) {
-    if (ARENA.dead || !ARENA.running) return;
-    const now = performance.now();
-    if (now - ARENA.lastShotAt <span>${evoIcon(player.evoStage)}</span><span>${player.name}</span><span style="color:var(--gold)">${player.score ?? 0}</span>`;
+  /** Shows every player in the room with their server-authoritative score
+   *  (not the local per-half hit counters, which are just visual feedback). */
+  function renderHud() {
+    if (!els.hudPlayers) return;
+    clearNode(els.hudPlayers);
+    MP.allPlayers().forEach(player => {
+      const pill = document.createElement("div");
+      pill.className = "hud-player-pill" + (player.id === MP.myId ? " me" : "");
+      pill.innerHTML =
+        `<span>${evoIcon(player.evoStage)}</span>` +
+        `<span>${player.name}</span>` +
+        `<span style="color:var(--gold)">${player.score ?? 0}</span>`;
       els.hudPlayers.appendChild(pill);
     });
     if (els.hudLatency) els.hudLatency.textContent = `${MP.latency || "--"} ms`;
@@ -877,38 +1043,16 @@
     MP.on("remoteState", () => {
       if (els.mpHud && !els.mpHud.classList.contains("hidden")) renderHud();
     });
-    MP.on("remoteShoot", spawnRemoteBullet);
-    MP.on("carSummoned", (d) => {
-      if (!d || d.playerId === MP.myId) return;
-      ARENA.cars.push({
-        x: d.x, y: d.y, dx: d.dx, dy: d.dy,
-        team: d.team, ownerId: d.playerId, mine: false, dist: 0, elevation: d.elevation || 0,
-      });
-    });
-    MP.on("carSummonDenied", (d) => {
-      const remaining = typeof d?.remainingMs === "number" ? d.remainingMs : CAR_COOLDOWN_MS;
-      // Server is authoritative — correct our optimistic local timer so the
-      // button reflects reality (matters most right after reconnecting).
-      ARENA.lastCarSummonAt = Date.now() - (CAR_COOLDOWN_MS - remaining);
-      showToast(`Car summon on cooldown — ${formatDuration(remaining)} left`, "error");
-    });
-    MP.on("positionCorrection", (data) => {
-      if (data?.position && isFinite(data.position.x) && isFinite(data.position.y)) {
-        ARENA.correctionTarget = { x: data.position.x, y: data.position.y };
-      }
-    });
-    MP.on("remoteHealth", (data) => {
-      if (data?.playerId === MP.myId && typeof data.hp === "number") {
-        applyAuthoritativeHp(data.hp);
-      }
+    MP.on("remoteScore", () => {
       if (els.mpHud && !els.mpHud.classList.contains("hidden")) renderHud();
     });
-    MP.on("playerDied", (data) => {
+    MP.on("remoteEvo", () => {
       if (els.mpHud && !els.mpHud.classList.contains("hidden")) renderHud();
-      if (data?.playerId !== MP.myId) {
-        const p = MP.allPlayers().find(pl => pl.id === data?.playerId);
-        renderChatMessage({ system: true, message: `${p?.name || "A player"} was eliminated.` });
-      }
+    });
+    MP.on("scoreUpdate", () => {
+      // Server's authoritative confirmation of our own score/evo stage —
+      // just refresh the shared HUD, since MP.roomState already reflects it.
+      if (els.mpHud && !els.mpHud.classList.contains("hidden")) renderHud();
     });
     MP.on("ping", () => {
       updateHeader();
@@ -1006,7 +1150,6 @@
     setReadyButton(false);
     setConnectStatus("Connecting to server…");
     initBgCanvas();
-    initArenaControls();
     wireEvents();
     wireUi();
 
