@@ -163,6 +163,12 @@ window.CUBE_SERVER = window.CUBE_SERVER || 'https://cube-game-fnam.onrender.com/
     s.on('gameEvent',     d => { MP._emit('gameEvent', d); });
     s.on('gameReward',    d => { MP._emit('gameReward', d); });
     s.on('pong',          ts => { MP.latency = Math.round((Date.now() - ts) / 2); MP._emit('ping', MP.latency); });
+
+    // ── Duel mode (1v1, real normal-mode game, bomb/miss = instant loss) ────
+    s.on('duelQueueStatus',    d => { MP._emit('duelQueueStatus', d); });
+    s.on('duelStart',          d => { MP._emit('duelStart', d); });
+    s.on('duelOpponentProgress', d => { MP._emit('duelOpponentProgress', d); });
+    s.on('duelEnd',            d => { MP._emit('duelEnd', d); });
   };
 
   MP.disconnect = function () {
@@ -345,6 +351,27 @@ window.CUBE_SERVER = window.CUBE_SERVER || 'https://cube-game-fnam.onrender.com/
   MP.sendCubeSliced = function (event) {
     if (!MP.inRoom || !MP.socket) return;
     MP.socket.emit('cubeSliced', event);
+  };
+
+  // ─── Duel mode (1v1, real normal-mode game) ──────────────────────────────
+
+  MP.joinDuelQueue = function (profile) {
+    if (!MP.connected || !MP.socket) return;
+    MP.socket.emit('joinDuelQueue', profile || {});
+  };
+
+  MP.leaveDuelQueue = function () {
+    if (MP.socket) MP.socket.emit('leaveDuelQueue');
+  };
+
+  MP.sendDuelProgress = function (score) {
+    if (!MP.socket) return;
+    MP.socket.emit('duelProgress', { score });
+  };
+
+  MP.sendDuelLost = function (reason) {
+    if (!MP.socket) return;
+    MP.socket.emit('duelLost', { reason });
   };
 
   // ─── Helpers ──────────────────────────────────────────────────────────────

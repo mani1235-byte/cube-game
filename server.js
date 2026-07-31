@@ -251,6 +251,17 @@ const io = new Server(server, {
 // ─── State ────────────────────────────────────────────────────────────────────
 const rooms   = new Map();   // code → room
 const queue   = new Map();   // socketId → queue entry (quick play)
+
+// ─── Duel mode ────────────────────────────────────────────────────────────────
+// 1v1 only. Each player runs the REAL normal-mode 3D game on their own device
+// (see duel-child.js) — this is NOT the lightweight slice-arena mini-game.
+// Rules mirror normal mode exactly: destroying a bomb, or letting a good cube
+// fall offscreen, is an immediate loss. First player to report a loss ends
+// the match; the other player is the winner. Score is purely informational
+// (shown live on the opponent's panel) — it never decides the outcome.
+const duelQueue   = new Map(); // socketId → { socket, profile, joinedAt }
+const duelPlayers = new Map(); // socketId → duel room code
+const duelRooms   = new Map(); // code → { code, mode:'duel', players:{id:{...}}, order:[idA,idB], state, createdAt }
 const players = new Map();   // socketId → { roomCode }
 const socketMeta = new Map(); // socketId → { ip, uid, rateBucket }
 
@@ -863,6 +874,48 @@ async function endGame(room, winnerTeam) {
   });
 }
 
+// ─── Duel mode helpers ──────────────────────────────────────────────────────
+function createDuelRoom(idA, idB, profiles) {
+  const code = generateCode();
+  const mk = (id) => ({
+    id,
+    name: (profiles[id]?.name && isValidName(profiles[id].name))
+      ? profiles[id].name : `Player${Math.floor(Math.random() * 9999)}`,
+    avatar: profiles[id]?.avatar || 'cube',
+    score: 0,
+  });
+  const room = {
+    code,
+    mode: 'duel',
+    players: { [idA]: mk(idA), [idB]: mk(idB) },
+    order: [idA, idB],
+    state: 'playing',
+    createdAt: Date.now(),
+  };
+  duelRooms.set(code, room);
+  duelPlayers.set(idA, code);
+  duelPlayers.set(idB, code);
+  return room;
+}
+
+function duelOpponentId(room, id) {
+  return room.order.find(pid => pid !== id) || null;
+}
+
+function endDuel(room, winnerId, reason) {
+  if (!room || room.state === 'ended') return;
+  room.state = 'ended';
+  const loserId = duelOpponentId(room, winnerId);
+  io.to(room.code).emit('duelEnd', {
+    winnerId,
+    loserId,
+    reason: reason || 'unknown',
+    scores: room.order.map(id => ({ id, name: room.players[id]?.name, score: room.players[id]?.score || 0 })),
+  });
+  room.order.forEach(id => duelPlayers.delete(id));
+  duelRooms.delete(room.code);
+}
+
 // ─── Matchmaking (quick play) ──────────────────────────────────────────────────
 // Players queue for a specific match size (1v1 / 2v2 / 3v3 / 4v4). Once enough
 // players are waiting for that size, the first half are auto-placed on Team A
@@ -1040,6 +1093,55 @@ io.on('connection', (socket) => {
   });
 
   socket.on('leaveQueue', () => queue.delete(socket.id));
+
+  // ── Duel: 1v1 matchmaking for the real-mode split-screen duel ────────────
+  socket.on('joinDuelQueue', (profile = {}) => {
+    if (duelQueue.has(socket.id) || duelPlayers.has(socket.id)) return;
+
+    const waiting = [...duelQueue.values()].find(e => e.socket.id !== socket.id);
+    if (waiting) {
+      duelQueue.delete(waiting.socket.id);
+      const room = createDuelRoom(waiting.socket.id, socket.id, {
+        [waiting.socket.id]: waiting.profile,
+        [socket.id]: profile,
+      });
+      waiting.socket.join(room.code);
+      socket.join(room.code);
+      room.order.forEach(id => {
+        const opp = room.players[duelOpponentId(room, id)];
+        io.to(id).emit('duelStart', {
+          code: room.code,
+          opponent: { id: opp.id, name: opp.name, avatar: opp.avatar },
+        });
+      });
+      audit('duelStart', { code: room.code, a: waiting.socket.id, b: socket.id });
+      return;
+    }
+
+    duelQueue.set(socket.id, { socket, profile, joinedAt: Date.now() });
+    socket.emit('duelQueueStatus', { waiting: true });
+  });
+
+  socket.on('leaveDuelQueue', () => duelQueue.delete(socket.id));
+
+  socket.on('duelProgress', ({ score } = {}) => {
+    const code = duelPlayers.get(socket.id);
+    const room = code ? duelRooms.get(code) : null;
+    if (!room || room.state !== 'playing') return;
+    const s = Number(score);
+    if (!Number.isFinite(s) || s < 0 || s > 999999) return;
+    if (room.players[socket.id]) room.players[socket.id].score = s;
+    const oppId = duelOpponentId(room, socket.id);
+    if (oppId) io.to(oppId).emit('duelOpponentProgress', { score: s });
+  });
+
+  socket.on('duelLost', ({ reason } = {}) => {
+    const code = duelPlayers.get(socket.id);
+    const room = code ? duelRooms.get(code) : null;
+    if (!room || room.state !== 'playing') return;
+    const winnerId = duelOpponentId(room, socket.id);
+    endDuel(room, winnerId, reason === 'bomb' ? 'bomb' : 'missed');
+  });
 
   socket.on('getRooms', (cb) => {
     const list = [...rooms.values()]
@@ -1430,6 +1532,14 @@ io.on('connection', (socket) => {
     console.log(`[-] ${socket.id} disconnected`);
     audit('disconnect', { socketId: socket.id });
     queue.delete(socket.id);
+    duelQueue.delete(socket.id);
+    const dCode = duelPlayers.get(socket.id);
+    if (dCode) {
+      const dRoom = duelRooms.get(dCode);
+      if (dRoom && dRoom.state === 'playing') {
+        endDuel(dRoom, duelOpponentId(dRoom, socket.id), 'opponentDisconnected');
+      }
+    }
     socketMeta.delete(socket.id);
     leaveRoom(socket.id);
   });

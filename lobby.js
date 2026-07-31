@@ -103,6 +103,21 @@
     sliceScoreP2:     document.getElementById("slice-score-p2"),
     sliceComboP1:     document.getElementById("slice-combo-p1"),
     sliceComboP2:     document.getElementById("slice-combo-p2"),
+
+    btnFindDuel:      document.getElementById("btn-find-duel"),
+    duelArena:        document.getElementById("duel-arena"),
+    duelFrame:        document.getElementById("duel-frame"),
+    duelScoreMe:      document.getElementById("duel-score-me"),
+    duelScoreOpp:     document.getElementById("duel-score-opp"),
+    duelOppName:      document.getElementById("duel-opp-name"),
+    duelOppAvatar:    document.getElementById("duel-opp-avatar"),
+    duelOppStatus:    document.getElementById("duel-opp-status"),
+    duelResult:       document.getElementById("duel-result"),
+    duelResultTrophy: document.getElementById("duel-result-trophy"),
+    duelResultTitle:  document.getElementById("duel-result-title"),
+    duelResultDetail: document.getElementById("duel-result-detail"),
+    btnDuelAgain:     document.getElementById("btn-duel-again"),
+    btnDuelLobby:     document.getElementById("btn-duel-lobby"),
   };
 
   const screens = {
@@ -150,8 +165,10 @@
     roomState:      null,
     ready:          false,
     queueSize:      null,
+    queueMode:      "versus", // "versus" | "duel" — which queue btn-cancel-queue should leave
     queueStartedAt: null,
     queueTimerId:   null,
+    duelOpponent:   null,
   };
 
   function setReadyButton(ready) {
@@ -489,6 +506,7 @@
       showToast("Connecting to server…", "error");
       return;
     }
+    state.queueMode = "versus";
     state.queueSize = size;
     MP.joinQueue(size, state.profile);
     setScreen("queue");
@@ -500,9 +518,73 @@
   }
 
   function leaveQueue() {
-    MP.leaveQueue();
+    if (state.queueMode === "duel") MP.leaveDuelQueue();
+    else MP.leaveQueue();
     stopQueueTimer();
     state.queueSize = null;
+    state.queueMode = "versus";
+    setScreen("home");
+  }
+
+  // ── Duel mode (real normal-mode game, networked 1v1 split screen) ────────
+
+  function joinDuelQueue() {
+    if (!MP.connected) {
+      showToast("Connecting to server…", "error");
+      return;
+    }
+    state.queueMode = "duel";
+    MP.joinDuelQueue(state.profile);
+    setScreen("queue");
+    if (els.queueTitle) els.queueTitle.textContent = "Finding a Duel opponent…";
+    if (els.queueSub) els.queueSub.textContent = "Real normal mode — first mistake loses";
+    if (els.queueCount) els.queueCount.textContent = "";
+    startQueueTimer();
+  }
+
+  function showDuelArena(opponent) {
+    stopQueueTimer();
+    Object.values(screens).forEach(el => el?.classList.remove("active"));
+    state.duelOpponent = opponent;
+    if (els.duelOppName) els.duelOppName.textContent = opponent?.name || "OPPONENT";
+    if (els.duelOppAvatar) els.duelOppAvatar.textContent = opponent?.avatar === "cube" ? "◆" : (opponent?.avatar || "◆");
+    if (els.duelOppStatus) els.duelOppStatus.textContent = "Playing…";
+    if (els.duelScoreMe) els.duelScoreMe.textContent = "0";
+    if (els.duelScoreOpp) els.duelScoreOpp.textContent = "0";
+    if (els.duelFrame) els.duelFrame.src = "./index.html?duelChild=1&t=" + Date.now();
+    els.duelArena?.classList.remove("hidden");
+  }
+
+  function hideDuelArena() {
+    els.duelArena?.classList.add("hidden");
+    if (els.duelFrame) els.duelFrame.src = "about:blank";
+  }
+
+  function showDuelResult(data) {
+    hideDuelArena();
+    if (!els.duelResult) return;
+    const won = data.winnerId === MP.myId;
+    const drew = !data.winnerId;
+    if (els.duelResultTrophy) els.duelResultTrophy.textContent = drew ? "🤝" : (won ? "🏆" : "😔");
+    if (els.duelResultTitle) els.duelResultTitle.textContent = drew ? "DRAW" : (won ? "YOU WIN!" : "YOU LOSE");
+    if (els.duelResultDetail) {
+      const reasonText = data.reason === "bomb" ? "destroying a bomb 💣"
+        : data.reason === "opponentDisconnected" ? "the other player disconnecting"
+        : "missing a good cube 🟦";
+      els.duelResultDetail.textContent = won
+        ? `Your opponent lost by ${reasonText}.`
+        : (drew ? "" : `You lost by ${reasonText}.`);
+    }
+    els.duelResult.classList.remove("hidden");
+  }
+
+  function hideDuelResult() {
+    els.duelResult?.classList.add("hidden");
+  }
+
+  function leaveDuel() {
+    hideDuelArena();
+    hideDuelResult();
     setScreen("home");
   }
 
@@ -1061,6 +1143,23 @@
     MP.on("gameEnd", (data) => {
       showEndOverlay(data);
     });
+
+    // ── Duel mode ────────────────────────────────────────────────────────
+    MP.on("duelQueueStatus", () => {
+      if (els.queueSub) els.queueSub.textContent = "Waiting for an opponent…";
+      if (!state.queueStartedAt) startQueueTimer();
+      setScreen("queue");
+    });
+    MP.on("duelStart", (data) => {
+      showToast("Duel found!", "success");
+      showDuelArena(data?.opponent);
+    });
+    MP.on("duelOpponentProgress", (data) => {
+      if (els.duelScoreOpp) els.duelScoreOpp.textContent = String(data?.score ?? 0);
+    });
+    MP.on("duelEnd", (data) => {
+      showDuelResult(data || {});
+    });
   }
 
   function wireUi() {
@@ -1141,6 +1240,31 @@
         setScreen("home");
       } else if (state.queueTimerId) {
         leaveQueue();
+      }
+    });
+
+    // ── Duel mode ────────────────────────────────────────────────────────
+    els.btnFindDuel?.addEventListener("click", joinDuelQueue);
+
+    els.btnDuelAgain?.addEventListener("click", () => {
+      hideDuelResult();
+      joinDuelQueue();
+    });
+
+    els.btnDuelLobby?.addEventListener("click", leaveDuel);
+
+    // Bridge from the duel iframe (duel-child.js), which posts "ready",
+    // "progress" (score ticks), and "end" (bomb hit / missed cube) messages.
+    window.addEventListener("message", (event) => {
+      if (event.origin !== location.origin) return;
+      const d = event.data || {};
+      if (d.source !== "cube-game-duel") return;
+
+      if (d.type === "progress") {
+        if (els.duelScoreMe) els.duelScoreMe.textContent = String(d.score ?? 0);
+        MP.sendDuelProgress(d.score ?? 0);
+      } else if (d.type === "end") {
+        MP.sendDuelLost(d.reason || "missed");
       }
     });
   }

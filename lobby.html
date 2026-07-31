@@ -125,6 +125,18 @@
             <p>Open rooms waiting for players</p>
             <button class="btn-mode btn-coop" id="btn-browse">BROWSE</button>
           </div>
+
+          <!-- DUEL -->
+          <div class="mode-card" id="card-duel">
+            <div class="mode-icon">⚔️</div>
+            <h2>Duel</h2>
+            <p>Real 1v1 normal mode, split screen — hit a bomb or miss a cube and it's over</p>
+            <div class="mode-tags">
+              <span class="tag">1v1</span>
+              <span class="tag">Sudden Death</span>
+            </div>
+            <button class="btn-mode btn-versus" id="btn-find-duel">FIND MATCH</button>
+          </div>
         </div>
       </div>
     </div>
@@ -255,6 +267,41 @@
           <span class="slice-hud-combo" id="slice-combo-p2"></span>
         </div>
         <canvas id="slice-canvas-p2"></canvas>
+      </div>
+    </div>
+
+    <!-- ── DUEL ARENA (real normal-mode game, networked 1v1 split screen) ── -->
+    <div id="duel-arena" class="duel-arena hidden">
+      <div class="duel-half duel-half--me">
+        <div class="duel-hud">
+          <span class="duel-hud-label">YOU</span>
+          <span class="duel-hud-score" id="duel-score-me">0</span>
+        </div>
+        <iframe id="duel-frame" title="Your game"></iframe>
+      </div>
+      <div class="duel-divider"></div>
+      <div class="duel-half duel-half--opp">
+        <div class="duel-hud">
+          <span class="duel-hud-label" id="duel-opp-name">OPPONENT</span>
+          <span class="duel-hud-score" id="duel-score-opp">0</span>
+        </div>
+        <div class="duel-opp-panel">
+          <div class="duel-opp-avatar" id="duel-opp-avatar">◆</div>
+          <div class="duel-opp-status" id="duel-opp-status">Playing…</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── DUEL RESULT ─────────────────────────────────────────────────── -->
+    <div id="duel-result" class="overlay hidden">
+      <div class="end-card">
+        <div class="end-trophy" id="duel-result-trophy">🏆</div>
+        <h2 id="duel-result-title">MATCH OVER</h2>
+        <div id="duel-result-detail" class="detail"></div>
+        <div class="end-actions">
+          <button class="btn-primary" id="btn-duel-again">FIND ANOTHER</button>
+          <button class="btn-secondary" id="btn-duel-lobby">Lobby</button>
+        </div>
       </div>
     </div>
 

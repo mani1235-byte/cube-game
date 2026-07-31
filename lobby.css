@@ -536,6 +536,54 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: var(--bg);
 }
 .slice-hud-combo.show { opacity: 1; }
 
+/* ─── Duel Arena (networked 1v1, real normal-mode game, split screen) ─────── */
+.duel-arena {
+  position: fixed; inset: 0; z-index: 50;
+  display: flex; width: 100%; height: 100%;
+  background: #07080f;
+}
+.duel-arena.hidden { display: none; }
+
+.duel-half { position: relative; flex: 1 1 50%; height: 100%; overflow: hidden; }
+.duel-half--me  { background: radial-gradient(circle at 50% 60%, #10142a 0%, #07080f 85%); }
+.duel-half--opp { background: radial-gradient(circle at 50% 60%, #1a1028 0%, #07080f 85%); }
+
+.duel-half iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; display: block; }
+
+.duel-divider {
+  flex: 0 0 3px; height: 100%; z-index: 51;
+  background: linear-gradient(180deg, transparent, var(--border2), transparent);
+}
+
+.duel-hud {
+  position: absolute; top: 10px; left: 0; right: 0; z-index: 52;
+  display: flex; align-items: center; justify-content: center; gap: .5rem;
+  pointer-events: none; font-family: inherit;
+}
+.duel-hud-label {
+  font-size: .7rem; letter-spacing: .1em; text-transform: uppercase; color: var(--muted);
+  background: rgba(7,8,15,.6); border: 1px solid var(--border2);
+  border-radius: 20px; padding: .15rem .6rem;
+}
+.duel-hud-score {
+  font-size: 1.1rem; font-weight: 800; color: #fff;
+  text-shadow: 0 0 12px rgba(123,108,255,.6);
+}
+
+.duel-opp-panel {
+  position: absolute; inset: 0; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: .75rem;
+}
+.duel-opp-avatar {
+  width: 64px; height: 64px; border-radius: 16px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.6rem; background: var(--bg3); border: 1px solid var(--border2);
+  box-shadow: 0 0 24px rgba(123,108,255,.25);
+}
+.duel-opp-status { font-size: .8rem; color: var(--muted); letter-spacing: .05em; }
+
+.detail { opacity: .75; margin-bottom: 1.25rem; font-size: .85rem; }
+
 /* ─── HUD ─────────────────────────────────────────────────────────────────── */
 .mp-hud {
   position: fixed; top: 12px; right: 12px; z-index: 100;
