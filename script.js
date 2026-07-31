@@ -1734,6 +1734,11 @@ function resetGame() {
   renderHearts();
 }
 
+// ── Split-screen competition mode ──────────────────────────────────────────
+// Handled by mechanics.js (patches window.tick to detect bomb hits) and
+// competition-child.js (patches window.endGame to report the result back to
+// competition.html) — nothing needed here.
+
 function pauseGame() {
   isInGame() && setActiveMenu(MENU_PAUSE);
 }
