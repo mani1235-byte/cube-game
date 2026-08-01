@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+<!-- Google tag (gtag.js) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-MCMX7ELYNB"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', 'G-MCMX7ELYNB');
+</script>
+
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Cube Game — Split Screen</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: #03050a; }
+  .arena { position: relative; width: 100%; height: 100%; display: flex; background: #03050a; }
+  .player { position: relative; width: 50%; height: 100%; overflow: hidden; background: #05070d; }
+  .player iframe { display: block; width: 100%; height: 100%; border: 0; }
+  .divider {
+    position: absolute; z-index: 50; left: 50%; top: 0; width: 3px; height: 100%;
+    transform: translateX(-50%);
+    background: rgba(255,255,255,.75); box-shadow: 0 0 18px rgba(90,220,255,.9);
+    pointer-events: none;
+  }
+  .back-btn {
+    position: fixed; z-index: 60; top: 12px; left: 50%; transform: translateX(-50%);
+    padding: 6px 16px; border-radius: 999px; border: 1px solid rgba(255,255,255,.18);
+    background: rgba(0,0,0,.6); color: #fff; font-family: monospace; font-size: 11px;
+    font-weight: 700; letter-spacing: .08em; cursor: pointer;
+  }
+</style>
+</head>
+<body>
+<div class="arena">
+  <section class="player">
+    <iframe src="./index.html" title="Player 1"></iframe>
+  </section>
+  <section class="player">
+    <iframe src="./index.html" title="Player 2"></iframe>
+  </section>
+  <div class="divider"></div>
+</div>
+<button class="back-btn" onclick="location.href='./index.html'">✕ EXIT SPLIT SCREEN</button>
+</body>
+</html>

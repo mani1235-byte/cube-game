@@ -2252,7 +2252,7 @@ app.get('/api/payments/:username', async (req, res) => {
 });
 
 // ─── Root route ────────────────────────────────────────────────────────────────
-app.get('/', (_, res) => res.sendFile(path.join(__dirname, 'multiplayer.html')));
+app.get('/', (_, res) => res.sendFile(path.join(__dirname, 'intro.html')));
 
 // ─── Health / stats ───────────────────────────────────────────────────────────
 app.get('/health', (_, res) => res.json({
