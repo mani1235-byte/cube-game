@@ -33,5 +33,20 @@
         if (el !== homeBtn) navLinks.classList.remove("cg-open");
       });
     });
+
+    // ── Hide the whole sidebar during actual gameplay ─────────────────────
+    // Same approach as profile-avatar.js: watch .menu--main's visibility.
+    const sidebar = document.querySelector(".cg-sidebar");
+    const mainMenu = document.querySelector(".menu--main");
+    if (sidebar && mainMenu) {
+      function syncSidebarVisibility() {
+        const d = getComputedStyle(mainMenu).display;
+        sidebar.style.display = d === "none" ? "none" : "";
+      }
+      const observer = new MutationObserver(syncSidebarVisibility);
+      observer.observe(mainMenu, { attributes: true, attributeFilter: ["style", "class"] });
+      setInterval(syncSidebarVisibility, 500);
+      syncSidebarVisibility();
+    }
   });
 })();

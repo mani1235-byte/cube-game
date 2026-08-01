@@ -17,7 +17,7 @@
 
 /* ---- XP bar ---- */
 .prog-xp-widget {
-  top: 14px;
+  top: 70px;
   left: 50%;
   transform: translateX(-50%);
   display: flex;
@@ -32,8 +32,8 @@
 .prog-xp-text { font-size: 11px; opacity: 0.8; white-space: nowrap; }
 
 /* ---- Coin / trophy counters ---- */
-.prog-coin-widget { top: 14px; right: 14px; padding: 8px 14px; font-weight: 700; }
-.prog-trophy-widget { top: 60px; right: 14px; padding: 8px 14px; font-weight: 700; }
+.prog-coin-widget { top: 70px; right: 14px; padding: 8px 14px; font-weight: 700; }
+.prog-trophy-widget { top: 116px; right: 14px; padding: 8px 14px; font-weight: 700; }
 
 .prog-coin-float {
   position: absolute; right: 8px; top: 4px; font-size: 12px; font-weight: 700;
@@ -235,6 +235,6 @@
 
 @media (max-width: 640px) {
   .prog-xp-widget { min-width: 70vw; }
-  .prog-trophy-widget { top: 56px; }
+  .prog-trophy-widget { top: 112px; }
   .prog-streak-day-label { display: none; }
 }
