@@ -7,25 +7,12 @@
 
   ready(function () {
     const toggleBtn = document.querySelector(".cg-sidebar-toggle");
-    const sidebar = document.querySelector(".cg-sidebar");
-    const backdrop = document.querySelector(".cg-sidebar-backdrop");
+    const navLinks = document.querySelector(".cg-nav-links");
     const homeBtn = document.querySelector("[data-cg-home]");
 
-    function openSidebar() {
-      sidebar.classList.add("cg-open");
-      backdrop.classList.add("cg-open");
-    }
-
-    function closeSidebar() {
-      sidebar.classList.remove("cg-open");
-      backdrop.classList.remove("cg-open");
-    }
-
     toggleBtn.addEventListener("click", () => {
-      sidebar.classList.contains("cg-open") ? closeSidebar() : openSidebar();
+      navLinks.classList.toggle("cg-open");
     });
-
-    backdrop.addEventListener("click", closeSidebar);
 
     // Home -> jump back to the main menu using the game's own "MAIN MENU" buttons
     if (homeBtn) {
@@ -35,15 +22,15 @@
           ".menu-btn--pause, .menu-btn--score"
         );
         if (mainMenuBtn) mainMenuBtn.click();
-        closeSidebar();
+        navLinks.classList.remove("cg-open");
       });
     }
 
     // Leaderboard uses [data-open-leaderboard], already handled by leaderboard.js.
-    // Close the sidebar once any nav link/button inside it is used.
-    sidebar.querySelectorAll("a, button").forEach((el) => {
+    // Close the mobile menu once a nav link/button is used.
+    navLinks.querySelectorAll("a, button").forEach((el) => {
       el.addEventListener("click", () => {
-        if (el !== homeBtn) closeSidebar();
+        if (el !== homeBtn) navLinks.classList.remove("cg-open");
       });
     });
   });

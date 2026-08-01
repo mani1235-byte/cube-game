@@ -1,75 +1,35 @@
-/* ===== Cube Game Sidebar ===== */
-
-.cg-sidebar-toggle {
-    position: fixed;
-    top: 15px;
-    left: 15px;
-    z-index: 10000;
-    background: #222;
-    color: #fff;
-    border: none;
-    border-radius: 4px;
-    font-size: 24px;
-    line-height: 1;
-    padding: 6px 12px;
-    cursor: pointer;
-    font-family: Arial, sans-serif;
-}
-
-.cg-sidebar-toggle:hover {
-    background: #00c8ff;
-    color: #111;
-}
-
-.cg-sidebar-backdrop {
-    position: fixed;
-    inset: 0;
-    background: rgba(0, 0, 0, 0.5);
-    z-index: 9998;
-    opacity: 0;
-    pointer-events: none;
-    transition: opacity 0.25s ease;
-}
-
-.cg-sidebar-backdrop.cg-open {
-    opacity: 1;
-    pointer-events: auto;
-}
+/* ===== Cube Game Sidebar (top bar) ===== */
 
 .cg-sidebar {
     position: fixed;
     top: 0;
     left: 0;
-    height: 100vh;
-    width: 220px;
+    width: 100%;
+    height: 56px;
     background: #1a1a1a;
     color: #fff;
     display: flex;
-    flex-direction: column;
-    padding: 60px 0 20px 0;
+    align-items: center;
+    padding: 0 20px;
+    gap: 20px;
     z-index: 9999;
-    transform: translateX(-100%);
-    transition: transform 0.25s ease;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.5);
     font-family: Arial, sans-serif;
-    box-shadow: 2px 0 12px rgba(0, 0, 0, 0.5);
 }
 
-.cg-sidebar.cg-open {
-    transform: translateX(0);
-}
-
-.cg-sidebar .cg-logo {
-    font-size: 20px;
+.cg-logo {
+    font-size: 18px;
     font-weight: bold;
-    padding: 0 20px 20px 20px;
-    border-bottom: 1px solid #333;
-    margin-bottom: 10px;
+    white-space: nowrap;
 }
 
 .cg-nav-links {
     list-style: none;
     margin: 0;
     padding: 0;
+    display: flex;
+    align-items: center;
+    gap: 4px;
 }
 
 .cg-nav-links li {
@@ -80,14 +40,14 @@
 .cg-nav-links button {
     all: unset;
     box-sizing: border-box;
-    width: 100%;
-    text-decoration: none;
     color: #fff;
-    padding: 12px 20px;
+    padding: 8px 14px;
     display: block;
     cursor: pointer;
-    font-size: 15px;
+    font-size: 14px;
+    border-radius: 4px;
     transition: 0.2s;
+    white-space: nowrap;
 }
 
 .cg-nav-links a:hover,
@@ -98,24 +58,82 @@
 
 .cg-dropdown-menu {
     list-style: none;
-    background: #262626;
     margin: 0;
-    padding: 0;
+    padding: 4px 0;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    background: #262626;
+    min-width: 160px;
+    display: none;
+    border-radius: 4px;
+    overflow: hidden;
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4);
 }
 
 .cg-dropdown-menu a,
 .cg-dropdown-menu button {
-    padding-left: 36px;
-    font-size: 14px;
+    border-radius: 0;
+    width: 100%;
+    text-align: left;
 }
 
-.cg-profile-link {
-    margin-top: auto;
-    border-top: 1px solid #333;
+.cg-dropdown:hover .cg-dropdown-menu {
+    display: block;
+}
+
+.cg-sidebar-toggle {
+    display: none;
+    background: transparent;
+    border: none;
+    color: #fff;
+    font-size: 24px;
+    line-height: 1;
+    cursor: pointer;
+    padding: 4px 8px;
+}
+
+/* Profile widget now sits inside the bar, pushed to the far right */
+.cg-sidebar .pa-wrap {
+    position: relative !important;
+    top: auto !important;
+    right: auto !important;
+    margin-left: auto;
 }
 
 @media (max-width: 768px) {
     .cg-sidebar {
-        width: 200px;
+        flex-wrap: wrap;
+        height: auto;
+        padding: 10px 16px;
+    }
+
+    .cg-sidebar-toggle {
+        display: block;
+        margin-left: auto;
+        order: 1;
+    }
+
+    .cg-nav-links {
+        display: none;
+        flex-direction: column;
+        align-items: stretch;
+        width: 100%;
+        order: 3;
+    }
+
+    .cg-nav-links.cg-open {
+        display: flex;
+    }
+
+    .cg-dropdown-menu {
+        position: static;
+        display: block;
+        box-shadow: none;
+    }
+
+    .cg-sidebar .pa-wrap {
+        margin-left: 0;
+        order: 2;
     }
 }

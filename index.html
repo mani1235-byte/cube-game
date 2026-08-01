@@ -46,11 +46,10 @@
 </head>
 <body>
 
-<!-- ── Sidebar Navigation ── -->
-<button type="button" class="cg-sidebar-toggle" aria-label="Open menu">&#9776;</button>
-<div class="cg-sidebar-backdrop"></div>
+<!-- ── Sidebar Navigation (full-width top bar) ── -->
 <nav class="cg-sidebar">
   <div class="cg-logo">Cube Game</div>
+  <button type="button" class="cg-sidebar-toggle" aria-label="Open menu">&#9776;</button>
   <ul class="cg-nav-links">
     <li><a href="#" data-cg-home>Home</a></li>
     <li class="cg-dropdown">
@@ -60,15 +59,11 @@
       </ul>
     </li>
   </ul>
-  <div class="cg-profile-link">
-    <a href="./profile.html">Profile</a>
-  </div>
-</nav>
 
-<!-- ── Profile Avatar (top-right corner, menu only) ── -->
-<div id="profileWrap" class="pa-wrap">
-  <div id="avatarCircle" class="pa-circle" title="Profile"></div>
-  <div id="profileDropdown" class="pa-panel">
+  <!-- ── Profile Avatar (now lives in the sidebar) ── -->
+  <div id="profileWrap" class="pa-wrap">
+    <div id="avatarCircle" class="pa-circle" title="Profile"></div>
+    <div id="profileDropdown" class="pa-panel">
     <div class="pa-header">
       <div class="pa-avatar-lg" id="avatarCircleLg"></div>
       <div class="pa-name" id="profileName">Guest</div>
@@ -106,7 +101,8 @@
       Log Out
     </button>
   </div>
-</div>
+  </div>
+</nav>
  
 <!-- Game canvas -->
 <canvas id="c"></canvas>
