@@ -42,8 +42,28 @@
   <link rel="stylesheet" href="./trophies.css">
   <link rel="stylesheet" href="./progression/ui/progression.css">
   <link rel="stylesheet" href="./progression/three/scene3d.css">
+  <link rel="stylesheet" href="./sidebar.css">
 </head>
 <body>
+
+<!-- ── Sidebar Navigation ── -->
+<button type="button" class="cg-sidebar-toggle" aria-label="Open menu">&#9776;</button>
+<div class="cg-sidebar-backdrop"></div>
+<nav class="cg-sidebar">
+  <div class="cg-logo">Cube Game</div>
+  <ul class="cg-nav-links">
+    <li><a href="#" data-cg-home>Home</a></li>
+    <li class="cg-dropdown">
+      <a href="#">Cube Game</a>
+      <ul class="cg-dropdown-menu">
+        <li><button type="button" data-open-leaderboard>Leaderboard</button></li>
+      </ul>
+    </li>
+  </ul>
+  <div class="cg-profile-link">
+    <a href="./profile.html">Profile</a>
+  </div>
+</nav>
 
 <!-- ── Profile Avatar (top-right corner, menu only) ── -->
 <div id="profileWrap" class="pa-wrap">
@@ -146,14 +166,10 @@
       </a>
       <button type="button" class="shop-link-btn" id="openShopMenu">🛒 SHOP</button>
       <button type="button" class="shop-link-btn" id="openPassMenu">🎫 BRAWL PASS</button>
+      <button type="button" class="shop-link-btn" data-open-leaderboard>🏆 LEADERBOARD</button>
 
       <button type="button" class="shop-link-btn" onclick="window.location.href='./settings.html'">⚙️ SETTINGS</button>
       <button type="button" class="shop-link-btn" onclick="window.location.href='./mobile.html'">📱 MOBILE</button>
-      <button type="button" class="multiplayer-server-btn" onclick="window.location.href='./lobby.html'">
-        <span class="mp-btn-icon">🌐</span>
-        <span class="mp-btn-text">MULTIPLAYER SERVER</span>
-        <span class="mp-btn-ping"></span>
-      </button>
       <!-- Quick sound toggles -->
       <div class="quick-sound">
         <button type="button" class="quick-sound-btn" id="quickMusicBtn" title="Toggle Music">🎵 MUSIC</button>
@@ -168,6 +184,7 @@
     <button type="button" class="menu-btn--pause">MAIN MENU</button>
     <button type="button" class="shop-link-btn" id="openShopPause">🛒 SHOP</button>
     <button type="button" class="shop-link-btn" id="openPassPause">🎫 BRAWL PASS</button>
+    <button type="button" class="shop-link-btn" data-open-leaderboard>🏆 LEADERBOARD</button>
     <!-- Quick sound toggles in pause menu -->
     <div class="quick-sound">
       <button type="button" class="quick-sound-btn" id="pauseMusicBtn" title="Toggle Music">🎵 MUSIC</button>
@@ -179,8 +196,10 @@
     <h2>Your Score:</h2>
     <div class="final-score-lbl"></div>
     <div class="high-score-lbl"></div>
+    <div class="lb-rank-lbl" id="scoreRankLbl"></div>
     <div id="trophyResult"></div>
     <button type="button" class="play-again-btn">PLAY AGAIN</button>
+    <button type="button" class="shop-link-btn" data-open-leaderboard>🏆 LEADERBOARD</button>
     <button type="button" class="menu-btn--score">MAIN MENU</button>
 
   </div>
@@ -439,6 +458,22 @@
   </div>
 </div>
 
+<!-- ===== LEADERBOARD MODAL ===== -->
+<div class="shop-overlay" id="leaderboardOverlay">
+  <div class="shop-modal">
+    <div class="shop-header">
+      <h2 class="shop-title">🏆 LEADERBOARD</h2>
+      <button class="shop-close" data-close-leaderboard>✕</button>
+    </div>
+    <div class="shop-content active" style="padding-top:16px;">
+      <div class="lb-subtitle">Top players by best score</div>
+      <div class="lb-list" id="leaderboardList">
+        <div class="lb-loading">Loading leaderboard…</div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- PayPal Toast -->
 <div class="paypal-toast" id="paypalToast"></div>
  
@@ -457,9 +492,9 @@
 <script src="./mobile.js"></script>
 <script src="./cube-evolution.js"></script>
 <script src="./mechanics.js"></script>
-<script src="./competition-child.js"></script>
 <script src="./ads.js"></script>
 <script src="./shop.js"></script>
+<script src="./leaderboard.js"></script>
 <script src="./secrets.js"></script>
 <script src="./trophies.js"></script>
 
@@ -549,6 +584,7 @@
 
 <!-- boot last -->
 <script src="progression/progression-init.js"></script>
+<script src="./sidebar.js"></script>
 <!-- 100% privacy-first analytics -->
 <script async src="https://scripts.simpleanalyticscdn.com/latest.js"></script>
 

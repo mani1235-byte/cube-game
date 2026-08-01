@@ -2,7 +2,7 @@
 // ============================================================================
 
 // Frontend (Netlify) and backend (Render) are different domains, so API
-// calls need to be absolute — same pattern as multiplayer.js's window.CUBE_SERVER.
+// calls need to be absolute — same pattern as server-config.js's window.CUBE_SERVER.
 const SHOP_SERVER_URL = (window.CUBE_SERVER || window.location.origin || "").replace(/\/$/, "");
 
 const CONFIG = {
@@ -63,7 +63,7 @@ const ITEM_CATALOGUE = [
   { id:"power_weapon",  name:"Cube Blaster",  desc:"6 shots to destroy bombs on sight — auto-reloads", icon:"🔫", gradient:"135deg,#ff5722,#d84315", cost:1100, tag:"power" },
   // Badges
   { id:"badge_rookie",  name:"Rookie",        desc:"Show your starting spirit",     icon:"🌟", gradient:"135deg,#29b6f6,#0288d1", cost:100,  tag:"badge" },
-  { id:"badge_slayer",  name:"Cube Slayer",   desc:"Badge shown next to your name in multiplayer", icon:"⚔️", gradient:"135deg,#b71c1c,#880000", cost:500,  tag:"badge" },
+  { id:"badge_slayer",  name:"Cube Slayer",   desc:"Badge shown next to your name", icon:"⚔️", gradient:"135deg,#b71c1c,#880000", cost:500,  tag:"badge" },
   { id:"badge_legend",  name:"Legend",        desc:"Exclusive gold legend badge",   icon:"🏆", gradient:"135deg,#ffd700,#ff8c00", cost:2500, tag:"badge" },
   { id:"badge_void",    name:"Void Walker",   desc:"Rare dark-matter badge",        icon:"🔮", gradient:"135deg,#4a0080,#1a0030", cost:3000, tag:"badge" },
   // Exclusive — cost:Infinity means it can't be bought with coins. Shows as

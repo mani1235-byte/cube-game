@@ -1,0 +1,121 @@
+/* ===== Cube Game Sidebar ===== */
+
+.cg-sidebar-toggle {
+    position: fixed;
+    top: 15px;
+    left: 15px;
+    z-index: 10000;
+    background: #222;
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    font-size: 24px;
+    line-height: 1;
+    padding: 6px 12px;
+    cursor: pointer;
+    font-family: Arial, sans-serif;
+}
+
+.cg-sidebar-toggle:hover {
+    background: #00c8ff;
+    color: #111;
+}
+
+.cg-sidebar-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 9998;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.25s ease;
+}
+
+.cg-sidebar-backdrop.cg-open {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+.cg-sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 100vh;
+    width: 220px;
+    background: #1a1a1a;
+    color: #fff;
+    display: flex;
+    flex-direction: column;
+    padding: 60px 0 20px 0;
+    z-index: 9999;
+    transform: translateX(-100%);
+    transition: transform 0.25s ease;
+    font-family: Arial, sans-serif;
+    box-shadow: 2px 0 12px rgba(0, 0, 0, 0.5);
+}
+
+.cg-sidebar.cg-open {
+    transform: translateX(0);
+}
+
+.cg-sidebar .cg-logo {
+    font-size: 20px;
+    font-weight: bold;
+    padding: 0 20px 20px 20px;
+    border-bottom: 1px solid #333;
+    margin-bottom: 10px;
+}
+
+.cg-nav-links {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.cg-nav-links li {
+    position: relative;
+}
+
+.cg-nav-links a,
+.cg-nav-links button {
+    all: unset;
+    box-sizing: border-box;
+    width: 100%;
+    text-decoration: none;
+    color: #fff;
+    padding: 12px 20px;
+    display: block;
+    cursor: pointer;
+    font-size: 15px;
+    transition: 0.2s;
+}
+
+.cg-nav-links a:hover,
+.cg-nav-links button:hover {
+    background: #00c8ff;
+    color: #111;
+}
+
+.cg-dropdown-menu {
+    list-style: none;
+    background: #262626;
+    margin: 0;
+    padding: 0;
+}
+
+.cg-dropdown-menu a,
+.cg-dropdown-menu button {
+    padding-left: 36px;
+    font-size: 14px;
+}
+
+.cg-profile-link {
+    margin-top: auto;
+    border-top: 1px solid #333;
+}
+
+@media (max-width: 768px) {
+    .cg-sidebar {
+        width: 200px;
+    }
+}

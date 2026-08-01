@@ -1734,11 +1734,6 @@ function resetGame() {
   renderHearts();
 }
 
-// ── Split-screen competition mode ──────────────────────────────────────────
-// Handled by mechanics.js (patches window.tick to detect bomb hits) and
-// competition-child.js (patches window.endGame to report the result back to
-// competition.html) — nothing needed here.
-
 function pauseGame() {
   isInGame() && setActiveMenu(MENU_PAUSE);
 }
@@ -1754,6 +1749,8 @@ function endGame() {
     setHighScore(state.game.score);
   }
   // Save score to logged-in user profile
+  const rankLbl = document.getElementById("scoreRankLbl");
+  if (rankLbl) rankLbl.textContent = ""; // clear any rank shown from a previous run
   try {
     const user = JSON.parse(localStorage.getItem("cg_current_user"));
     if (user) {
@@ -1772,7 +1769,19 @@ function endGame() {
             localStorage.setItem("cg_users", JSON.stringify(users));
           }
         } catch(e) {}
-
+        // Report this run's score to the global leaderboard (see
+        // server.js's /api/leaderboard/submit — server only keeps it if
+        // it beats the player's stored best, a lower score never
+        // overwrites it) and show the resulting rank on the game-over
+        // screen. Guests aren't reported since there's no stable identity
+        // to rank them by.
+        try {
+          if (window.CGLeaderboard) {
+            window.CGLeaderboard.submitScore(user.username, finalScore).then((info) => {
+              window.CGLeaderboard.renderRankLabel(document.getElementById("scoreRankLbl"), info);
+            });
+          }
+        } catch(e) {}
       }
     }
   } catch(e) {}

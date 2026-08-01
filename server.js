@@ -5,7 +5,6 @@
 
 const express  = require('express');
 const http     = require('http');
-const { Server } = require('socket.io');
 const path     = require('path');
 const crypto   = require('crypto');
 const fs       = require('fs');
@@ -235,43 +234,8 @@ setInterval(() => {
   secretAttempts.forEach((v, k) => { if (now > v.resetAt) secretAttempts.delete(k); });
 }, 10 * 60_000);
 
-// ─── Socket.IO ────────────────────────────────────────────────────────────────
-const io = new Server(server, {
-  cors: {
-    origin: ALLOWED_ORIGINS,
-    methods: ['GET', 'POST'],
-    credentials: true,
-  },
-  pingTimeout:  60000,
-  pingInterval: 25000,
-  maxHttpBufferSize: 1e4, // 10 KB max socket message
-});
-
-// ─── State ────────────────────────────────────────────────────────────────────
-// ─── State ────────────────────────────────────────────────────────────────────
-const rooms   = new Map();   // code → room
-const queue   = new Map();   // socketId → queue entry (quick play)
-const players = new Map();   // socketId → { roomCode }
-const socketMeta = new Map(); // socketId → { ip, uid, rateBucket }
-
-// ─── Team constants ────────────────────────────────────────────────────────────
-// Multiplayer is Team Versus only: two teams, 1-4 players each, freely chosen.
-// "1v1" through "4v4" are all the same room type — just a different team cap.
-const MAX_TEAM_SIZE         = 4;   // hard cap per team
-const MAX_PLAYERS_PER_ROOM  = MAX_TEAM_SIZE * 2; // 8
-const MATCHMAKING_INTERVAL  = 2000;
-const MATCHMAKING_WAIT_MAX  = 20000; // after this, match with whoever's queued
-const ROOM_TTL              = 30 * 60 * 1000;
-const TEAMS                 = ['A', 'B'];
-
-// ─── Anti-cheat constants ─────────────────────────────────────────────────────
-const MAX_SPEED           = 25;     // units/tick — reject above this
-const MAX_TELEPORT_DIST   = 80;     // units — flag if jumped further
-const MAX_SCORE_PER_HIT   = 500;    // points — reject above this per event
-const SOCKET_RATE_LIMIT   = 25;     // events/sec per socket
-const SOCKET_RATE_WINDOW  = 1000;   // ms
-
 // ─── Audit log ────────────────────────────────────────────────────────────────
+// (Also used by the REST API below — kept after multiplayer removal.)
 const auditLog = [];
 const MAX_AUDIT = 5000;
 
@@ -279,51 +243,13 @@ function audit(type, data) {
   const entry = { ts: new Date().toISOString(), type, ...data };
   auditLog.push(entry);
   if (auditLog.length > MAX_AUDIT) auditLog.shift();
-  // In production, pipe to persistent store / monitoring
   if (type.startsWith('cheat') || type.startsWith('ban')) {
     console.warn('[AUDIT]', entry);
   }
 }
 
-// ─── Socket rate limiting ─────────────────────────────────────────────────────
-function checkSocketRate(socketId) {
-  const meta = socketMeta.get(socketId);
-  if (!meta) return false;
-  const now = Date.now();
-  if (now > meta.rateReset) {
-    meta.rateCount = 0;
-    meta.rateReset = now + SOCKET_RATE_WINDOW;
-  }
-  meta.rateCount++;
-  if (meta.rateCount > SOCKET_RATE_LIMIT) {
-    if (!meta.rateLimitLogged) {
-      audit('rateLimit', { socketId });
-      meta.rateLimitLogged = true;
-    }
-    return false; // reject
-  }
-  meta.rateLimitLogged = false;
-  return true;
-}
-
 // ─── Input validation helpers ──────────────────────────────────────────────────
-function isValidPosition(pos) {
-  return pos && typeof pos.x === 'number' && typeof pos.y === 'number'
-    && isFinite(pos.x) && isFinite(pos.y)
-    && Math.abs(pos.x) < 100000 && Math.abs(pos.y) < 100000;
-}
-
-function isValidVelocity(vel) {
-  if (!vel) return true; // optional
-  return typeof vel.x === 'number' && typeof vel.y === 'number'
-    && isFinite(vel.x) && isFinite(vel.y)
-    && Math.abs(vel.x) <= MAX_SPEED && Math.abs(vel.y) <= MAX_SPEED;
-}
-
-function isValidScore(score) {
-  return typeof score === 'number' && isFinite(score) && score >= 0 && score < 10_000_000;
-}
-
+// (Also used by the REST API below.)
 function isValidName(name) {
   return typeof name === 'string' && name.length >= 1 && name.length <= 24
     && /^[\w\s\-\.]+$/.test(name);
@@ -334,1106 +260,6 @@ function sanitizeText(str, maxLen = 200) {
     .replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
-function isValidTeamSize(n) {
-  const v = parseInt(n, 10);
-  return Number.isInteger(v) && v >= 1 && v <= MAX_TEAM_SIZE ? v : MAX_TEAM_SIZE;
-}
-
-function isValidTeam(t) {
-  return TEAMS.includes(t) ? t : null;
-}
-
-// ─── Anti-cheat: speed/teleport check ────────────────────────────────────────
-// Must match the client's ARENA constants (lobby.js) — these are the values
-// the server uses to validate hits server-side (Phase 3 lag-compensated
-// hitscan), so they need to describe the same world.
-const ARENA_HIT_RADIUS = 20;
-const ARENA_BULLET_RANGE = 480;
-const ARENA_HISTORY_WINDOW_MS = 500; // how far back we keep position snapshots
-const MAX_REWIND_MS = 300;           // cap on how far we'll rewind for a laggy shooter
-
-// Mirrors OBSTACLE_LAYOUTS in lobby.js — must stay in sync. Used here only
-// for line-of-sight blocking in the authoritative hit check; the server
-// doesn't need to know about auto-step-up/vault mechanics, just "is there
-// something solid between the shooter and the target at this height?"
-const OBSTACLE_LAYOUTS = {
-  "neon-grid": [
-    { id: "w1", type: "wall",       x: -130, y:  0,   hw: 14, hy: 65, h: 140 },
-    { id: "w2", type: "wall",       x:  130, y:  0,   hw: 14, hy: 65, h: 140 },
-    { id: "c1", type: "crate_low",  x:    0, y: -95,  hw: 22, hy: 22, h:  36 },
-    { id: "c2", type: "crate_tall", x:    0, y:  95,  hw: 26, hy: 26, h:  78 },
-    { id: "c3", type: "crate_low",  x: -170, y: 160,  hw: 20, hy: 20, h:  34 },
-    { id: "c4", type: "crate_low",  x:  170, y: -160, hw: 20, hy: 20, h:  34 },
-  ],
-  "sunset-dune": [
-    { id: "w1", type: "wall",       x:    0, y: -140, hw: 70, hy: 14, h: 130 },
-    { id: "w2", type: "wall",       x:    0, y:  140, hw: 70, hy: 14, h: 130 },
-    { id: "c1", type: "crate_tall", x: -110, y:    0, hw: 24, hy: 24, h:  80 },
-    { id: "c2", type: "crate_tall", x:  110, y:    0, hw: 24, hy: 24, h:  80 },
-    { id: "c3", type: "crate_low",  x:  -60, y:  -60, hw: 20, hy: 20, h:  34 },
-    { id: "c4", type: "crate_low",  x:   60, y:   60, hw: 20, hy: 20, h:  34 },
-  ],
-  "deep-void": [
-    { id: "w1", type: "wall",       x: -90,  y:  90,  hw: 16, hy: 60, h: 150 },
-    { id: "w2", type: "wall",       x:  90,  y: -90,  hw: 16, hy: 60, h: 150 },
-    { id: "c1", type: "crate_tall", x:    0, y:    0, hw: 28, hy: 28, h:  82 },
-    { id: "c2", type: "crate_low",  x: -150, y: -60,  hw: 20, hy: 20, h:  34 },
-  ],
-};
-
-function getObstaclesForMap(mapId) { return OBSTACLE_LAYOUTS[mapId] || OBSTACLE_LAYOUTS['neon-grid']; }
-
-function segmentIntersectsAABB(x1, y1, x2, y2, obs) {
-  const minX = obs.x - obs.hw, maxX = obs.x + obs.hw;
-  const minY = obs.y - obs.hy, maxY = obs.y + obs.hy;
-  let tmin = 0, tmax = 1;
-  const dx = x2 - x1, dy = y2 - y1;
-  for (const [d, lo, hi, p] of [[dx, minX, maxX, x1], [dy, minY, maxY, y1]]) {
-    if (Math.abs(d) < 1e-9) {
-      if (p < lo || p > hi) return false;
-    } else {
-      let t1 = (lo - p) / d, t2 = (hi - p) / d;
-      if (t1 > t2) [t1, t2] = [t2, t1];
-      tmin = Math.max(tmin, t1);
-      tmax = Math.min(tmax, t2);
-      if (tmin > tmax) return false;
-    }
-  }
-  return true;
-}
-
-/** Simplified line-of-sight check: does a wall or un-cleared crate sit
- *  between the shooter and the (rewound) target? Approximates height by
- *  only counting the shot as blocked if at least one end is below the
- *  obstacle's top — full 3D ray tracing isn't worth it for a 2.5D arena. */
-function shotBlockedByObstacles(mapId, ox, oy, tx, ty, shooterElevation, targetElevation) {
-  for (const obs of getObstaclesForMap(mapId)) {
-    const clearOver = obs.type !== 'wall' && Math.min(shooterElevation, targetElevation) >= obs.h - 2;
-    if (clearOver) continue;
-    if (segmentIntersectsAABB(ox, oy, tx, ty, obs)) return true;
-  }
-  return false;
-}
-
-function randomDamage() { return 10 + Math.floor(Math.random() * 11); } // 10-20, matches client
-
-// ── "Summon car" ultimate ability ──────────────────────────────────────────
-const CAR_COOLDOWN_MS = 60 * 60 * 1000; // 1 hour per player
-
-// Cube-slicing matches have no HP/elimination — they end after a fixed
-// timer, winner decided by combined team score (see startGame/endGame).
-const MATCH_DURATION_MS = 90 * 1000; // 90 seconds per match
-const CAR_DAMAGE = 100;
-const CAR_HIT_RADIUS = 40;   // wider than a bullet
-const CAR_RANGE = 900;       // crosses the whole arena
-
-/** Like shotBlockedByObstacles, but only walls stop a car — it's heavy
- *  enough to just smash through crates regardless of height/vaulting. */
-function carBlockedByWalls(mapId, ox, oy, tx, ty) {
-  for (const obs of getObstaclesForMap(mapId)) {
-    if (obs.type !== 'wall') continue;
-    if (segmentIntersectsAABB(ox, oy, tx, ty, obs)) return true;
-  }
-  return false;
-}
-
-function clampNum(v, min, max) { return Math.max(min, Math.min(max, v)); }
-
-/** Interpolated position of `player` at `atTime`, from their buffered
- *  position history — this is the lag-compensation rewind: "where was this
- *  player, from the shooter's point of view, when they actually fired?" */
-function getRewoundPosition(player, atTime) {
-  const history = player.history || [];
-  if (history.length === 0) return player.position;
-  if (history.length === 1) return history[0].position;
-  const newest = history[history.length - 1];
-  const oldest = history[0];
-  if (atTime >= newest.t) return newest.position;
-  if (atTime <= oldest.t) return oldest.position;
-  for (let i = history.length - 1; i > 0; i--) {
-    const a = history[i - 1], b = history[i];
-    if (atTime >= a.t && atTime <= b.t) {
-      const span = b.t - a.t;
-      const mix = span > 0 ? (atTime - a.t) / span : 1;
-      return {
-        x: a.position.x + (b.position.x - a.position.x) * mix,
-        y: a.position.y + (b.position.y - a.position.y) * mix,
-      };
-    }
-  }
-  return newest.position;
-}
-
-/** Simplified lag-compensated hitscan: is `target` within HIT_RADIUS of the
- *  ray from (ox,oy) toward (dx,dy)? Treats the shot as instant rather than
- *  simulating full projectile travel time — the client still animates a
- *  travelling bullet for feel, but the server only needs to know whether
- *  the fired direction would have crossed the (rewound) target. */
-function rayHitsPoint(ox, oy, dx, dy, target, radius, maxRange) {
-  const r = typeof radius === 'number' ? radius : ARENA_HIT_RADIUS;
-  const range = typeof maxRange === 'number' ? maxRange : ARENA_BULLET_RANGE;
-  const vx = target.x - ox, vy = target.y - oy;
-  const proj = vx * dx + vy * dy;
-  if (proj < 0 || proj > range) return false;
-  const cx = ox + dx * proj, cy = oy + dy * proj;
-  return Math.hypot(target.x - cx, target.y - cy) <= r;
-}
-
-function checkMovement(player, newPosition, newVelocity) {
-  if (!isValidPosition(newPosition)) return { ok: false, reason: 'invalid_position' };
-  if (newVelocity && !isValidVelocity(newVelocity)) return { ok: false, reason: 'speed_hack' };
-
-  if (player.position && isValidPosition(player.position)) {
-    const dx = newPosition.x - player.position.x;
-    const dy = newPosition.y - player.position.y;
-    const dist = Math.hypot(dx, dy);
-    if (dist > MAX_TELEPORT_DIST) {
-      return { ok: false, reason: 'teleport', dist };
-    }
-  }
-  return { ok: true };
-}
-
-// ─── Server-authoritative score system ────────────────────────────────────────
-// Clients send 'cubeSliced' events; server calculates score delta
-const SCORE_PER_NORMAL = 10;
-const SCORE_PER_COMBO  = [0, 0, 30, 50, 80, 120]; // index = combo count
-
-function calculateScoreDelta(event, player) {
-  const { cubeType, combo } = event;
-
-  let base = SCORE_PER_NORMAL;
-  if (cubeType === 'bomb')    return { delta: 0, valid: false }; // bombs don't give score
-  if (cubeType === 'double')  base = SCORE_PER_NORMAL * 2;
-  if (cubeType === 'golden')  base = SCORE_PER_NORMAL * 5;
-
-  const comboBonus = (combo > 0 && combo < SCORE_PER_COMBO.length)
-    ? SCORE_PER_COMBO[combo] : 0;
-
-  const delta = base + comboBonus;
-  if (delta > MAX_SCORE_PER_HIT) return { delta: 0, valid: false };
-  return { delta, valid: true };
-}
-
-function getEvoStage(score) {
-  if (score >= 5000) return 6;
-  if (score >= 2500) return 5;
-  if (score >= 1000) return 4;
-  if (score >=  400) return 3;
-  if (score >=  150) return 2;
-  return 1;
-}
-
-// ─── Room factory ─────────────────────────────────────────────────────────────
-// Every room is Team Versus: Team A vs Team B, 1-4 players per side, players
-// pick their own team. `teamSize` is the room's cap per side (1v1..4v4).
-function createRoom(code, hostId, teamSize) {
-  return {
-    code,
-    mode:         'versus',
-    teamSize:     isValidTeamSize(teamSize),
-    hostId,
-    teams:        { A: new Map(), B: new Map() },
-    state:        'waiting', // waiting | countdown | playing | ended
-    quickPlay:    false,     // true if created by matchmaking (auto-starts)
-    createdAt:    Date.now(),
-    lastActivity: Date.now(),
-    gameData:     { events: [] },
-    mapVotes:     {},        // socketId -> mapId, tallied for roomPublicState
-    map:          null,      // locked in once the game actually starts
-    seriesScore:  { A: 0, B: 0 }, // wins this room's teams have racked up across rematches
-    matchTimer:   null,      // handle for the score-based match-end timeout
-  };
-}
-
-/** Tally current mapVotes into { mapId: count }, including zero-count ids. */
-function mapVoteTally(room) {
-  const tally = {};
-  MAP_IDS.forEach(id => { tally[id] = 0; });
-  Object.values(room.mapVotes || {}).forEach(id => {
-    if (tally[id] !== undefined) tally[id]++;
-  });
-  return tally;
-}
-
-/** Pick the winning map from current votes; ties broken randomly. Falls back
- *  to a random map if nobody voted. */
-function resolveMapVote(room) {
-  const tally = mapVoteTally(room);
-  const max = Math.max(...Object.values(tally));
-  if (max <= 0) return MAP_IDS[Math.floor(Math.random() * MAP_IDS.length)];
-  const winners = Object.keys(tally).filter(id => tally[id] === max);
-  return winners[Math.floor(Math.random() * winners.length)];
-}
-
-function generateCode() {
-  return crypto.randomBytes(3).toString('hex').toUpperCase();
-}
-
-function teamOfSocket(room, socketId) {
-  if (room.teams.A.has(socketId)) return 'A';
-  if (room.teams.B.has(socketId)) return 'B';
-  return null;
-}
-
-function teamCount(room, team) {
-  return room.teams[team].size;
-}
-
-function roomPublicState(room) {
-  const teamList = (team) => [...room.teams[team].values()].map(p => ({
-    id:        p.id,
-    name:      p.name,
-    avatar:    p.avatar,
-    photo:     p.photo || null,
-    evoStage:  p.evoStage,
-    score:     p.score,
-    ready:     p.ready,
-    alive:     p.alive,
-    hp:        typeof p.hp === 'number' ? p.hp : 150,
-    ping:      p.ping,
-    badgeIcon: p.badgeIcon || null,
-    team:      p.team,
-    mapVote:   room.mapVotes ? (room.mapVotes[p.id] || null) : null,
-  }));
-  return {
-    code:      room.code,
-    mode:      room.mode,
-    teamSize:  room.teamSize,
-    state:     room.state,
-    hostId:    room.hostId,
-    quickPlay: room.quickPlay,
-    teams:     { A: teamList('A'), B: teamList('B') },
-    gameData:  room.gameData,
-    mapVotes:  mapVoteTally(room),
-    map:       room.map,
-    seriesScore: room.seriesScore || { A: 0, B: 0 },
-  };
-}
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-// Mirrors the badge icons in shop.js's ITEM_CATALOGUE — kept as an allow-list
-// so a player can't just send any string as their "badge" over the socket.
-// Whether they've actually *earned* the badge is still enforced client-side
-// (localStorage), which is fine for a cosmetic flex badge but NOT something
-// to rely on for anything with real value (see the coins/items note above).
-// Map pool — ids only. Visuals (colors/thumbnails/names) live client-side in
-// lobby.js MAP_POOL; the server only needs to know which ids are legal to
-// vote for and tally the votes.
-const MAP_IDS = ['neon-grid', 'sunset-dune', 'deep-void'];
-
-const VALID_BADGE_ICONS = new Set(['🌟', '⚔️', '🏆', '🔮']);
-function sanitizeBadgeIcon(icon) {
-  return (typeof icon === 'string' && VALID_BADGE_ICONS.has(icon)) ? icon : null;
-}
-
-// Only allow http(s) image URLs, capped in length — this is a cosmetic
-// display-only field (rendered as a CSS background-image), never trusted
-// for anything else, and we never fetch it server-side.
-function sanitizePhotoURL(url) {
-  if (typeof url !== 'string' || url.length > 500) return null;
-  if (!/^https:\/\//i.test(url)) return null;
-  return url;
-}
-
-// Picks whichever team has fewer players (ties → A). Used for quick play,
-// where the server assigns teams instead of the player choosing.
-function autoTeam(room) {
-  return teamCount(room, 'A') <= teamCount(room, 'B') ? 'A' : 'B';
-}
-
-// Finds an existing room that's still waiting for players, matches the
-// requested team size, and has an open slot — so a new player can drop into
-// it instead of always spinning up a brand new (empty) room. Prefers the
-// room that's already the most full, so rooms fill up and start rather than
-// players getting scattered thin across lots of half-empty rooms.
-function findOpenRoom(teamSize) {
-  let best = null;
-  let bestCount = -1;
-  for (const room of rooms.values()) {
-    if (room.state !== 'waiting') continue;
-    if (room.teamSize !== teamSize) continue;
-    const count = room.teams.A.size + room.teams.B.size;
-    if (count >= room.teamSize * 2) continue; // full
-    if (count > bestCount) { best = room; bestCount = count; }
-  }
-  return best;
-}
-
-function joinRoom(socket, code, requestedTeam, profile) {
-  const room = rooms.get(code);
-  if (!room) return { error: 'Room not found' };
-  if (room.state !== 'waiting') return { error: 'Game already in progress' };
-  if (teamOfSocket(room, socket.id)) return { error: 'Already in this room' };
-
-  let team = isValidTeam(requestedTeam);
-  if (team) {
-    if (teamCount(room, team) >= room.teamSize) {
-      // Requested team full — fall back to the other side if it has room.
-      const other = team === 'A' ? 'B' : 'A';
-      if (teamCount(room, other) < room.teamSize) team = other;
-      else return { error: 'Room full' };
-    }
-  } else {
-    team = autoTeam(room);
-    if (teamCount(room, team) >= room.teamSize) return { error: 'Room full' };
-  }
-
-  socket.join(code);
-  players.set(socket.id, { roomCode: code });
-
-  const name = (profile?.name && isValidName(profile.name))
-    ? profile.name : `Player${Math.floor(Math.random() * 9999)}`;
-
-  const playerState = {
-    id:        socket.id,
-    name,
-    avatar:    profile?.avatar || 'cube',
-    photo:     sanitizePhotoURL(profile?.photo),
-    evoStage:  1, // always start at 1 — server controls evo
-    badgeIcon: sanitizeBadgeIcon(profile?.badgeIcon),
-    team,
-    score:     0,
-    coins:     0,
-    ready:     false,
-    alive:     true,
-    hp:        150,
-    ping:      0,
-    position:  { x: 0, y: 0 },
-    velocity:  { x: 0, y: 0 },
-    inputs:    {},
-    flagCount: 0, // anti-cheat flag counter
-    history:   [], // { t, position } — for Phase 3 lag-compensated hit rewind
-    lastCarSummonAt: 0, // "summon car" ultimate — 1hr cooldown, see CAR_COOLDOWN_MS
-  };
-
-  room.teams[team].set(socket.id, playerState);
-  room.lastActivity = Date.now();
-  audit('playerJoined', { socketId: socket.id, name, room: code, team });
-
-  io.to(code).emit('playerJoined', {
-    player: { id: playerState.id, name: playerState.name, avatar: playerState.avatar, evoStage: playerState.evoStage, team },
-    roomState: roomPublicState(room),
-  });
-
-  return { success: true, room: roomPublicState(room), team };
-}
-
-// Switch team pre-game (waiting state only). Returns {error} or {success}.
-function switchTeam(socketId, requestedTeam) {
-  const pData = players.get(socketId);
-  if (!pData) return { error: 'Not in a room' };
-  const room = rooms.get(pData.roomCode);
-  if (!room) return { error: 'Room not found' };
-  if (room.state !== 'waiting') return { error: 'Game already started' };
-
-  const from = teamOfSocket(room, socketId);
-  const to   = isValidTeam(requestedTeam);
-  if (!from || !to) return { error: 'Invalid team' };
-  if (from === to) return { success: true, room: roomPublicState(room) };
-  if (teamCount(room, to) >= room.teamSize) return { error: 'Team full' };
-
-  const player = room.teams[from].get(socketId);
-  room.teams[from].delete(socketId);
-  player.team = to;
-  player.ready = false;
-  room.teams[to].set(socketId, player);
-  room.lastActivity = Date.now();
-
-  io.to(room.code).emit('teamChanged', { playerId: socketId, team: to, roomState: roomPublicState(room) });
-  return { success: true, room: roomPublicState(room) };
-}
-
-function checkTeamElimination(room) {
-  if (!room || room.state !== 'playing') return;
-  const aliveA = [...room.teams.A.values()].filter(p => p.alive).length;
-  const aliveB = [...room.teams.B.values()].filter(p => p.alive).length;
-  const eliminatedA = room.teams.A.size === 0 || aliveA === 0;
-  const eliminatedB = room.teams.B.size === 0 || aliveB === 0;
-  if (eliminatedA && eliminatedB) endGame(room, null);
-  else if (eliminatedA) endGame(room, 'B');
-  else if (eliminatedB) endGame(room, 'A');
-}
-
-function leaveRoom(socketId) {
-  const pData = players.get(socketId);
-  if (!pData) return;
-  const room = rooms.get(pData.roomCode);
-  if (!room) return;
-
-  const team = teamOfSocket(room, socketId);
-  if (!team) return;
-  room.teams[team].delete(socketId);
-  players.delete(socketId);
-
-  if (room.mapVotes) delete room.mapVotes[socketId];
-
-  const remaining = [...room.teams.A.keys(), ...room.teams.B.keys()];
-
-  if (room.hostId === socketId && remaining.length > 0) {
-    room.hostId = remaining[0];
-    io.to(room.code).emit('hostChanged', { newHostId: room.hostId });
-  }
-
-  if (room.state === 'playing') {
-    checkTeamElimination(room);
-  }
-
-  io.to(room.code).emit('playerLeft', { playerId: socketId, roomState: roomPublicState(room) });
-  if (remaining.length === 0) rooms.delete(room.code);
-}
-
-function startCountdown(room) {
-  room.state = 'countdown';
-  let count = 3;
-  io.to(room.code).emit('countdown', { count });
-
-  const timer = setInterval(() => {
-    count--;
-    if (count > 0) io.to(room.code).emit('countdown', { count });
-    else { clearInterval(timer); startGame(room); }
-  }, 1000);
-}
-
-function startGame(room) {
-  room.state = 'playing';
-  room.map = resolveMapVote(room);
-  room.gameData.startedAt = Date.now();
-  [...room.teams.A.values(), ...room.teams.B.values()].forEach(p => {
-    p.score = 0; p.coins = 0;
-    p.alive = true; p.ready = false;
-    p.evoStage = 1; p.flagCount = 0;
-    p.hp = 150; p._lastShot = 0;
-  });
-  io.to(room.code).emit('gameStart', { roomState: roomPublicState(room) });
-
-  if (room.matchTimer) clearTimeout(room.matchTimer);
-  room.matchTimer = setTimeout(() => {
-    if (room.state !== 'playing') return; // already ended some other way
-    const scoreOf = (team) => [...room.teams[team].values()].reduce((s, p) => s + p.score, 0);
-    const scoreA = scoreOf('A'), scoreB = scoreOf('B');
-    const winnerTeam = scoreA === scoreB ? null : (scoreA > scoreB ? 'A' : 'B');
-    endGame(room, winnerTeam);
-  }, MATCH_DURATION_MS);
-}
-
-async function endGame(room, winnerTeam) {
-  if (room.state === 'ended') return;
-  room.state = 'ended';
-  if (room.matchTimer) { clearTimeout(room.matchTimer); room.matchTimer = null; }
-
-  room.seriesScore = room.seriesScore || { A: 0, B: 0 };
-  if (winnerTeam === 'A' || winnerTeam === 'B') room.seriesScore[winnerTeam]++;
-
-  const scoreOf = (team) => [...room.teams[team].values()].reduce((s, p) => s + p.score, 0);
-  const teamScores = { A: scoreOf('A'), B: scoreOf('B') };
-
-  const scores = [...room.teams.A.values(), ...room.teams.B.values()]
-    .map(p => ({ id: p.id, name: p.name, team: p.team, score: p.score, evoStage: p.evoStage, coins: p.coins }))
-    .sort((a, b) => b.score - a.score);
-
-  const matchStart = room.gameData.startedAt || room.createdAt;
-
-  // Server decides coin rewards — winning team gets a bigger bonus. Credited
-  // to the real wallet (not just told to the client to self-apply) so a
-  // match win actually counts toward what the shop will let you spend.
-  scores.forEach((p) => {
-    const onWinner = winnerTeam && p.team === winnerTeam;
-    const bonus = onWinner ? 50 : 10;
-    const coinReward = Math.floor(p.score / 100) + bonus;
-    io.to(p.id).emit('gameReward', {
-      coinsEarned: coinReward,
-      trophyChange: onWinner ? 30 : -10,
-    });
-    if (isValidName(p.name)) {
-      creditWallet(p.name, coinReward, `mp:${room.code}:${matchStart}:${p.id}`, { method: 'multiplayer', room: room.code })
-        .catch(e => console.error('[wallet] multiplayer credit failed:', e.message));
-    }
-    audit('gameReward', { socketId: p.id, name: p.name, coins: coinReward, score: p.score });
-  });
-
-  io.to(room.code).emit('gameEnd', {
-    winnerTeam,
-    teamScores,
-    scores,
-    mode:     room.mode,
-    teamSize: room.teamSize,
-    duration: Date.now() - (room.gameData.startedAt || room.createdAt),
-    seriesScore: room.seriesScore,
-  });
-}
-
-// ─── Matchmaking (quick play) ──────────────────────────────────────────────────
-// Players queue for a specific match size (1v1 / 2v2 / 3v3 / 4v4). Once enough
-// players are waiting for that size, the first half are auto-placed on Team A
-// and the second half on Team B, and the match starts immediately.
-//
-// runMatchmaking() is called both immediately — whenever someone joins/leaves
-// the queue, so a room is "found" the instant a second player shows up
-// instead of waiting for the next poll tick — and on a slower interval as a
-// safety net (to catch the MATCHMAKING_WAIT_MAX timeout case).
-function runMatchmaking() {
-  const now = Date.now();
-
-  for (let size = 1; size <= MAX_TEAM_SIZE; size++) {
-    const entries = [...queue.values()].filter(e => e.size === size);
-    if (entries.length === 0) continue;
-
-    const need = size * 2;
-    const oldestWait = now - Math.min(...entries.map(e => e.joinedAt));
-    const timedOut = oldestWait >= MATCHMAKING_WAIT_MAX && entries.length >= 2;
-
-    if (entries.length >= need || timedOut) {
-      // If timed out early, match with however many are here (split as evenly
-      // as possible, capped at `size` per team) rather than making them wait forever.
-      const takeTotal = Math.min(entries.length, need);
-      const perSide = timedOut && takeTotal < need ? Math.floor(takeTotal / 2) : size;
-      if (perSide < 1) continue;
-
-      const batch = entries.slice(0, perSide * 2);
-      const code  = generateCode();
-      const room  = createRoom(code, batch[0].socket.id, perSide);
-      room.quickPlay = true;
-      rooms.set(code, room);
-
-      batch.forEach((entry, i) => {
-        queue.delete(entry.socket.id);
-        const team = i < perSide ? 'A' : 'B';
-        joinRoom(entry.socket, code, team, entry.profile);
-      });
-
-      io.to(code).emit('matchFound', { code, mode: 'versus', teamSize: perSide });
-      startCountdown(room);
-      continue; // this size's queue just got consumed — skip status broadcast below
-    }
-
-    entries.forEach((entry, i) => {
-      entry.socket.emit('queueStatus', { position: i + 1, size, total: entries.length });
-    });
-  }
-}
-
-setInterval(runMatchmaking, MATCHMAKING_INTERVAL);
-
-// Stale room cleanup
-setInterval(() => {
-  const now = Date.now();
-  for (const [code, room] of rooms) {
-    if (now - room.lastActivity > ROOM_TTL) rooms.delete(code);
-  }
-}, 5 * 60 * 1000);
-
-// ─── Socket handlers ───────────────────────────────────────────────────────────
-io.on('connection', (socket) => {
-  const ip = socket.handshake.address || 'unknown';
-
-  // Reject if origin not in whitelist
-  const origin = socket.handshake.headers.origin;
-  if (origin && !ALLOWED_ORIGINS.includes(origin)) {
-    console.warn(`[REJECT] connection from disallowed origin: ${origin}`);
-    socket.disconnect(true);
-    return;
-  }
-
-  socketMeta.set(socket.id, {
-    ip, uid: null,
-    rateCount: 0, rateReset: Date.now() + SOCKET_RATE_WINDOW,
-    rateLimitLogged: false,
-  });
-
-  console.log(`[+] ${socket.id} connected from ${ip}`);
-  audit('connect', { socketId: socket.id, ip });
-
-  // Middleware: apply rate limit to all events
-  socket.use(([event, ...args], next) => {
-    if (!checkSocketRate(socket.id)) {
-      socket.emit('error', { message: 'Rate limit exceeded' });
-      return; // drop event
-    }
-    next();
-  });
-
-  // ── Lobby: room creation / joining ─────────────────────────────────────────
-  socket.on('createRoom', ({ teamSize, profile } = {}, cb) => {
-    const size = isValidTeamSize(teamSize);
-
-    // If a room of this size is already open and waiting for players, join
-    // that instead of creating a new (empty) one.
-    const existing = findOpenRoom(size);
-    if (existing) {
-      const result = joinRoom(socket, existing.code, undefined, profile);
-      if (result.success) {
-        if (typeof cb === 'function') cb({ ...result, code: existing.code, teamSize: size, joinedExisting: true });
-        return;
-      }
-      // Fell through (e.g. filled up right before we joined) — just create a new one below.
-    }
-
-    const code = generateCode();
-    const room = createRoom(code, socket.id, size);
-    rooms.set(code, room);
-    const result = joinRoom(socket, code, 'A', profile);
-    if (typeof cb === 'function') cb({ ...result, code, teamSize: size });
-  });
-
-  socket.on('joinRoom', ({ code, team, profile } = {}, cb) => {
-    if (typeof code !== 'string') {
-      if (typeof cb === 'function') cb({ error: 'Invalid code' });
-      return;
-    }
-    const result = joinRoom(socket, code.toUpperCase().slice(0, 8), team, profile);
-    if (typeof cb === 'function') cb(result);
-  });
-
-  socket.on('voteMap', ({ mapId } = {}) => {
-    const pData = players.get(socket.id);
-    if (!pData) return;
-    const room = rooms.get(pData.roomCode);
-    if (!room || room.state !== 'waiting') return;
-    if (!teamOfSocket(room, socket.id)) return;
-    if (!MAP_IDS.includes(mapId)) return;
-
-    room.mapVotes[socket.id] = mapId;
-    room.lastActivity = Date.now();
-    io.to(room.code).emit('mapVoteUpdate', { roomState: roomPublicState(room) });
-  });
-
-  socket.on('switchTeam', ({ team } = {}, cb) => {
-    const result = switchTeam(socket.id, team);
-    if (typeof cb === 'function') cb(result);
-  });
-
-  socket.on('leaveRoom', () => leaveRoom(socket.id));
-
-  // ── Lobby: quick play matchmaking ────────────────────────────────────────
-  // size = 1..4, meaning "queue for a 1v1", "queue for a 2v2", etc.
-  socket.on('joinQueue', ({ size, profile } = {}) => {
-    const validSize = isValidTeamSize(size);
-    if (queue.has(socket.id)) return;
-
-    // Prefer dropping straight into an existing open room over waiting in
-    // the queue for a brand new one to be created.
-    const existing = findOpenRoom(validSize);
-    if (existing) {
-      const result = joinRoom(socket, existing.code, undefined, profile);
-      if (result.success) {
-        socket.emit('matchFound', { code: existing.code, mode: 'versus', teamSize: validSize });
-        // If this fill made a quick-play room full, start it right away —
-        // mirrors the normal quick-play "match found → countdown" flow.
-        const count = existing.teams.A.size + existing.teams.B.size;
-        if (existing.quickPlay && count >= existing.teamSize * 2) startCountdown(existing);
-        return;
-      }
-      // Fell through (e.g. someone else filled the last slot first) — queue normally below.
-    }
-
-    queue.set(socket.id, { socket, size: validSize, profile, joinedAt: Date.now() });
-    const sameSize = [...queue.values()].filter(e => e.size === validSize);
-    socket.emit('queueStatus', {
-      position: sameSize.length,
-      size: validSize,
-      total: sameSize.length,
-    });
-    // Check for a match right away — don't make a waiting player sit
-    // through up to MATCHMAKING_INTERVAL ms before the room is found.
-    runMatchmaking();
-  });
-
-  socket.on('leaveQueue', () => queue.delete(socket.id));
-
-  socket.on('getRooms', (cb) => {
-    const list = [...rooms.values()]
-      .filter(r => r.state === 'waiting' && !r.quickPlay)
-      .map(r => ({
-        code:        r.code,
-        teamSize:    r.teamSize,
-        teamACount:  r.teams.A.size,
-        teamBCount:  r.teams.B.size,
-        maxPlayers:  r.teamSize * 2,
-        host:        r.teams.A.get(r.hostId)?.name || r.teams.B.get(r.hostId)?.name || 'Unknown',
-      }));
-    if (typeof cb === 'function') cb(list);
-  });
-
-  // ── In-lobby ─────────────────────────────────────────────────────────────
-  socket.on('setReady', ({ ready } = {}) => {
-    const pData = players.get(socket.id);
-    if (!pData) return;
-    const room = rooms.get(pData.roomCode);
-    if (!room || room.state !== 'waiting') return;
-    const team = teamOfSocket(room, socket.id);
-    if (!team) return;
-    const player = room.teams[team].get(socket.id);
-    if (player) player.ready = !!ready;
-
-    io.to(room.code).emit('playerReady', {
-      playerId: socket.id, ready: !!ready, roomState: roomPublicState(room),
-    });
-
-    const all = [...room.teams.A.values(), ...room.teams.B.values()];
-    const bothTeamsFilled = room.teams.A.size > 0 && room.teams.A.size === room.teams.B.size;
-    if (bothTeamsFilled && all.length >= 2 && all.every(p => p.ready)) startCountdown(room);
-  });
-
-  socket.on('hostStartGame', () => {
-    const pData = players.get(socket.id);
-    if (!pData) return;
-    const room = rooms.get(pData.roomCode);
-    if (!room || room.hostId !== socket.id || room.state !== 'waiting') return;
-    if (room.teams.A.size < 1 || room.teams.B.size < 1) {
-      socket.emit('error', { message: 'Both teams need at least 1 player' });
-      return;
-    }
-    if (room.teams.A.size !== room.teams.B.size) {
-      socket.emit('error', { message: 'Teams must be even — same number of players on each side' });
-      return;
-    }
-    startCountdown(room);
-  });
-
-  // Any player can propose a rematch — idempotent, so if more than one
-  // client sends it (e.g. everyone tapping "Play Again" at once) only the
-  // first one actually does anything.
-  socket.on('playAgain', () => {
-    const pData = players.get(socket.id);
-    if (!pData) return;
-    const room = rooms.get(pData.roomCode);
-    if (!room || room.state !== 'ended') return;
-
-    room.state = 'waiting';
-    room.map = null;
-    room.mapVotes = {}; // fresh map vote for the rematch
-    [...room.teams.A.values(), ...room.teams.B.values()].forEach(p => {
-      p.ready = false; p.alive = true; p.hp = 150; p.score = 0;
-    });
-
-    io.to(room.code).emit('roomReset', { roomState: roomPublicState(room) });
-  });
-
-  socket.on('chat', ({ message } = {}) => {
-    const pData = players.get(socket.id);
-    if (!pData) return;
-    const room = rooms.get(pData.roomCode);
-    if (!room) return;
-    const team = teamOfSocket(room, socket.id);
-    const player = team ? room.teams[team].get(socket.id) : null;
-    const sanitized = sanitizeText(message, 200);
-    if (!sanitized) return;
-
-    io.to(room.code).emit('chat', {
-      playerId: socket.id,
-      name:     player?.name || 'Unknown',
-      team:     team || null,
-      message:  sanitized,
-      ts:       Date.now(),
-    });
-  });
-
-  // ── In-game: SERVER-AUTHORITATIVE ────────────────────────────────────────
-
-  socket.on('playerInput', (input) => {
-    const pData = players.get(socket.id);
-    if (!pData) return;
-    const room = rooms.get(pData.roomCode);
-    if (!room || room.state !== 'playing') return;
-    const team = teamOfSocket(room, socket.id);
-    const player = team ? room.teams[team].get(socket.id) : null;
-    if (!player || !player.alive) return;
-
-    // Validate input object — only allow expected keys
-    const safeInput = {};
-    if (typeof input?.left    === 'boolean') safeInput.left    = input.left;
-    if (typeof input?.right   === 'boolean') safeInput.right   = input.right;
-    if (typeof input?.up      === 'boolean') safeInput.up      = input.up;
-    if (typeof input?.down    === 'boolean') safeInput.down    = input.down;
-    if (typeof input?.pointer === 'object' && input.pointer) {
-      if (isFinite(input.pointer.x) && isFinite(input.pointer.y)) {
-        safeInput.pointer = { x: +input.pointer.x, y: +input.pointer.y };
-      }
-    }
-
-    player.inputs = safeInput;
-    room.lastActivity = Date.now();
-    socket.to(room.code).emit('remoteInput', { playerId: socket.id, input: safeInput });
-  });
-
-  socket.on('playerState', (state) => {
-    const pData = players.get(socket.id);
-    if (!pData) return;
-    const room = rooms.get(pData.roomCode);
-    if (!room || room.state !== 'playing') return;
-    const team = teamOfSocket(room, socket.id);
-    const player = team ? room.teams[team].get(socket.id) : null;
-    if (!player || !player.alive) return;
-
-    // Validate movement — anti-cheat
-    if (state.position) {
-      const check = checkMovement(player, state.position, state.velocity);
-      if (!check.ok) {
-        player.flagCount = (player.flagCount || 0) + 1;
-        audit('cheat:movement', {
-          socketId: socket.id, name: player.name,
-          reason: check.reason, flagCount: player.flagCount, dist: check.dist,
-        });
-        // Kick after 5 flags
-        if (player.flagCount >= 5) {
-          socket.emit('kicked', { reason: 'Anti-cheat: movement violation' });
-          socket.disconnect();
-        } else if (player.position) {
-          // Reconciliation: tell the client where the server actually has
-          // them so their local prediction can snap back instead of
-          // silently drifting out of sync with what everyone else (and hit
-          // detection) sees. If we don't have a prior known-good position
-          // yet (e.g. their very first update was malformed), there's
-          // nothing sane to correct to — the client will just try again.
-          socket.emit('positionCorrection', { position: player.position });
-        }
-        return; // reject this update
-      }
-      player.position = state.position;
-      if (state.velocity) player.velocity = state.velocity;
-      if (typeof state.elevation === 'number' && isFinite(state.elevation)) {
-        player.elevation = clampNum(state.elevation, 0, 200);
-      }
-
-      const now = Date.now();
-      player.history = player.history || [];
-      player.history.push({ t: now, position: player.position });
-      // Prune anything older than our rewind window so this can't grow
-      // unbounded over a long match.
-      while (player.history.length > 1 && now - player.history[0].t > ARENA_HISTORY_WINDOW_MS) {
-        player.history.shift();
-      }
-    }
-
-    // NEVER trust score from client — score comes from cubeSliced events
-    // evoStage is server-controlled too
-    room.lastActivity = Date.now();
-
-    socket.to(room.code).emit('remoteState', {
-      id:       socket.id,
-      team:     player.team,
-      position: player.position,
-      velocity: player.velocity,
-      evoStage: player.evoStage,
-      score:    player.score,
-      alive:    player.alive,
-      elevation: player.elevation || 0,
-    });
-  });
-
-  // ── Server-authoritative scoring ─────────────────────────────────────────
-  socket.on('cubeSliced', (event) => {
-    const pData = players.get(socket.id);
-    if (!pData) return;
-    const room = rooms.get(pData.roomCode);
-    if (!room || room.state !== 'playing') return;
-    const team = teamOfSocket(room, socket.id);
-    const player = team ? room.teams[team].get(socket.id) : null;
-    if (!player || !player.alive) return;
-
-    // Server calculates score — never trusting client score
-    const { delta, valid } = calculateScoreDelta(event, player);
-    if (!valid) {
-      audit('cheat:score', { socketId: socket.id, name: player.name, event });
-      return;
-    }
-
-    player.score += delta;
-
-    // Check evo stage based on server score
-    const newEvo = getEvoStage(player.score);
-    if (newEvo !== player.evoStage) {
-      player.evoStage = newEvo;
-      io.to(room.code).emit('remoteEvo', { playerId: socket.id, stage: newEvo });
-    }
-
-    // Tell the scoring player their authoritative score
-    socket.emit('scoreUpdate', { score: player.score, delta, evoStage: player.evoStage });
-
-    // Tell others the updated score
-    socket.to(room.code).emit('remoteScore', { playerId: socket.id, team: player.team, score: player.score });
-  });
-
-  socket.on('playerDied', () => {
-    const pData = players.get(socket.id);
-    if (!pData) return;
-    const room = rooms.get(pData.roomCode);
-    if (!room || room.state !== 'playing') return;
-    const team = teamOfSocket(room, socket.id);
-    const player = team ? room.teams[team].get(socket.id) : null;
-    if (!player) return;
-
-    player.alive = false;
-    io.to(room.code).emit('playerDied', { playerId: socket.id, team: player.team });
-
-    checkTeamElimination(room);
-  });
-
-  socket.on('playerShoot', (data = {}) => {
-    const pData = players.get(socket.id);
-    if (!pData) return;
-    const room = rooms.get(pData.roomCode);
-    if (!room || room.state !== 'playing') return;
-    const team = teamOfSocket(room, socket.id);
-    const player = team ? room.teams[team].get(socket.id) : null;
-    if (!player || !player.alive) return;
-
-    // Rate limit — max ~6 shots/sec per player
-    const now = Date.now();
-    if (now - (player._lastShot || 0) < 150) return;
-    player._lastShot = now;
-
-    if (!isFinite(data.x) || !isFinite(data.y) || !isFinite(data.dx) || !isFinite(data.dy)) return;
-    const dirLen = Math.hypot(data.dx, data.dy);
-    if (dirLen < 0.01) return;
-    const dx = data.dx / dirLen, dy = data.dy / dirLen;
-    const shooterElevation = (typeof data.elevation === 'number' && isFinite(data.elevation))
-      ? clampNum(data.elevation, 0, 200) : 0;
-
-    socket.to(room.code).emit('remoteShoot', {
-      playerId: socket.id,
-      team: player.team,
-      x: +data.x, y: +data.y,
-      dx, dy,
-      elevation: shooterElevation,
-    });
-
-    // ── Server-authoritative hit detection (lag-compensated) ──────────────
-    // Rewind each opponent to where they were, from the shooter's point of
-    // view, when this shot actually left their gun — instead of trusting
-    // whichever client claims to have been hit.
-    const shooterLatencyMs = Math.min((player.ping || 0) / 2, MAX_REWIND_MS);
-    const rewindTime = now - shooterLatencyMs;
-    const enemyTeam = team === 'A' ? 'B' : 'A';
-    const mapId = room.map || 'neon-grid';
-
-    for (const opponent of room.teams[enemyTeam].values()) {
-      if (!opponent.alive) continue;
-      const rewoundPos = getRewoundPosition(opponent, rewindTime);
-      if (!rewoundPos) continue;
-      if (!rayHitsPoint(+data.x, +data.y, dx, dy, rewoundPos)) continue;
-
-      // A wall or un-vaulted crate between the shooter and this target
-      // blocks the hit — cover actually matters.
-      const targetElevation = typeof opponent.elevation === 'number' ? opponent.elevation : 0;
-      if (shotBlockedByObstacles(mapId, +data.x, +data.y, rewoundPos.x, rewoundPos.y, shooterElevation, targetElevation)) continue;
-
-      const dmg = randomDamage();
-      opponent.hp = Math.max(0, (typeof opponent.hp === 'number' ? opponent.hp : 150) - dmg);
-      io.to(room.code).emit('remoteHealth', { playerId: opponent.id, hp: opponent.hp, byId: socket.id });
-
-      if (opponent.hp <= 0) {
-        opponent.alive = false;
-        io.to(room.code).emit('playerDied', { playerId: opponent.id, team: opponent.team });
-        checkTeamElimination(room);
-      }
-      break; // one target hit per shot
-    }
-  });
-
-  // ── "Summon car" ultimate ability ────────────────────────────────────────
-  // Same lag-compensated rewind pattern as playerShoot, but: fixed 100
-  // damage, wider hit radius, crosses the whole arena, ignores crates
-  // (only walls stop it), and gated behind a long per-player cooldown.
-  socket.on('summonCar', (data = {}) => {
-    const pData = players.get(socket.id);
-    if (!pData) return;
-    const room = rooms.get(pData.roomCode);
-    if (!room || room.state !== 'playing') return;
-    const team = teamOfSocket(room, socket.id);
-    const player = team ? room.teams[team].get(socket.id) : null;
-    if (!player || !player.alive) return;
-
-    const now = Date.now();
-    const elapsed = now - (player.lastCarSummonAt || 0);
-    if (elapsed < CAR_COOLDOWN_MS) {
-      socket.emit('carSummonDenied', { remainingMs: CAR_COOLDOWN_MS - elapsed });
-      return;
-    }
-
-    if (!isFinite(data.x) || !isFinite(data.y) || !isFinite(data.dx) || !isFinite(data.dy)) return;
-    const dirLen = Math.hypot(data.dx, data.dy);
-    if (dirLen < 0.01) return;
-    const dx = data.dx / dirLen, dy = data.dy / dirLen;
-    const shooterElevation = (typeof data.elevation === 'number' && isFinite(data.elevation))
-      ? clampNum(data.elevation, 0, 200) : 0;
-
-    player.lastCarSummonAt = now;
-
-    socket.to(room.code).emit('carSummoned', {
-      playerId: socket.id,
-      team: player.team,
-      x: +data.x, y: +data.y,
-      dx, dy,
-      elevation: shooterElevation,
-    });
-
-    const enemyTeam = team === 'A' ? 'B' : 'A';
-    const mapId = room.map || 'neon-grid';
-    const shooterLatencyMs = Math.min((player.ping || 0) / 2, MAX_REWIND_MS);
-    const rewindTime = now - shooterLatencyMs;
-
-    for (const opponent of room.teams[enemyTeam].values()) {
-      if (!opponent.alive) continue;
-      const rewoundPos = getRewoundPosition(opponent, rewindTime);
-      if (!rewoundPos) continue;
-      if (!rayHitsPoint(+data.x, +data.y, dx, dy, rewoundPos, CAR_HIT_RADIUS, CAR_RANGE)) continue;
-      if (carBlockedByWalls(mapId, +data.x, +data.y, rewoundPos.x, rewoundPos.y)) continue;
-
-      opponent.hp = Math.max(0, (typeof opponent.hp === 'number' ? opponent.hp : 150) - CAR_DAMAGE);
-      io.to(room.code).emit('remoteHealth', { playerId: opponent.id, hp: opponent.hp, byId: socket.id });
-
-      if (opponent.hp <= 0) {
-        opponent.alive = false;
-        io.to(room.code).emit('playerDied', { playerId: opponent.id, team: opponent.team });
-        checkTeamElimination(room);
-      }
-      break; // one target hit per car
-    }
-  });
-
-  // Legacy client-reported damage — no longer trusted (see server-side
-  // hit detection in playerShoot above). Kept as a no-op so an older cached
-  // client sending this doesn't error, but it never touches HP anymore.
-  socket.on('playerDamaged', () => {});
-
-  // (retained below for reference to the old handler shape — unused)
-  socket.on('bombExploded', (data) => {
-    const pData = players.get(socket.id);
-    if (!pData) return;
-    // Only relay — server doesn't trust position from client
-    socket.to(pData.roomCode).emit('bombExploded', { fromId: socket.id });
-  });
-
-  socket.on('heartCollected', () => {
-    const pData = players.get(socket.id);
-    if (!pData) return;
-    socket.to(pData.roomCode).emit('heartCollected', { fromId: socket.id });
-  });
-
-  socket.on('ping', (ts) => {
-    if (typeof ts !== 'number' || !isFinite(ts)) return;
-    socket.emit('pong', ts);
-    const pData = players.get(socket.id);
-    if (pData) {
-      const room = rooms.get(pData.roomCode);
-      if (room) {
-        const team = teamOfSocket(room, socket.id);
-        const player = team ? room.teams[team].get(socket.id) : null;
-        if (player) player.ping = Math.min(Date.now() - ts, 9999);
-      }
-    }
-  });
-
-  socket.on('disconnect', () => {
-    console.log(`[-] ${socket.id} disconnected`);
-    audit('disconnect', { socketId: socket.id });
-    queue.delete(socket.id);
-    socketMeta.delete(socket.id);
-    leaveRoom(socket.id);
-  });
-});
 // ─── Secret unlock endpoint ─────────────────────────────────────────────────────
 // Client sends { username, secretId } once it detects the actual hidden
 // trigger in-game (see secrets.js). Server is the sole source of truth for
@@ -2168,6 +994,180 @@ app.post('/api/coins/earn', async (req, res) => {
   res.json({ success: !!credited, balance });
 });
 
+// ─── Leaderboard (server-authoritative — keeps each player's best score) ───
+// Same shape as the wallet/streak storage above: Firestore is the real
+// store (`leaderboard/{username}`, one doc per player), falling back to a
+// local JSON file when FIREBASE_SERVICE_ACCOUNT_KEY isn't set. The client
+// (script.js, at game-over) reports whatever score it just got, but this is
+// deliberately not "trust and overwrite" — a submission only ever raises a
+// player's stored best, it can never lower it, so a stale or replayed call
+// can't erase a real high score.
+const LEADERBOARD_FILE = path.join(__dirname, 'leaderboard-local.json');
+let leaderboardLocal = {}; // { username: { score, updatedAt } } — fallback only
+try {
+  if (fs.existsSync(LEADERBOARD_FILE)) {
+    leaderboardLocal = JSON.parse(fs.readFileSync(LEADERBOARD_FILE, 'utf8'));
+  }
+} catch (e) {
+  console.warn('[leaderboard] could not load leaderboard-local.json — starting fresh:', e.message);
+  leaderboardLocal = {};
+}
+function saveLeaderboardLocal() {
+  try {
+    fs.writeFileSync(LEADERBOARD_FILE, JSON.stringify(leaderboardLocal));
+  } catch (e) {
+    console.warn('[leaderboard] could not persist leaderboard-local.json:', e.message);
+  }
+}
+
+// Anything above this is bogus — nowhere near reachable by legitimate play —
+// so it's rejected outright rather than silently capped.
+const LEADERBOARD_MAX_SCORE = 5000000;
+const LEADERBOARD_MAX_CALLS_PER_WINDOW = 20;
+const LEADERBOARD_WINDOW_MS = 10 * 60 * 1000; // 10 minutes
+const leaderboardRateBuckets = new Map(); // username → { count, resetAt }
+
+function checkLeaderboardRate(username) {
+  const now = Date.now();
+  let bucket = leaderboardRateBuckets.get(username);
+  if (!bucket || now > bucket.resetAt) {
+    bucket = { count: 0, resetAt: now + LEADERBOARD_WINDOW_MS };
+    leaderboardRateBuckets.set(username, bucket);
+  }
+  bucket.count++;
+  return bucket.count <= LEADERBOARD_MAX_CALLS_PER_WINDOW;
+}
+
+async function submitLeaderboardScore(username, score) {
+  if (db) {
+    try {
+      const ref = db.collection('leaderboard').doc(username);
+      return await db.runTransaction(async (t) => {
+        const doc = await t.get(ref);
+        const current = doc.exists ? (doc.data().score || 0) : 0;
+        if (score <= current) return { updated: false, best: current };
+        t.set(ref, {
+          username, score,
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        }, { merge: true });
+        return { updated: true, best: score };
+      });
+    } catch (e) {
+      console.error('[leaderboard] Firestore write failed, falling back to local file:', e.message);
+    }
+  }
+  const current = (leaderboardLocal[username] && leaderboardLocal[username].score) || 0;
+  if (score <= current) return { updated: false, best: current };
+  leaderboardLocal[username] = { score, updatedAt: Date.now() };
+  saveLeaderboardLocal();
+  return { updated: true, best: score };
+}
+
+async function getTopLeaderboard(limit) {
+  if (db) {
+    try {
+      const snap = await db.collection('leaderboard').orderBy('score', 'desc').limit(limit).get();
+      return snap.docs.map(d => ({ username: d.data().username, score: d.data().score || 0 }));
+    } catch (e) {
+      console.error('[leaderboard] Firestore read failed, falling back to local file:', e.message);
+    }
+  }
+  return Object.entries(leaderboardLocal)
+    .map(([username, v]) => ({ username, score: v.score || 0 }))
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit);
+}
+
+// How many players currently rank above a given score, i.e. what place that
+// score would hold on the board right now. Uses Firestore's count()
+// aggregation so this doesn't have to pull every document down just to
+// count them.
+async function getLeaderboardRank(score) {
+  if (db) {
+    try {
+      const [aboveSnap, totalSnap] = await Promise.all([
+        db.collection('leaderboard').where('score', '>', score).count().get(),
+        db.collection('leaderboard').count().get(),
+      ]);
+      return { rank: aboveSnap.data().count + 1, totalPlayers: totalSnap.data().count };
+    } catch (e) {
+      console.error('[leaderboard] rank query failed, falling back to local file:', e.message);
+    }
+  }
+  const scores = Object.values(leaderboardLocal).map(v => v.score || 0);
+  const above = scores.filter(s => s > score).length;
+  return { rank: above + 1, totalPlayers: scores.length };
+}
+
+// Submit a run's score. Only updates the stored value if it beats the
+// player's current best.
+app.post('/api/leaderboard/submit', async (req, res) => {
+  const { username, score } = req.body || {};
+  if (!isValidName(username)) {
+    return res.status(400).json({ error: 'Invalid username.' });
+  }
+  const s = Math.floor(Number(score));
+  if (!Number.isFinite(s) || s < 0 || s > LEADERBOARD_MAX_SCORE) {
+    audit('leaderboard:rejected', { username: sanitizeText(username, 24), score, reason: 'out_of_bounds' });
+    return res.status(400).json({ error: 'Invalid score.' });
+  }
+  if (!checkLeaderboardRate(username)) {
+    audit('leaderboard:rateLimited', { username: sanitizeText(username, 24), score: s });
+    return res.status(429).json({ error: 'Too many submissions — slow down.' });
+  }
+  try {
+    // Only ever raises the stored best (see submitLeaderboardScore) — a
+    // lower score than what's already saved is accepted (so the endpoint
+    // doesn't error out) but leaves the stored value untouched, and the
+    // rank returned always reflects the player's true best, not this run.
+    const result = await submitLeaderboardScore(username, s);
+    const rankInfo = await getLeaderboardRank(result.best);
+    res.json({ success: true, ...result, ...rankInfo });
+  } catch (e) {
+    console.error('[leaderboard] submit error:', e.message);
+    res.status(500).json({ error: 'Leaderboard submit failed.' });
+  }
+});
+
+// Standalone rank lookup — e.g. for re-checking a rank without submitting
+// a new score, or for a UI that wants to show rank separately from submit.
+app.get('/api/leaderboard/rank/:username', async (req, res) => {
+  const username = req.params.username;
+  if (!isValidName(username)) {
+    return res.status(400).json({ error: 'Invalid username.' });
+  }
+  try {
+    let best = 0;
+    if (db) {
+      const doc = await db.collection('leaderboard').doc(username).get();
+      best = doc.exists ? (doc.data().score || 0) : 0;
+    } else {
+      best = (leaderboardLocal[username] && leaderboardLocal[username].score) || 0;
+    }
+    const rankInfo = await getLeaderboardRank(best);
+    res.json({ username, best, ...rankInfo });
+  } catch (e) {
+    console.error('[leaderboard] rank lookup error:', e.message);
+    res.status(500).json({ error: 'Leaderboard rank lookup failed.' });
+  }
+});
+
+// Public top-N read — no auth required, this is meant to be shown to
+// everyone (guests included), same as any in-game leaderboard screen.
+app.get('/api/leaderboard', async (req, res) => {
+  let limit = parseInt(req.query.limit, 10);
+  if (!Number.isInteger(limit) || limit < 1) limit = 50;
+  limit = Math.min(limit, 100);
+  try {
+    const top = await getTopLeaderboard(limit);
+    res.json({ leaderboard: top });
+  } catch (e) {
+    console.error('[leaderboard] read error:', e.message);
+    res.status(500).json({ error: 'Leaderboard read failed.' });
+  }
+});
+
+
 // ─── Daily streak check-in — account-wide, not per-device ───────────────────
 // Called once per session by streak-system.js. This is the source of truth
 // for "has today's reward already been claimed" and "what day of the 7-day
@@ -2256,8 +1256,7 @@ app.get('/', (_, res) => res.sendFile(path.join(__dirname, 'intro.html')));
 
 // ─── Health / stats ───────────────────────────────────────────────────────────
 app.get('/health', (_, res) => res.json({
-  rooms: rooms.size, players: players.size,
-  queue: queue.size, uptime: process.uptime(),
+  uptime: process.uptime(),
 }));
 
 app.get('/stats', (req, res) => {
@@ -2267,15 +1266,7 @@ app.get('/stats', (req, res) => {
     return res.status(403).json({ error: 'Forbidden' });
   }
   res.json({
-    rooms:   rooms.size,
-    players: players.size,
-    queue:   { total: queue.size },
-    uptime:  process.uptime(),
-    roomList: [...rooms.values()].map(r => ({
-      code: r.code, mode: r.mode, state: r.state, teamSize: r.teamSize,
-      players: r.teams.A.size + r.teams.B.size,
-      age: Math.floor((Date.now() - r.createdAt) / 1000),
-    })),
+    uptime: process.uptime(),
   });
 });
 
@@ -2287,18 +1278,6 @@ app.get('/audit', (req, res) => {
   }
   res.json(auditLog.slice(-200));
 });
-
-// ─── Idle room cleanup ────────────────────────────────────────────────────────
-setInterval(() => {
-  const now = Date.now();
-  rooms.forEach((room, code) => {
-    if (now - room.lastActivity > ROOM_TTL) {
-      room.players.forEach((_, sid) => players.delete(sid));
-      rooms.delete(code);
-      console.log(`[clean] removed idle room ${code}`);
-    }
-  });
-}, 5 * 60 * 1000);
 
 // ─── Start ────────────────────────────────────────────────────────────────────
 server.listen(PORT, () => {
