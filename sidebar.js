@@ -35,17 +35,14 @@
     });
 
     // ── Hide the whole sidebar during actual gameplay ─────────────────────
-    // Same approach as profile-avatar.js: watch .menu--main's visibility.
+    // .menu elements never use display:none (they fade via opacity/visibility),
+    // so we use the game's own isInGame() state instead of watching CSS.
     const sidebar = document.querySelector(".cg-sidebar");
-    const mainMenu = document.querySelector(".menu--main");
-    if (sidebar && mainMenu) {
+    if (sidebar && typeof isInGame === "function") {
       function syncSidebarVisibility() {
-        const d = getComputedStyle(mainMenu).display;
-        sidebar.style.display = d === "none" ? "none" : "";
+        sidebar.style.display = isInGame() ? "none" : "";
       }
-      const observer = new MutationObserver(syncSidebarVisibility);
-      observer.observe(mainMenu, { attributes: true, attributeFilter: ["style", "class"] });
-      setInterval(syncSidebarVisibility, 500);
+      setInterval(syncSidebarVisibility, 200);
       syncSidebarVisibility();
     }
   });
