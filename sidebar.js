@@ -36,14 +36,37 @@
     wireProgressionButton("[data-cg-progress]", "prog-menu-toggle");
     wireProgressionButton("[data-cg-missions]", "prog-mission-toggle");
 
-    // Home -> jump back to the main menu using the game's own "MAIN MENU" buttons
+    // Home -> always return to the main menu, no matter what's currently
+    // open (mid-game paused/score screen, Shop, Leaderboard, Progress
+    // panel, or Missions page).
     if (homeBtn) {
       homeBtn.addEventListener("click", (e) => {
         e.preventDefault();
-        const mainMenuBtn = document.querySelector(
-          ".menu-btn--pause, .menu-btn--score"
-        );
-        if (mainMenuBtn) mainMenuBtn.click();
+
+        // Close any open overlays first so they don't stay stuck on top.
+        document.getElementById("shopOverlay")?.classList.remove("open");
+        document.getElementById("passOverlay")?.classList.remove("open");
+        if (window.CGLeaderboard) window.CGLeaderboard.close();
+        const progMenu = document.getElementById("prog-menu");
+        if (progMenu && progMenu.classList.contains("prog-menu-open")) {
+          document.getElementById("prog-menu-toggle")?.click();
+        }
+        const missionPage = document.getElementById("prog-mission-page");
+        if (missionPage && missionPage.classList.contains("prog-mission-page-open")) {
+          document.getElementById("prog-mission-toggle")?.click();
+        }
+
+        // Force the main menu state directly (script.js's setActiveMenu /
+        // MENU_MAIN) rather than clicking a specific pause/score button,
+        // since that button may not match whatever's actually on screen.
+        if (typeof setActiveMenu === "function" && typeof MENU_MAIN !== "undefined") {
+          setActiveMenu(MENU_MAIN);
+        } else {
+          const mainMenuBtn = document.querySelector(
+            ".menu-btn--pause, .menu-btn--score"
+          );
+          if (mainMenuBtn) mainMenuBtn.click();
+        }
         navLinks.classList.remove("cg-open");
       });
     }
