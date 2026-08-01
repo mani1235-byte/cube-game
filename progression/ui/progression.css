@@ -70,9 +70,9 @@
   font-weight: 700; font-size: 13px;
 }
 .prog-menu {
-  position: fixed; bottom: 60px; left: 14px; z-index: 9000;
+  position: fixed; bottom: 60px; left: 14px; z-index: 10050;
   display: flex; flex-direction: column; gap: 10px;
-  max-height: 70vh; overflow-y: auto;
+  max-height: calc(100vh - 130px); overflow-y: auto;
   transition: opacity 0.25s ease, transform 0.25s ease;
 }
 .prog-menu-closed { opacity: 0; pointer-events: none; transform: translateY(10px); }
@@ -102,7 +102,7 @@
 
 /* ---- Missions: full-screen page (Brawl-Stars-style), not a small panel ---- */
 .prog-mission-page {
-  position: fixed; inset: 0; z-index: 9800;
+  position: fixed; inset: 0; z-index: 10050;
   background: rgba(8, 9, 16, 0.96);
   color: #fff; display: flex; flex-direction: column;
   transition: opacity 0.2s ease;

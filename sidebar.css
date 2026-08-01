@@ -84,13 +84,15 @@
 
 .cg-sidebar-toggle {
     display: none;
-    background: transparent;
-    border: none;
-    color: #fff;
-    font-size: 24px;
-    line-height: 1;
-    cursor: pointer;
-    padding: 4px 8px;
+}
+
+/* The Progress / Missions floating buttons now live inside the sidebar
+   (see sidebar.js, which forwards clicks to these) — hide the originals
+   that progression-menu.js / mission-ui.js append to <body>, so they don't
+   show up twice. The panels/pages they open are untouched. */
+#prog-menu-toggle,
+#prog-mission-toggle {
+    display: none !important;
 }
 
 /* Profile widget now sits inside the bar, pushed to the far right */
@@ -108,22 +110,12 @@
         padding: 10px 16px;
     }
 
-    .cg-sidebar-toggle {
-        display: block;
-        margin-left: auto;
-        order: 1;
-    }
-
     .cg-nav-links {
-        display: none;
+        display: flex;
         flex-direction: column;
         align-items: stretch;
         width: 100%;
         order: 3;
-    }
-
-    .cg-nav-links.cg-open {
-        display: flex;
     }
 
     .cg-dropdown-menu {

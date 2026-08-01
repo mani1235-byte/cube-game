@@ -15,7 +15,7 @@ window.CGLeaderboard = (function () {
   // Reports a run's score at game-over (see server.js's /api/leaderboard/submit,
   // which only ever raises the player's stored best — never lowers it).
   // Returns a promise resolving to { updated, best, rank, totalPlayers },
-  // or null if the report failed (offline, rate-limited, guest, etc) — the
+  // or null if the report failed (offline, rate-limited, etc) — the
   // caller should treat null as "couldn't get a rank right now" and just
   // hide the rank UI rather than error out.
   async function submitScore(username, score) {
@@ -54,7 +54,7 @@ window.CGLeaderboard = (function () {
   function currentUsername() {
     try {
       const user = JSON.parse(localStorage.getItem('cg_current_user'));
-      return user && !user.isGuest ? user.username : null;
+      return user ? user.username : null;
     } catch (_) { return null; }
   }
 

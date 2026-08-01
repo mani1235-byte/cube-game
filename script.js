@@ -1769,20 +1769,20 @@ function endGame() {
             localStorage.setItem("cg_users", JSON.stringify(users));
           }
         } catch(e) {}
-        // Report this run's score to the global leaderboard (see
-        // server.js's /api/leaderboard/submit — server only keeps it if
-        // it beats the player's stored best, a lower score never
-        // overwrites it) and show the resulting rank on the game-over
-        // screen. Guests aren't reported since there's no stable identity
-        // to rank them by.
-        try {
-          if (window.CGLeaderboard) {
-            window.CGLeaderboard.submitScore(user.username, finalScore).then((info) => {
-              window.CGLeaderboard.renderRankLabel(document.getElementById("scoreRankLbl"), info);
-            });
-          }
-        } catch(e) {}
       }
+      // Report this run's score to the global leaderboard (see
+      // server.js's /api/leaderboard/submit — server only keeps it if
+      // it beats the player's stored best, a lower score never
+      // overwrites it) and show the resulting rank on the game-over
+      // screen. Guests are reported too, under whichever nickname they
+      // picked on the guest screen, so their runs show up on the board.
+      try {
+        if (window.CGLeaderboard) {
+          window.CGLeaderboard.submitScore(user.username, finalScore).then((info) => {
+            window.CGLeaderboard.renderRankLabel(document.getElementById("scoreRankLbl"), info);
+          });
+        }
+      } catch(e) {}
     }
   } catch(e) {}
   // Trophy / Season Pass update
