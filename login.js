@@ -157,7 +157,19 @@ function simpleHash(str) {
 }
 
 // ── Redirect to game ──────────────────────────────────────────────────────
+// Instead of jumping straight into the game, ask the player once whether
+// they want to play in the browser or grab the app — see the
+// #platformOverlay modal in login.html.
 function goToGame() {
+  const overlay = document.getElementById("platformOverlay");
+  if (overlay) {
+    overlay.classList.add("open");
+  } else {
+    enterGame(); // modal not present for some reason — don't block play
+  }
+}
+
+function enterGame() {
   sessionStorage.setItem("cg_just_logged_in", "1");
   if (window.CinematicNav) {
     setTimeout(() => CinematicNav.cinematic("./index.html"), 80);
@@ -165,6 +177,23 @@ function goToGame() {
     setTimeout(() => { window.location.href = "./index.html"; }, 100);
   }
 }
+
+(function initPlatformModal() {
+  function ready(fn) {
+    if (document.readyState !== "loading") fn();
+    else document.addEventListener("DOMContentLoaded", fn);
+  }
+  ready(function () {
+    const playWebBtn = document.getElementById("btnPlayWeb");
+    const playAppBtn = document.getElementById("btnPlayApp");
+    if (playWebBtn) playWebBtn.addEventListener("click", enterGame);
+    if (playAppBtn) {
+      playAppBtn.addEventListener("click", () => {
+        window.location.href = "./downloads.html";
+      });
+    }
+  });
+})();
 
 // ── Card success flash ────────────────────────────────────────────────────
 function flashSuccess() {

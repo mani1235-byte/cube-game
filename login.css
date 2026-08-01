@@ -386,3 +386,30 @@ body {
 .btn--social:active { transform: translateY(0); }
 .btn--social:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
 .btn--social svg { flex-shrink: 0; }
+
+/* ── Platform choice modal (shown right after login/signup/guest) ────────── */
+.platform-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: rgba(5, 10, 16, 0.75);
+  backdrop-filter: blur(4px);
+  padding: 20px;
+}
+.platform-overlay.open { display: flex; }
+.platform-card {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 28px 24px;
+  text-align: center;
+}
+.platform-card .panel-desc {
+  font-size: 1rem;
+  color: var(--text);
+  font-weight: bold;
+  letter-spacing: 0.06em;
+}

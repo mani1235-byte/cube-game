@@ -151,6 +151,21 @@
  
   </div>
  
+  <!-- Platform choice modal — shown right after a successful login/signup/guest,
+       before entering the game. See goToGame() / choosePlatform() in login.js. -->
+  <div class="platform-overlay" id="platformOverlay">
+    <div class="card platform-card">
+      <p class="panel-desc">How do you want to play?</p>
+      <button class="btn btn--primary" id="btnPlayWeb">
+        <span>🌐 PLAY IN BROWSER</span>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+      </button>
+      <button class="btn btn--ghost" id="btnPlayApp">
+        <span>📱 DOWNLOAD THE APP</span>
+      </button>
+    </div>
+  </div>
+
   <script src="./transition.js"></script>
 <script src="./login.js"></script>
 <script src="./translate.js"></script>

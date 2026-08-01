@@ -407,3 +407,5 @@ canvas {
     transition-duration: 0.01ms !important;
   }
 }
+
+.download-grid{display:flex;flex-direction:column;gap:18px;margin:20px}.download-btn{display:flex;justify-content:center;padding:18px;border-radius:16px;text-decoration:none;color:#fff;font-weight:bold}.windows{background:#0078D7}.linux{background:#555}.mac{background:#777}.android{background:#3DDC84}.tablet{background:#00a650}
