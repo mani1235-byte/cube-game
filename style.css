@@ -1254,3 +1254,7 @@ h1 {
   font-size: 0.85rem;
   color: rgba(255,255,255,0.5);
 }
+.lb-row-divider {
+  margin: 4px 0;
+  border-top: 1px dashed rgba(255,255,255,0.15);
+}

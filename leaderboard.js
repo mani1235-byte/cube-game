@@ -2,8 +2,11 @@
 // Global leaderboard: reports each run's score to the server (see
 // server.js's /api/leaderboard/submit, which only ever raises a player's
 // stored best) and renders the top scores in the #leaderboardOverlay modal
-// defined in index.html. Mirrors the fetch/base-URL pattern already used by
-// shop.js and progression/coin-system.js.
+// defined in index.html. Works the same for guests, Google-signed-in, and
+// registered players — they're all just a "username" string as far as the
+// server is concerned (see server.js's isValidName, which accepts any
+// script's letters/numbers so Google display names with accents etc. don't
+// get silently rejected).
 window.CGLeaderboard = (function () {
   const listEl    = () => document.getElementById('leaderboardList');
   const overlayEl = () => document.getElementById('leaderboardOverlay');
@@ -15,9 +18,9 @@ window.CGLeaderboard = (function () {
   // Reports a run's score at game-over (see server.js's /api/leaderboard/submit,
   // which only ever raises the player's stored best — never lowers it).
   // Returns a promise resolving to { updated, best, rank, totalPlayers },
-  // or null if the report failed (offline, rate-limited, etc) — the
-  // caller should treat null as "couldn't get a rank right now" and just
-  // hide the rank UI rather than error out.
+  // or null if the report failed (offline, rate-limited, invalid name, etc)
+  // — the caller should treat null as "couldn't get a rank right now" and
+  // just hide the rank UI rather than error out.
   async function submitScore(username, score) {
     try {
       if (!username || typeof score !== 'number' || !Number.isFinite(score) || score <= 0) return null;
@@ -27,9 +30,14 @@ window.CGLeaderboard = (function () {
         body: JSON.stringify({ username, score: Math.floor(score) }),
         keepalive: true,
       });
-      if (!res.ok) return null;
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        console.warn('[leaderboard] submit rejected:', res.status, body && body.error);
+        return null;
+      }
       return await res.json();
-    } catch (_) {
+    } catch (e) {
+      console.warn('[leaderboard] submit failed:', e.message);
       return null;
     }
   }
@@ -51,6 +59,18 @@ window.CGLeaderboard = (function () {
     return Array.isArray(data.leaderboard) ? data.leaderboard : [];
   }
 
+  // Standalone rank lookup — used for the "your rank" footer row when the
+  // current player isn't in the visible top list at all.
+  async function fetchRank(username) {
+    try {
+      const res = await fetch(`${base()}/api/leaderboard/rank/${encodeURIComponent(username)}`);
+      if (!res.ok) return null;
+      return await res.json(); // { username, best, rank, totalPlayers }
+    } catch (_) {
+      return null;
+    }
+  }
+
   function currentUsername() {
     try {
       const user = JSON.parse(localStorage.getItem('cg_current_user'));
@@ -65,7 +85,20 @@ window.CGLeaderboard = (function () {
     return `#${rank}`;
   }
 
-  function render(entries) {
+  function nameSafe(name) {
+    return String(name || '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
+  function rowHTML(rank, username, score, isYou) {
+    return `
+      <div class="lb-row${isYou ? ' lb-you' : ''}${rank <= 3 ? ' lb-top' : ''}">
+        <div class="lb-rank">${medal(rank)}</div>
+        <div class="lb-name">${nameSafe(username)}${isYou ? ' <span class="lb-you-tag">YOU</span>' : ''}</div>
+        <div class="lb-score">${(score || 0).toLocaleString()}</div>
+      </div>`;
+  }
+
+  async function render(entries) {
     const el = listEl();
     if (!el) return;
     if (!entries.length) {
@@ -73,17 +106,24 @@ window.CGLeaderboard = (function () {
       return;
     }
     const me = currentUsername();
-    el.innerHTML = entries.map((row, i) => {
-      const rank = i + 1;
-      const isYou = me && row.username === me;
-      const nameSafe = String(row.username || '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-      return `
-        <div class="lb-row${isYou ? ' lb-you' : ''}${rank <= 3 ? ' lb-top' : ''}">
-          <div class="lb-rank">${medal(rank)}</div>
-          <div class="lb-name">${nameSafe}${isYou ? ' <span class="lb-you-tag">YOU</span>' : ''}</div>
-          <div class="lb-score">${(row.score || 0).toLocaleString()}</div>
-        </div>`;
-    }).join('');
+    const meInList = me && entries.some((row) => row.username === me);
+
+    el.innerHTML = entries
+      .map((row, i) => rowHTML(i + 1, row.username, row.score, !!(me && row.username === me)))
+      .join('');
+
+    // If the current player has a saved score but isn't visible in the top
+    // list, pin their real rank at the bottom so everyone can see where
+    // they stand, not just people near the top.
+    if (me && !meInList) {
+      const info = await fetchRank(me);
+      if (info && info.best > 0) {
+        el.insertAdjacentHTML(
+          'beforeend',
+          `<div class="lb-row-divider"></div>${rowHTML(info.rank, me, info.best, true)}`
+        );
+      }
+    }
   }
 
   async function refresh() {
@@ -91,7 +131,7 @@ window.CGLeaderboard = (function () {
     if (el) el.innerHTML = `<div class="lb-loading">Loading leaderboard…</div>`;
     try {
       const entries = await fetchTop(50);
-      render(entries);
+      await render(entries);
     } catch (e) {
       if (el) el.innerHTML = `<div class="lb-empty">Couldn't load the leaderboard. Try again in a moment.</div>`;
     }
@@ -128,5 +168,5 @@ window.CGLeaderboard = (function () {
     initUI();
   }
 
-  return { submitScore, renderRankLabel, open, close, refresh };
+  return { submitScore, renderRankLabel, fetchRank, open, close, refresh };
 })();
