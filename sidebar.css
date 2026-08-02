@@ -42,12 +42,13 @@
     box-sizing: border-box;
     color: #fff;
     padding: 8px 14px;
-    display: block;
+    display: flex;
+    align-items: center;
     cursor: pointer;
     font-family: inherit;
     font-size: 14px;
     font-weight: normal;
-    line-height: normal;
+    line-height: 1;
     letter-spacing: normal;
     text-decoration: none;
     border-radius: 4px;
@@ -62,8 +63,10 @@
 }
 
 .cg-nav-icon {
-    font-size: 12px;
-    vertical-align: middle;
+    display: inline-block;
+    font-size: 14px;
+    transform: scale(0.8);
+    margin-right: 2px;
 }
 
 .cg-dropdown-menu {

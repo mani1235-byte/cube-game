@@ -8,6 +8,15 @@ const http     = require('http');
 const path     = require('path');
 const crypto   = require('crypto');
 const fs       = require('fs');
+
+// Where the local-file fallbacks (used when FIREBASE_SERVICE_ACCOUNT_KEY isn't
+// set) get written. Defaults to the app folder — which Render wipes on every
+// redeploy, same as before. If you attach a Render persistent disk, set
+// DATA_DIR to its mount path (e.g. /var/data) in the Render env vars and
+// these files will survive redeploys too. Firestore is still the real fix —
+// this is just a safety net for whichever local file is active at the time.
+const DATA_DIR = process.env.DATA_DIR || __dirname;
+try { fs.mkdirSync(DATA_DIR, { recursive: true }); } catch (_) {}
 const admin    = require('firebase-admin');
 
 const app    = express();
@@ -194,7 +203,7 @@ const SECRET_REWARDS = {
 // will reset if the service is redeployed without a mounted volume. For
 // long-lived rewards, attach a Render volume at this path (or migrate to
 // Firestore) so unlock history survives deploys.
-const SECRETS_FILE = path.join(__dirname, 'secrets-found.json');
+const SECRETS_FILE = path.join(DATA_DIR, 'secrets-found.json');
 let secretsFound = {};
 try {
   if (fs.existsSync(SECRETS_FILE)) {
@@ -349,7 +358,7 @@ app.post('/api/secret/unlock', async (req, res) => {
 // wallet-ledger.json file so the shop still works — but that file lives on
 // Render's ephemeral disk and resets on redeploy. Set the env var for real,
 // permanent memory of payments.
-const WALLET_FILE = path.join(__dirname, 'wallet-ledger.json');
+const WALLET_FILE = path.join(DATA_DIR, 'wallet-ledger.json');
 let walletLocal = {}; // { username: { coins: number, txns: [txnId, ...] } } — fallback only
 try {
   if (fs.existsSync(WALLET_FILE)) {
@@ -459,7 +468,7 @@ const SHOP_ITEM_COSTS = {
   // meaning it can only ever come from /api/secret/unlock, never bought.
 };
 
-const UNLOCKS_FILE = path.join(__dirname, 'unlocks-ledger.json');
+const UNLOCKS_FILE = path.join(DATA_DIR, 'unlocks-ledger.json');
 let unlocksLocal = {}; // { username: [itemId, ...] } — fallback only
 try {
   if (fs.existsSync(UNLOCKS_FILE)) {
@@ -574,7 +583,7 @@ async function getPaymentHistory(username) {
 // Storage: Firestore (`streaks/{username}`) when available, else a local
 // streak-ledger.json file (ephemeral on Render redeploys, same caveat as
 // the wallet fallback above).
-const STREAK_FILE = path.join(__dirname, 'streak-ledger.json');
+const STREAK_FILE = path.join(DATA_DIR, 'streak-ledger.json');
 let streakLocal = {}; // { username: { count, longest, lastCheckIn, claimedUpTo } } — fallback only
 try {
   if (fs.existsSync(STREAK_FILE)) {
@@ -1012,7 +1021,7 @@ app.post('/api/coins/earn', async (req, res) => {
 // deliberately not "trust and overwrite" — a submission only ever raises a
 // player's stored best, it can never lower it, so a stale or replayed call
 // can't erase a real high score.
-const LEADERBOARD_FILE = path.join(__dirname, 'leaderboard-local.json');
+const LEADERBOARD_FILE = path.join(DATA_DIR, 'leaderboard-local.json');
 let leaderboardLocal = {}; // { username: { score, updatedAt } } — fallback only
 try {
   if (fs.existsSync(LEADERBOARD_FILE)) {
