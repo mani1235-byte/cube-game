@@ -14,7 +14,7 @@ const GREEN  = { r: 0xa6, g: 0xe0, b: 0x2c };
 const PINK   = { r: 0xfa, g: 0x24, b: 0x73 };
 const ORANGE = { r: 0xfe, g: 0x95, b: 0x22 };
 const RED    = { r: 0xff, g: 0x22, b: 0x22 };
-const allColors = [BLUE, GREEN, PINK, ORANGE];
+const allColors = [BLUE, GREEN, PINK, ORANGE, RED];
 
 // Hearts (normal mode only)
 const MAX_HEARTS = 3;
