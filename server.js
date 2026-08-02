@@ -251,8 +251,18 @@ function audit(type, data) {
 // ─── Input validation helpers ──────────────────────────────────────────────────
 // (Also used by the REST API below.)
 function isValidName(name) {
-  return typeof name === 'string' && name.length >= 1 && name.length <= 24
-    && /^[\w\s\-\.]+$/.test(name);
+  // \w is ASCII-only, so this used to reject any name with accented
+  // letters or non-Latin characters (é, ñ, 中, etc.) — which is exactly
+  // what Google Sign-In hands back as displayName for a lot of real
+  // players. That made isValidName() (used by the leaderboard and every
+  // other username-keyed endpoint) silently reject those submissions:
+  // the client's fetch would come back !res.ok, submitScore() would
+  // return null, and the run just never made it onto the board — no
+  // error shown to the player, it just looked like the game "forgot" them.
+  // \p{L}/\p{N} (with the /u flag) match letters/numbers in ANY script,
+  // so Google / guest / registered names all validate the same way now.
+  return typeof name === 'string' && name.trim().length >= 1 && name.length <= 24
+    && /^[\p{L}\p{N}\s\-\.']+$/u.test(name);
 }
 
 function sanitizeText(str, maxLen = 200) {
