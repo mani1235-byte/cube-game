@@ -61,6 +61,11 @@
     color: #111;
 }
 
+.cg-nav-icon {
+    font-size: 12px;
+    vertical-align: middle;
+}
+
 .cg-dropdown-menu {
     list-style: none;
     margin: 0;
