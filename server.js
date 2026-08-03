@@ -17,7 +17,6 @@ const fs       = require('fs');
 // this is just a safety net for whichever local file is active at the time.
 const DATA_DIR = process.env.DATA_DIR || __dirname;
 try { fs.mkdirSync(DATA_DIR, { recursive: true }); } catch (_) {}
-const admin    = require('firebase-admin');
 
 const app    = express();
 const server = http.createServer(app);
@@ -45,7 +44,9 @@ const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS
       'http://127.0.0.1:8080',
     ];
 
-// Firebase client config — served to the browser via /config (never in static JS)
+// Firebase client config — served to the browser via /config (never in static JS).
+// This is ONLY for Google Sign-In (login.js/firebase-auth.js) — unrelated to
+// data storage below, which now runs on Supabase instead of Firebase.
 const FIREBASE_CLIENT_CONFIG = {
   apiKey:            process.env.FIREBASE_API_KEY        || null,
   authDomain:        process.env.FIREBASE_AUTH_DOMAIN    || null,
@@ -55,27 +56,37 @@ const FIREBASE_CLIENT_CONFIG = {
   messagingSenderId: process.env.FIREBASE_SENDER_ID      || null,
 };
 
-// ─── Firebase Admin SDK — server-side Firestore access ────────────────────────
-// This is what makes payment records permanent. Everything written through
-// this (not the client SDK) bypasses firestore.rules by design — it's the
-// trusted server, same as the "server writes via Admin SDK" comments already
-// in firestore.rules for leaderboard/scores. If FIREBASE_SERVICE_ACCOUNT_KEY
-// isn't set, payments fall back to a local JSON file (see below) so the app
-// still runs, but that file resets on every Render redeploy — set the env
-// var for real persistence.
-let db = null;
-try {
-  if (process.env.FIREBASE_SERVICE_ACCOUNT_KEY) {
-    const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY);
-    admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
-    db = admin.firestore();
-    console.log('🔥 Firestore connected — payments will persist permanently.');
-  } else {
-    console.warn('⚠️  FIREBASE_SERVICE_ACCOUNT_KEY not set — payments will only persist to a local file, which Render wipes on redeploy. Set this env var for real persistence.');
+// ─── Supabase — server-side data storage ──────────────────────────────────────
+// Everything the server needs to remember permanently (wallet balances,
+// payments, unlocked items, streaks, leaderboard) lives in Supabase Postgres
+// tables now, reached over plain HTTPS via its REST API. If SUPABASE_URL /
+// SUPABASE_SERVICE_KEY aren't set, everything below falls back to local JSON
+// files (see DATA_DIR above) so the app still runs — but that data won't
+// survive a Render redeploy unless DATA_DIR points at a persistent disk.
+const SUPABASE_URL = process.env.SUPABASE_URL || null;
+const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY || null;
+const useSupabase = !!(SUPABASE_URL && SUPABASE_SERVICE_KEY);
+if (useSupabase) {
+  console.log('🟢 Supabase connected — wallet, unlocks, streaks, and leaderboard will persist permanently.');
+} else {
+  console.warn('⚠️  SUPABASE_URL/SUPABASE_SERVICE_KEY not set — data will only persist to local files, which Render wipes on redeploy. Set these env vars for real persistence.');
+}
+
+async function supabaseFetch(pathAndQuery, options = {}) {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/${pathAndQuery}`, {
+    ...options,
+    headers: {
+      apikey: SUPABASE_SERVICE_KEY,
+      Authorization: `Bearer ${SUPABASE_SERVICE_KEY}`,
+      'Content-Type': 'application/json',
+      ...(options.headers || {}),
+    },
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    throw new Error(`Supabase ${res.status}: ${body.slice(0, 300)}`);
   }
-} catch (e) {
-  console.error('❌ Firebase Admin init failed — falling back to local file storage:', e.message);
-  db = null;
+  return res.status === 204 ? null : res.json();
 }
 
 // ─── Security: Helmet headers ─────────────────────────────────────────────────
@@ -388,32 +399,32 @@ function creditWalletLocal(username, coins, txnId) {
 // (keyed by txnId, so retries/duplicate webhooks can never double-pay).
 // meta: { method: 'paypal'|'metamask', amount, currency }
 async function creditWallet(username, coins, txnId, meta = {}) {
-  if (db) {
+  if (useSupabase) {
     try {
-      const paymentRef = txnId ? db.collection('payments').doc(txnId) : db.collection('payments').doc();
-      const walletRef  = db.collection('wallets').doc(username);
-      return await db.runTransaction(async (t) => {
-        if (txnId) {
-          const paymentDoc = await t.get(paymentRef);
-          if (paymentDoc.exists) return false; // this exact payment was already recorded
-        }
-        const walletDoc = await t.get(walletRef);
-        const currentCoins = walletDoc.exists ? (walletDoc.data().coins || 0) : 0;
-        t.set(walletRef, {
-          username, coins: currentCoins + coins,
-          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-        }, { merge: true });
-        t.set(paymentRef, {
-          username, coins, txnId: txnId || null,
+      if (txnId) {
+        const existing = await supabaseFetch(`payments?txn_id=eq.${encodeURIComponent(txnId)}&select=txn_id`);
+        if (existing && existing.length) return false; // this exact payment was already recorded
+      }
+      const rows = await supabaseFetch(`wallets?username=eq.${encodeURIComponent(username)}&select=coins`);
+      const currentCoins = (rows && rows[0] && rows[0].coins) || 0;
+      await supabaseFetch('wallets', {
+        method: 'POST',
+        headers: { Prefer: 'resolution=merge-duplicates' },
+        body: JSON.stringify({ username, coins: currentCoins + coins, updated_at: new Date().toISOString() }),
+      });
+      await supabaseFetch('payments', {
+        method: 'POST',
+        body: JSON.stringify({
+          txn_id: txnId || crypto.randomUUID(),
+          username, coins,
           method:   meta.method   || 'unknown',
           amount:   meta.amount   ?? null,
           currency: meta.currency ?? null,
-          creditedAt: admin.firestore.FieldValue.serverTimestamp(),
-        });
-        return true;
+        }),
       });
+      return true;
     } catch (e) {
-      console.error('[wallet] Firestore credit failed, falling back to local file:', e.message);
+      console.error('[wallet] Supabase credit failed, falling back to local file:', e.message);
       return creditWalletLocal(username, coins, txnId);
     }
   }
@@ -421,12 +432,12 @@ async function creditWallet(username, coins, txnId, meta = {}) {
 }
 
 async function getWalletBalance(username) {
-  if (db) {
+  if (useSupabase) {
     try {
-      const doc = await db.collection('wallets').doc(username).get();
-      return doc.exists ? (doc.data().coins || 0) : 0;
+      const rows = await supabaseFetch(`wallets?username=eq.${encodeURIComponent(username)}&select=coins`);
+      return (rows && rows[0] && rows[0].coins) || 0;
     } catch (e) {
-      console.error('[wallet] Firestore read failed, falling back to local file:', e.message);
+      console.error('[wallet] Supabase read failed, falling back to local file:', e.message);
     }
   }
   return (walletLocal[username] && walletLocal[username].coins) || 0;
@@ -484,46 +495,60 @@ function saveUnlocksLocal() {
 }
 
 async function getUnlocks(username) {
-  if (db) {
+  if (useSupabase) {
     try {
-      const doc = await db.collection('unlocks').doc(username).get();
-      return doc.exists ? (doc.data().items || []) : [];
+      const rows = await supabaseFetch(`unlocks?username=eq.${encodeURIComponent(username)}&select=items`);
+      return (rows && rows[0] && rows[0].items) || [];
     } catch (e) {
-      console.error('[unlocks] Firestore read failed, falling back to local file:', e.message);
+      console.error('[unlocks] Supabase read failed, falling back to local file:', e.message);
     }
   }
   return unlocksLocal[username] || [];
 }
 
-// Atomically: verify the item exists + isn't already owned, check balance,
-// deduct, record ownership. Returns { success, balance, reason? }.
+// Verify the item exists + isn't already owned, check balance, deduct,
+// record ownership. Returns { success, balance, reason? }.
+// NOTE: this is a read-then-write over REST, same small race-condition
+// window the local-file fallback below always had (two purchases landing
+// in the same instant could both read the same starting balance) — not
+// worth a Postgres stored procedure for this app's scale/risk, but worth
+// knowing if that ever needs tightening up.
 async function debitWalletForItem(username, itemId) {
   const cost = SHOP_ITEM_COSTS[itemId];
   if (!cost) return { success: false, reason: 'unknown_item' };
 
-  if (db) {
+  if (useSupabase) {
     try {
-      const walletRef  = db.collection('wallets').doc(username);
-      const unlockRef  = db.collection('unlocks').doc(username);
-      return await db.runTransaction(async (t) => {
-        const [walletDoc, unlockDoc] = await Promise.all([t.get(walletRef), t.get(unlockRef)]);
-        const balance = walletDoc.exists ? (walletDoc.data().coins || 0) : 0;
-        const owned   = unlockDoc.exists ? (unlockDoc.data().items || []) : [];
+      const [walletRows, unlockRows] = await Promise.all([
+        supabaseFetch(`wallets?username=eq.${encodeURIComponent(username)}&select=coins`),
+        supabaseFetch(`unlocks?username=eq.${encodeURIComponent(username)}&select=items`),
+      ]);
+      const balance = (walletRows && walletRows[0] && walletRows[0].coins) || 0;
+      const owned   = (unlockRows && unlockRows[0] && unlockRows[0].items) || [];
 
-        if (owned.includes(itemId)) return { success: false, reason: 'already_owned', balance };
-        if (balance < cost) return { success: false, reason: 'insufficient_funds', balance };
+      if (owned.includes(itemId)) return { success: false, reason: 'already_owned', balance };
+      if (balance < cost) return { success: false, reason: 'insufficient_funds', balance };
 
-        const newBalance = balance - cost;
-        t.set(walletRef, { username, coins: newBalance, updatedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
-        t.set(unlockRef, { username, items: [...owned, itemId], updatedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
-        return { success: true, balance: newBalance, itemId };
-      });
+      const newBalance = balance - cost;
+      await Promise.all([
+        supabaseFetch('wallets', {
+          method: 'POST',
+          headers: { Prefer: 'resolution=merge-duplicates' },
+          body: JSON.stringify({ username, coins: newBalance, updated_at: new Date().toISOString() }),
+        }),
+        supabaseFetch('unlocks', {
+          method: 'POST',
+          headers: { Prefer: 'resolution=merge-duplicates' },
+          body: JSON.stringify({ username, items: [...owned, itemId], updated_at: new Date().toISOString() }),
+        }),
+      ]);
+      return { success: true, balance: newBalance, itemId };
     } catch (e) {
-      console.error('[wallet] Firestore debit failed, falling back to local file:', e.message);
+      console.error('[wallet] Supabase debit failed, falling back to local file:', e.message);
     }
   }
 
-  // Local-file fallback (dev / no Firestore configured)
+  // Local-file fallback (dev / no Supabase configured)
   const balance = (walletLocal[username] && walletLocal[username].coins) || 0;
   const owned   = unlocksLocal[username] || [];
   if (owned.includes(itemId)) return { success: false, reason: 'already_owned', balance };
@@ -561,13 +586,12 @@ function checkEarnRate(username) {
   return bucket.count <= EARN_MAX_CALLS_PER_WINDOW;
 }
 
-// Full payment history for a player — used for support/dispute lookups
-// (e.g. "I paid but didn't get coins") rather than by the game client.
 async function getPaymentHistory(username) {
-  if (!db) return null; // history isn't available in local-file fallback mode
-  const snap = await db.collection('payments').where('username', '==', username)
-    .orderBy('creditedAt', 'desc').limit(100).get();
-  return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  if (!useSupabase) return null; // history isn't available in local-file fallback mode
+  const rows = await supabaseFetch(
+    `payments?username=eq.${encodeURIComponent(username)}&select=*&order=credited_at.desc&limit=100`
+  );
+  return rows || [];
 }
 
 // ─── Daily streak ledger (account-wide, server clock, cross-device) ────────
@@ -657,21 +681,26 @@ function advanceStreak(prev, today) {
 async function checkInStreak(username) {
   const today = todayUTCKey();
 
-  if (db) {
+  if (useSupabase) {
     try {
-      const ref = db.collection('streaks').doc(username);
-      const result = await db.runTransaction(async (t) => {
-        const doc = await t.get(ref);
-        const prev = doc.exists ? doc.data() : {};
-        const { streak, alreadyCheckedIn } = advanceStreak(prev, today);
-        if (!alreadyCheckedIn) {
-          t.set(ref, { username, ...streak, updatedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
-        }
-        return { streak, alreadyCheckedIn };
-      });
-      return finishStreakResult(result);
+      const rows = await supabaseFetch(`streaks?username=eq.${encodeURIComponent(username)}&select=*`);
+      const row = rows && rows[0];
+      const prev = row ? { count: row.count, longest: row.longest, lastCheckIn: row.last_check_in, claimedUpTo: row.claimed_up_to } : {};
+      const { streak, alreadyCheckedIn } = advanceStreak(prev, today);
+      if (!alreadyCheckedIn) {
+        await supabaseFetch('streaks', {
+          method: 'POST',
+          headers: { Prefer: 'resolution=merge-duplicates' },
+          body: JSON.stringify({
+            username, count: streak.count, longest: streak.longest,
+            last_check_in: streak.lastCheckIn, claimed_up_to: streak.claimedUpTo,
+            updated_at: new Date().toISOString(),
+          }),
+        });
+      }
+      return finishStreakResult({ streak, alreadyCheckedIn });
     } catch (e) {
-      console.error('[streak] Firestore check-in failed, falling back to local file:', e.message);
+      console.error('[streak] Supabase check-in failed, falling back to local file:', e.message);
     }
   }
 
@@ -689,21 +718,26 @@ async function checkInStreak(username) {
 // list so the client can grant each one's reward. Calling this with nothing
 // pending just returns an empty `claimed` array — harmless no-op.
 async function claimStreak(username) {
-  if (db) {
+  if (useSupabase) {
     try {
-      const ref = db.collection('streaks').doc(username);
-      const result = await db.runTransaction(async (t) => {
-        const doc = await t.get(ref);
-        const prev = doc.exists ? doc.data() : {};
-        const claim = buildClaim(prev);
-        if (claim.claimed.length) {
-          t.set(ref, { claimedUpTo: claim.claimedUpTo, updatedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
-        }
-        return claim;
-      });
-      return result;
+      const rows = await supabaseFetch(`streaks?username=eq.${encodeURIComponent(username)}&select=*`);
+      const row = rows && rows[0];
+      const prev = row ? { count: row.count, longest: row.longest, lastCheckIn: row.last_check_in, claimedUpTo: row.claimed_up_to } : {};
+      const claim = buildClaim(prev);
+      if (claim.claimed.length) {
+        await supabaseFetch('streaks', {
+          method: 'POST',
+          headers: { Prefer: 'resolution=merge-duplicates' },
+          body: JSON.stringify({
+            username, count: prev.count || 0, longest: prev.longest || 0,
+            last_check_in: prev.lastCheckIn || null, claimed_up_to: claim.claimedUpTo,
+            updated_at: new Date().toISOString(),
+          }),
+        });
+      }
+      return claim;
     } catch (e) {
-      console.error('[streak] Firestore claim failed, falling back to local file:', e.message);
+      console.error('[streak] Supabase claim failed, falling back to local file:', e.message);
     }
   }
 
@@ -747,24 +781,29 @@ async function unlockStreakDays(username, days) {
   days = Math.max(1, Math.min(STREAK_UNLOCK_MAX_DAYS, Math.trunc(days)));
   const today = todayUTCKey();
 
-  if (db) {
+  if (useSupabase) {
     try {
-      const ref = db.collection('streaks').doc(username);
-      const streak = await db.runTransaction(async (t) => {
-        const doc = await t.get(ref);
-        const prev = doc.exists ? doc.data() : {};
-        const next = {
-          count: (prev.count || 0) + days,
-          claimedUpTo: prev.claimedUpTo || 0,
-          lastCheckIn: today, // treat the skip as covering today too, so tomorrow's normal check-in still sees a 1-day gap
-        };
-        next.longest = Math.max(prev.longest || 0, next.count);
-        t.set(ref, { username, ...next, updatedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
-        return next;
+      const rows = await supabaseFetch(`streaks?username=eq.${encodeURIComponent(username)}&select=*`);
+      const row = rows && rows[0];
+      const prev = row ? { count: row.count, longest: row.longest, claimedUpTo: row.claimed_up_to } : {};
+      const next = {
+        count: (prev.count || 0) + days,
+        claimedUpTo: prev.claimedUpTo || 0,
+        lastCheckIn: today,
+      };
+      next.longest = Math.max(prev.longest || 0, next.count);
+      await supabaseFetch('streaks', {
+        method: 'POST',
+        headers: { Prefer: 'resolution=merge-duplicates' },
+        body: JSON.stringify({
+          username, count: next.count, longest: next.longest,
+          last_check_in: next.lastCheckIn, claimed_up_to: next.claimedUpTo,
+          updated_at: new Date().toISOString(),
+        }),
       });
-      return finishStreakResult({ streak, alreadyCheckedIn: false });
+      return finishStreakResult({ streak: next, alreadyCheckedIn: false });
     } catch (e) {
-      console.error('[streak] Firestore unlock failed, falling back to local file:', e.message);
+      console.error('[streak] Supabase unlock failed, falling back to local file:', e.message);
     }
   }
 
@@ -1014,13 +1053,10 @@ app.post('/api/coins/earn', async (req, res) => {
 });
 
 // ─── Leaderboard (server-authoritative — keeps each player's best score) ───
-// Same shape as the wallet/streak storage above: Firestore is the real
-// store (`leaderboard/{username}`, one doc per player), falling back to a
-// local JSON file when FIREBASE_SERVICE_ACCOUNT_KEY isn't set. The client
-// (script.js, at game-over) reports whatever score it just got, but this is
-// deliberately not "trust and overwrite" — a submission only ever raises a
-// player's stored best, it can never lower it, so a stale or replayed call
-// can't erase a real high score.
+// A submission only ever raises a player's stored best, never lowers it —
+// so a stale or replayed call can't erase a real high score. Falls back to
+// a local JSON file (DATA_DIR) if Supabase isn't configured.
+
 const LEADERBOARD_FILE = path.join(DATA_DIR, 'leaderboard-local.json');
 let leaderboardLocal = {}; // { username: { score, updatedAt } } — fallback only
 try {
@@ -1058,21 +1094,19 @@ function checkLeaderboardRate(username) {
 }
 
 async function submitLeaderboardScore(username, score) {
-  if (db) {
+  if (useSupabase) {
     try {
-      const ref = db.collection('leaderboard').doc(username);
-      return await db.runTransaction(async (t) => {
-        const doc = await t.get(ref);
-        const current = doc.exists ? (doc.data().score || 0) : 0;
-        if (score <= current) return { updated: false, best: current };
-        t.set(ref, {
-          username, score,
-          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-        }, { merge: true });
-        return { updated: true, best: score };
+      const rows = await supabaseFetch(`leaderboard?username=eq.${encodeURIComponent(username)}&select=score`);
+      const current = (rows && rows[0] && rows[0].score) || 0;
+      if (score <= current) return { updated: false, best: current };
+      await supabaseFetch('leaderboard', {
+        method: 'POST',
+        headers: { Prefer: 'resolution=merge-duplicates' },
+        body: JSON.stringify({ username, score, updated_at: new Date().toISOString() }),
       });
+      return { updated: true, best: score };
     } catch (e) {
-      console.error('[leaderboard] Firestore write failed, falling back to local file:', e.message);
+      console.error('[leaderboard] Supabase write failed, falling back:', e.message);
     }
   }
   const current = (leaderboardLocal[username] && leaderboardLocal[username].score) || 0;
@@ -1083,12 +1117,12 @@ async function submitLeaderboardScore(username, score) {
 }
 
 async function getTopLeaderboard(limit) {
-  if (db) {
+  if (useSupabase) {
     try {
-      const snap = await db.collection('leaderboard').orderBy('score', 'desc').limit(limit).get();
-      return snap.docs.map(d => ({ username: d.data().username, score: d.data().score || 0 }));
+      const rows = await supabaseFetch(`leaderboard?select=username,score&order=score.desc&limit=${limit}`);
+      return (rows || []).map((r) => ({ username: r.username, score: r.score || 0 }));
     } catch (e) {
-      console.error('[leaderboard] Firestore read failed, falling back to local file:', e.message);
+      console.error('[leaderboard] Supabase read failed, falling back:', e.message);
     }
   }
   return Object.entries(leaderboardLocal)
@@ -1098,19 +1132,17 @@ async function getTopLeaderboard(limit) {
 }
 
 // How many players currently rank above a given score, i.e. what place that
-// score would hold on the board right now. Uses Firestore's count()
-// aggregation so this doesn't have to pull every document down just to
-// count them.
+// score would hold on the board right now.
 async function getLeaderboardRank(score) {
-  if (db) {
+  if (useSupabase) {
     try {
-      const [aboveSnap, totalSnap] = await Promise.all([
-        db.collection('leaderboard').where('score', '>', score).count().get(),
-        db.collection('leaderboard').count().get(),
+      const [above, total] = await Promise.all([
+        supabaseFetch(`leaderboard?select=username&score=gt.${score}`, { headers: { Prefer: 'count=exact' } }),
+        supabaseFetch(`leaderboard?select=username`, { headers: { Prefer: 'count=exact' } }),
       ]);
-      return { rank: aboveSnap.data().count + 1, totalPlayers: totalSnap.data().count };
+      return { rank: (above || []).length + 1, totalPlayers: (total || []).length };
     } catch (e) {
-      console.error('[leaderboard] rank query failed, falling back to local file:', e.message);
+      console.error('[leaderboard] Supabase rank query failed, falling back:', e.message);
     }
   }
   const scores = Object.values(leaderboardLocal).map(v => v.score || 0);
@@ -1157,9 +1189,9 @@ app.get('/api/leaderboard/rank/:username', async (req, res) => {
   }
   try {
     let best = 0;
-    if (db) {
-      const doc = await db.collection('leaderboard').doc(username).get();
-      best = doc.exists ? (doc.data().score || 0) : 0;
+    if (useSupabase) {
+      const rows = await supabaseFetch(`leaderboard?username=eq.${encodeURIComponent(username)}&select=score`);
+      best = (rows && rows[0] && rows[0].score) || 0;
     } else {
       best = (leaderboardLocal[username] && leaderboardLocal[username].score) || 0;
     }
@@ -1265,7 +1297,7 @@ app.get('/api/payments/:username', async (req, res) => {
   }
   const history = await getPaymentHistory(username);
   if (history === null) {
-    return res.status(503).json({ error: 'Payment history requires Firestore (FIREBASE_SERVICE_ACCOUNT_KEY) to be configured.' });
+    return res.status(503).json({ error: 'Payment history requires Supabase (SUPABASE_URL/SUPABASE_SERVICE_KEY) to be configured.' });
   }
   res.json({ username, payments: history });
 });
