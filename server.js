@@ -18,6 +18,13 @@ const fs       = require('fs');
 const DATA_DIR = process.env.DATA_DIR || __dirname;
 try { fs.mkdirSync(DATA_DIR, { recursive: true }); } catch (_) {}
 
+// ─── TEMPORARY DIAGNOSTIC — remove once the env var mystery is solved ────────
+// Lists every environment variable NAME Render actually handed this process
+// at boot (never values, just names — safe to paste into chat). This tells
+// us definitively whether SUPABASE_URL etc. are really missing, vs. present
+// under a slightly different name (typo, extra space, wrong casing).
+console.log('🔍 DIAGNOSTIC — env var names Render gave this process:', Object.keys(process.env).sort().join(', '));
+
 const app    = express();
 const server = http.createServer(app);
 
