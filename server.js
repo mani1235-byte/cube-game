@@ -101,10 +101,10 @@ app.use((req, res, next) => {
     "default-src 'self'; " +
     "script-src 'self' 'unsafe-inline' https://www.gstatic.com https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://pagead2.googlesyndication.com https://adservice.google.com https://www.googletagservices.com https://www.googletagmanager.com https://scripts.simpleanalyticscdn.com https://ep1.adtrafficquality.google https://ep2.adtrafficquality.google; " +
     "connect-src 'self' wss: ws: https://*.firebaseapp.com https://*.googleapis.com https://cubegame.club https://www.cubegame.club https://pagead2.googlesyndication.com https://adservice.google.com https://www.google-analytics.com https://*.analytics.google.com https://www.googletagmanager.com https://scripts.simpleanalyticscdn.com https://queue.simpleanalyticscdn.com https://ep1.adtrafficquality.google https://ep2.adtrafficquality.google https://www.gstatic.com; " +
-    "img-src 'self' data: https://*.googleusercontent.com https://pagead2.googlesyndication.com https://tpc.googlesyndication.com https://www.google-analytics.com https://queue.simpleanalyticscdn.com; " +
+    "img-src 'self' data: https://*.googleusercontent.com https://pagead2.googlesyndication.com https://tpc.googlesyndication.com https://www.google-analytics.com https://queue.simpleanalyticscdn.com https://*.google.com https://*.google.fr; " +
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " +
     "font-src 'self' https://fonts.gstatic.com; " +
-    "frame-src https://googleads.g.doubleclick.net https://tpc.googlesyndication.com https://pagead2.googlesyndication.com; " +
+    "frame-src https://googleads.g.doubleclick.net https://tpc.googlesyndication.com https://pagead2.googlesyndication.com https://ep1.adtrafficquality.google https://ep2.adtrafficquality.google; " +
     "frame-ancestors 'none';"
   );
   next();
