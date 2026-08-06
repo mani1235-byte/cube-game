@@ -64,23 +64,20 @@ window.TutorialSystem = (function () {
 
   function init() {
     state = window.ProgressionManager.getState();
-
-    const justLoggedIn = sessionStorage.getItem("cg_just_logged_in") === "1";
+    // No longer depends on sessionStorage "cg_just_logged_in" — that required
+    // login.js / firebase-auth.js to set it correctly on every entry path,
+    // which is fragile. Instead this checks directly, on every index.html
+    // load: has THIS account (by uid/email/guest-name) finished the
+    // tutorial? If not, show it — works the same for email, Google, and
+    // guest, and needs nothing from any other file.
     sessionStorage.removeItem("cg_just_logged_in");
-
+    console.log("[TutorialSystem] user=" + currentUserKey() + " done=" + isTutorialDone());
     if (isTutorialDone()) return;
 
-    // Show the welcome prompt if this is the moment right after login, OR
-    // if a tutorial was already started/offered earlier (pending) and the
-    // player refreshed or closed the tab before finishing it — localStorage
-    // survives both, so it picks back up on the very next page load instead
-    // of needing another login to reappear.
-    if (justLoggedIn || isTutorialPending()) {
-      markTutorialPending();
-      armed = true;
-      patchGameHooks();
-      showWelcomePrompt();
-    }
+    markTutorialPending();
+    armed = true;
+    patchGameHooks();
+    showWelcomePrompt();
   }
 
   // ── Monkeypatch the game's own functions to observe progress ─────────────
