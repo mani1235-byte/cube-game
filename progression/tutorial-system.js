@@ -35,14 +35,48 @@ window.TutorialSystem = (function () {
   let els = {};
   let origResetGame, origIncrementCubeCount, origEndGame;
 
+  // ── Per-account completion tracking ───────────────────────────────────
+  // Deliberately NOT stored in the shared progression save (cg_progression_v1)
+  // — that save is one file per browser, shared by every account signed in
+  // on it (email, Google, guest). Keying completion off the actual signed-in
+  // identity means email/Google/guest each get their own tutorial the first
+  // time THEY log in, instead of one account's completion hiding it for all.
+  function currentUserKey() {
+    let user = null;
+    try { user = JSON.parse(localStorage.getItem("cg_current_user")); } catch (_) {}
+    if (!user) return "anon";
+    if (user.uid)   return "uid:" + user.uid;
+    if (user.email) return "email:" + user.email.toLowerCase();
+    if (user.username) return "guest:" + user.username.toLowerCase();
+    return "anon";
+  }
+  function tutorialDoneKey()    { return "cg_tutorial_done:" + currentUserKey(); }
+  function tutorialPendingKey() { return "cg_tutorial_pending:" + currentUserKey(); }
+  function isTutorialDone()     { return localStorage.getItem(tutorialDoneKey()) === "1"; }
+  function isTutorialPending()  { return localStorage.getItem(tutorialPendingKey()) === "1"; }
+  function markTutorialDone()   {
+    try {
+      localStorage.setItem(tutorialDoneKey(), "1");
+      localStorage.removeItem(tutorialPendingKey());
+    } catch (_) {}
+  }
+  function markTutorialPending() { try { localStorage.setItem(tutorialPendingKey(), "1"); } catch (_) {} }
+
   function init() {
     state = window.ProgressionManager.getState();
-    state.tutorial = state.tutorial || { completed: false };
 
     const justLoggedIn = sessionStorage.getItem("cg_just_logged_in") === "1";
     sessionStorage.removeItem("cg_just_logged_in");
 
-    if (justLoggedIn && !state.tutorial.completed) {
+    if (isTutorialDone()) return;
+
+    // Show the welcome prompt if this is the moment right after login, OR
+    // if a tutorial was already started/offered earlier (pending) and the
+    // player refreshed or closed the tab before finishing it — localStorage
+    // survives both, so it picks back up on the very next page load instead
+    // of needing another login to reappear.
+    if (justLoggedIn || isTutorialPending()) {
+      markTutorialPending();
       armed = true;
       patchGameHooks();
       showWelcomePrompt();
@@ -179,10 +213,7 @@ window.TutorialSystem = (function () {
   }
 
   function markCompleted({ skipped }) {
-    state.tutorial.completed = true;
-    state.tutorial.skipped = !!skipped;
-    state.tutorial.at = Date.now();
-    Events.emit("progression:dirty");
+    markTutorialDone();
   }
 
   // ── HUD ────────────────────────────────────────────────────────────────
