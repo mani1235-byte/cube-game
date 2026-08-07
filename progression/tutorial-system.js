@@ -41,9 +41,13 @@ window.TutorialSystem = (function () {
   function markDone()   { try { localStorage.setItem(doneKey(), "1"); } catch (_) {} }
 
   function init() {
-    console.log("[TutorialSystem] user=" + currentUserKey() + " done=" + isDone());
-    if (isDone()) return;
-    showWelcomePrompt();
+    try {
+      console.log("[TutorialSystem] user=" + currentUserKey() + " done=" + isDone());
+      if (isDone()) return;
+      showWelcomePrompt();
+    } catch (err) {
+      console.error("[TutorialSystem] init() threw — tutorial will not show:", err);
+    }
   }
 
   // ── Game hooks (same monkeypatch pattern as battle-mode.js) ─────────────

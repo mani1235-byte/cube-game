@@ -5,7 +5,17 @@
 // working without modification.
 (function () {
   function boot() {
-    window.ProgressionManager.init();
+    try {
+      window.ProgressionManager.init();
+    } catch (err) {
+      // A failure anywhere in the subsystem chain (XP/Trophy/Coin/Reward/etc.
+      // init) used to die silently here and skip "progression:ready" forever
+      // — which is exactly why the tutorial (and everything else that waits
+      // on that event) would never fire with no visible symptom. Now it's
+      // logged loudly and clearly instead of vanishing.
+      console.error("[ProgressionInit] boot() failed — progression:ready will NOT fire:", err);
+      return;
+    }
 
     // keep the legacy `window.player` object (used by script.js) loosely in
     // sync with the new progression state for any code still reading it
