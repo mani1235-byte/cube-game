@@ -1,111 +1,83 @@
 // tutorial-system.js
-// First-time-player flow. Triggered right after login.js's platform choice
-// (btnPlayWeb → enterGame() sets sessionStorage "cg_just_logged_in") lands
-// the player back on index.html. Offers a 60-second guided tutorial with a
-// single quest ("slice N cubes"); completing the quest grants a reward via
-// RewardSystem. Never nags a player twice — state.tutorial.completed is
-// persisted in the shared progression save.
-//
-// Hooks into the existing game loop the same way battle-mode.js does:
-// monkeypatching the handful of window-level functions script.js exposes
-// (resetGame, incrementCubeCount, endGame) rather than modifying script.js.
+// A real guided, step-by-step first-time tutorial (not just a passive HUD).
+// Each step spotlights a real piece of the UI and either times out or waits
+// for the player to actually do the thing (slice N cubes) before advancing.
+// Triggers on index.html for any signed-in account (email, Google, guest)
+// that hasn't finished it yet — checked directly against that account's own
+// id, independent of any flag set by login.js/firebase-auth.js.
 window.TutorialSystem = (function () {
-  const Events = window.ProgressionEvents;
-  const QUEST_TARGET   = 15;      // cubes to slice
-  const DURATION_MS    = 60000;   // 1 minute
-  const TIP_INTERVAL_MS = 12000;
+  const QUEST_TARGET    = 15;     // total cubes to slice by the end
+  const STEP2_TARGET    = 5;      // cubes to slice mid-tutorial (step "practice slice")
+  const OVERALL_LIMIT_MS = 60000; // hard 1-minute ceiling for the whole thing
 
-  const TIPS = [
-    "Slice cubes to score points!",
-    "Watch out for bombs — they cost you a heart!",
-    "Chain quick slices for a combo bonus!",
-    "Open the Missions tab any time for bonus rewards!",
-    "Check the Shop for skins and power-ups!",
-  ];
+  let userState = { sliced: 0 };
+  let overallTimeLeft = OVERALL_LIMIT_MS;
+  let overallTickHandle = null;
+  let overallTimerEl = null;
 
-  let state = null;
-  let armed = false;     // welcome prompt should show
-  let active = false;    // quest currently running
-  let sliced = 0;
-  let timeLeft = DURATION_MS;
-  let tickHandle = null;
-  let tipHandle = null;
-  let tipIndex = 0;
+  let stepIndex = -1;
+  let stepTimeoutHandle = null;
+  let resizeHandle = null;
+  let running = false;
 
-  let els = {};
   let origResetGame, origIncrementCubeCount, origEndGame;
+  let usedSafetyNet = false;   // becomes true once we've already offered anti-lose mode
+  let awaitingModeClick = false; // true while spotlighting a mode button, waiting for the player to click it
+  let resumeStepIndex = null;  // step to return to after an anti-lose mode-switch prompt
+  let timerStarted = false;
 
-  // ── Per-account completion tracking ───────────────────────────────────
-  // Deliberately NOT stored in the shared progression save (cg_progression_v1)
-  // — that save is one file per browser, shared by every account signed in
-  // on it (email, Google, guest). Keying completion off the actual signed-in
-  // identity means email/Google/guest each get their own tutorial the first
-  // time THEY log in, instead of one account's completion hiding it for all.
+  // ── Per-account completion tracking (localStorage, not the shared save) ──
   function currentUserKey() {
     let user = null;
     try { user = JSON.parse(localStorage.getItem("cg_current_user")); } catch (_) {}
     if (!user) return "anon";
-    if (user.uid)   return "uid:" + user.uid;
-    if (user.email) return "email:" + user.email.toLowerCase();
-    if (user.username) return "guest:" + user.username.toLowerCase();
+    if (user.uid)       return "uid:" + user.uid;
+    if (user.email)     return "email:" + user.email.toLowerCase();
+    if (user.username)  return "guest:" + user.username.toLowerCase();
     return "anon";
   }
-  function tutorialDoneKey()    { return "cg_tutorial_done:" + currentUserKey(); }
-  function tutorialPendingKey() { return "cg_tutorial_pending:" + currentUserKey(); }
-  function isTutorialDone()     { return localStorage.getItem(tutorialDoneKey()) === "1"; }
-  function isTutorialPending()  { return localStorage.getItem(tutorialPendingKey()) === "1"; }
-  function markTutorialDone()   {
-    try {
-      localStorage.setItem(tutorialDoneKey(), "1");
-      localStorage.removeItem(tutorialPendingKey());
-    } catch (_) {}
-  }
-  function markTutorialPending() { try { localStorage.setItem(tutorialPendingKey(), "1"); } catch (_) {} }
+  function doneKey()    { return "cg_tutorial_done:" + currentUserKey(); }
+  function isDone()     { return localStorage.getItem(doneKey()) === "1"; }
+  function markDone()   { try { localStorage.setItem(doneKey(), "1"); } catch (_) {} }
 
   function init() {
-    state = window.ProgressionManager.getState();
-    // No longer depends on sessionStorage "cg_just_logged_in" — that required
-    // login.js / firebase-auth.js to set it correctly on every entry path,
-    // which is fragile. Instead this checks directly, on every index.html
-    // load: has THIS account (by uid/email/guest-name) finished the
-    // tutorial? If not, show it — works the same for email, Google, and
-    // guest, and needs nothing from any other file.
-    sessionStorage.removeItem("cg_just_logged_in");
-    console.log("[TutorialSystem] user=" + currentUserKey() + " done=" + isTutorialDone());
-    if (isTutorialDone()) return;
-
-    markTutorialPending();
-    armed = true;
-    patchGameHooks();
+    console.log("[TutorialSystem] user=" + currentUserKey() + " done=" + isDone());
+    if (isDone()) return;
     showWelcomePrompt();
   }
 
-  // ── Monkeypatch the game's own functions to observe progress ─────────────
+  // ── Game hooks (same monkeypatch pattern as battle-mode.js) ─────────────
   function patchGameHooks() {
-    if (origResetGame) return; // already patched
-
+    if (origResetGame) return;
     origResetGame = window.resetGame;
     window.resetGame = function (...args) {
       const r = origResetGame.apply(this, args);
-      if (armed && !active) startQuest();
+      if (running && awaitingModeClick) {
+        awaitingModeClick = false;
+        if (!timerStarted) { timerStarted = true; startOverallTimer(); }
+        if (resumeStepIndex !== null) {
+          const idx = resumeStepIndex;
+          resumeStepIndex = null;
+          renderStep(STEPS[idx]); // pick the interrupted step back up, progress intact
+        } else {
+          nextStep(); // first mode click → move into step 0
+        }
+      }
       return r;
     };
-
     origIncrementCubeCount = window.incrementCubeCount;
     window.incrementCubeCount = function (inc, ...rest) {
       const r = origIncrementCubeCount.apply(this, [inc, ...rest]);
-      if (active && inc > 0) onCubesSliced(inc);
+      if (running && inc > 0) onCubeSliced(inc);
       return r;
     };
-
     origEndGame = window.endGame;
     window.endGame = function (...args) {
       const r = origEndGame.apply(this, args);
-      if (active) onGameEnded();
+      if (running) handleGameOver();
       return r;
     };
   }
-
   function unpatchGameHooks() {
     if (origResetGame)          window.resetGame = origResetGame;
     if (origIncrementCubeCount) window.incrementCubeCount = origIncrementCubeCount;
@@ -113,7 +85,7 @@ window.TutorialSystem = (function () {
     origResetGame = origIncrementCubeCount = origEndGame = null;
   }
 
-  // ── Welcome prompt ─────────────────────────────────────────────────────
+  // ── Welcome card ──────────────────────────────────────────────────────
   function showWelcomePrompt() {
     const overlay = document.createElement("div");
     overlay.id = "tut-welcome";
@@ -122,8 +94,8 @@ window.TutorialSystem = (function () {
       <div class="tut-card">
         <div class="tut-card-icon">🎓</div>
         <div class="tut-card-title">New Here?</div>
-        <div class="tut-card-body">Take a quick 60-second tutorial and slice
-          ${QUEST_TARGET} cubes to earn coins, XP, and a free chest.</div>
+        <div class="tut-card-body">Take a quick guided tour of the game — slice
+          ${QUEST_TARGET} cubes along the way to earn coins, XP, and a free chest.</div>
         <div class="tut-card-actions">
           <button type="button" class="tut-btn tut-btn-primary" id="tutStartBtn">Start Tutorial</button>
           <button type="button" class="tut-btn tut-btn-ghost" id="tutSkipBtn">Skip</button>
@@ -133,126 +105,200 @@ window.TutorialSystem = (function () {
     requestAnimationFrame(() => overlay.classList.add("tut-open"));
 
     document.getElementById("tutStartBtn").addEventListener("click", () => {
-      closeWelcomePrompt();
-      const btn = document.querySelector(".play-casual-btn"); // anti-lose mode — no heart loss while learning
-      if (btn) btn.click();
-      else startQuest(); // fallback if menu markup ever changes
+      closeOverlay(overlay);
+      patchGameHooks();
+      beginTutorial();
     });
     document.getElementById("tutSkipBtn").addEventListener("click", () => {
-      closeWelcomePrompt();
-      armed = false;
-      markCompleted({ skipped: true });
+      closeOverlay(overlay);
+      markDone();
     });
   }
 
-  function closeWelcomePrompt() {
-    const el = document.getElementById("tut-welcome");
-    if (!el) return;
+  function closeOverlay(el) {
     el.classList.remove("tut-open");
     setTimeout(() => el.remove(), 250);
   }
 
-  // ── Quest lifecycle ────────────────────────────────────────────────────
-  function startQuest() {
-    if (active) return;
-    armed = false;
-    active = true;
-    sliced = 0;
-    timeLeft = DURATION_MS;
-    buildQuestHud();
-    tipIndex = 0;
-    setTip(TIPS[0]);
-    tipHandle = setInterval(() => {
-      tipIndex = (tipIndex + 1) % TIPS.length;
-      setTip(TIPS[tipIndex]);
-    }, TIP_INTERVAL_MS);
-    tickHandle = setInterval(tick, 1000);
+  // ── Step engine ───────────────────────────────────────────────────────
+  // mode: "timed"  → auto-advance after ms
+  // mode: "action" → advance once userState.sliced >= target_count
+  const STEPS = [
+    { text: "Your cube moves with the mouse / touch — steer it to line up your slices.",
+      target: "#c", mode: "timed", ms: 4200 },
+    { text: `Slice the flying cubes to score points! Get ${STEP2_TARGET} to continue.`,
+      target: "#c", mode: "action", target_count: STEP2_TARGET },
+    { text: "Red bombs cost you a heart — dodge them, don't slice them!",
+      target: "#c", mode: "timed", ms: 4200 },
+    { text: "This is your score and cube count.",
+      target: ".hud__score", mode: "timed", ms: 3200 },
+    { text: "Open the Shop any time to grab skins and power-ups.",
+      target: ".shop-btn", mode: "timed", ms: 3200 },
+    { text: `Now finish strong — slice ${QUEST_TARGET} total to complete the tutorial!`,
+      target: "#c", mode: "action", target_count: QUEST_TARGET },
+  ];
+
+  function beginTutorial() {
+    running = true;
+    usedSafetyNet = false;
+    timerStarted = false;
+    userState.sliced = 0;
+    overallTimeLeft = OVERALL_LIMIT_MS;
+    stepIndex = -1;
+    buildChrome();
+    // Tell them, don't do it for them: spotlight the real "Normal mod"
+    // button on the main menu and wait for them to click it. If they later
+    // game-over before finishing, handleGameOver() spotlights "Anti lose
+    // mod" the same way instead of switching modes automatically.
+    showModeSelectStep(".play-normal-btn",
+      `Click "Normal mod" below to start your first match!`);
   }
 
-  function tick() {
-    timeLeft -= 1000;
-    updateHud();
-    if (timeLeft <= 0) endQuest({ success: false });
+  function showModeSelectStep(target, text) {
+    clearTimeout(stepTimeoutHandle);
+    awaitingModeClick = true;
+    positionSpotlight(target);
+    window.removeEventListener("resize", resizeHandle);
+    resizeHandle = () => positionSpotlight(target);
+    window.addEventListener("resize", resizeHandle);
+    document.getElementById("tutTipText").textContent = text;
+    document.getElementById("tutTipProgress").textContent = "";
   }
 
-  function onCubesSliced(inc) {
-    sliced = Math.min(QUEST_TARGET, sliced + inc);
-    updateHud();
-    if (sliced >= QUEST_TARGET) endQuest({ success: true });
+  function buildChrome() {
+    const chrome = document.createElement("div");
+    chrome.id = "tut-chrome";
+    chrome.innerHTML = `
+      <div class="tut-spot-box" id="tutSpotBox"></div>
+      <div class="tut-tip" id="tutTip">
+        <div class="tut-tip-timer" id="tutTipTimer"></div>
+        <div class="tut-tip-text" id="tutTipText"></div>
+        <div class="tut-tip-progress" id="tutTipProgress"></div>
+      </div>`;
+    document.body.appendChild(chrome);
+    overallTimerEl = document.getElementById("tutTipTimer");
+    requestAnimationFrame(() => chrome.classList.add("tut-open"));
   }
 
-  function onGameEnded() {
-    // Died mid-tutorial (rare in anti-lose mode) — end gracefully, no reward,
-    // but don't mark completed so the prompt can offer it again next login.
-    endQuest({ success: false, interrupted: true });
+  function removeChrome() {
+    const chrome = document.getElementById("tut-chrome");
+    if (!chrome) return;
+    chrome.classList.remove("tut-open");
+    setTimeout(() => chrome.remove(), 250);
   }
 
-  function endQuest({ success, interrupted } = {}) {
-    if (!active) return;
-    active = false;
-    clearInterval(tickHandle);
-    clearInterval(tipHandle);
-    tickHandle = tipHandle = null;
-    removeQuestHud();
+  function nextStep() {
+    clearTimeout(stepTimeoutHandle);
+    stepIndex += 1;
+    if (stepIndex >= STEPS.length) {
+      stopTutorial({ success: true });
+      return;
+    }
+    renderStep(STEPS[stepIndex]);
+  }
+
+  function renderStep(step) {
+    positionSpotlight(step.target);
+    window.removeEventListener("resize", resizeHandle);
+    resizeHandle = () => positionSpotlight(step.target);
+    window.addEventListener("resize", resizeHandle);
+
+    document.getElementById("tutTipText").textContent = step.text;
+    const progressEl = document.getElementById("tutTipProgress");
+
+    if (step.mode === "timed") {
+      progressEl.textContent = "";
+      stepTimeoutHandle = setTimeout(nextStep, step.ms);
+    } else {
+      updateActionProgress(step);
+    }
+  }
+
+  function updateActionProgress(step) {
+    if (!running || stepIndex < 0 || STEPS[stepIndex] !== step) return;
+    const progressEl = document.getElementById("tutTipProgress");
+    if (progressEl) progressEl.textContent = `${userState.sliced} / ${step.target_count}`;
+  }
+
+  function positionSpotlight(selector) {
+    const box = document.getElementById("tutSpotBox");
+    const tip = document.getElementById("tutTip");
+    if (!box || !tip) return;
+    const target = selector ? document.querySelector(selector) : null;
+    if (!target) {
+      box.style.opacity = "0";
+      tip.style.top = "auto"; tip.style.bottom = "90px";
+      tip.style.left = "50%"; tip.style.transform = "translateX(-50%)";
+      return;
+    }
+    const r = target.getBoundingClientRect();
+    const pad = 10;
+    box.style.opacity = "1";
+    box.style.left   = (r.left - pad) + "px";
+    box.style.top    = (r.top - pad) + "px";
+    box.style.width  = (r.width + pad * 2) + "px";
+    box.style.height = (r.height + pad * 2) + "px";
+
+    const tipTop = r.bottom + 18;
+    const spaceBelow = window.innerHeight - r.bottom;
+    if (spaceBelow > 140) {
+      tip.style.top = tipTop + "px"; tip.style.bottom = "auto";
+    } else {
+      tip.style.bottom = (window.innerHeight - r.top + 18) + "px"; tip.style.top = "auto";
+    }
+    tip.style.left = Math.min(Math.max(r.left + r.width / 2, 170), window.innerWidth - 170) + "px";
+    tip.style.transform = "translateX(-50%)";
+  }
+
+  function onCubeSliced(inc) {
+    userState.sliced += inc;
+    const step = STEPS[stepIndex];
+    if (step && step.mode === "action") {
+      updateActionProgress(step);
+      if (userState.sliced >= step.target_count) nextStep();
+    }
+  }
+
+  function startOverallTimer() {
+    overallTickHandle = setInterval(() => {
+      overallTimeLeft -= 1000;
+      const secs = Math.max(0, Math.ceil(overallTimeLeft / 1000));
+      if (overallTimerEl) overallTimerEl.textContent = `0:${String(secs).padStart(2, "0")}`;
+      if (overallTimeLeft <= 0) stopTutorial({ success: false });
+    }, 1000);
+  }
+
+  function handleGameOver() {
+    if (usedSafetyNet) {
+      // Already offered anti-lose once — a second game-over ends the
+      // tutorial gracefully rather than looping the prompt forever.
+      stopTutorial({ success: false, interrupted: true });
+      return;
+    }
+    usedSafetyNet = true;
+    resumeStepIndex = stepIndex; // remember exactly where we were — progress isn't lost
+    showModeSelectStep(".play-casual-btn",
+      `You ran out of hearts! Click "Anti lose mod" to try again without losing hearts.`);
+  }
+
+  function stopTutorial({ success, interrupted } = {}) {
+    if (!running) return;
+    running = false;
+    clearTimeout(stepTimeoutHandle);
+    clearInterval(overallTickHandle);
+    window.removeEventListener("resize", resizeHandle);
+    removeChrome();
     unpatchGameHooks();
 
     if (success) {
       window.RewardSystem.grant("tutorial_coins", { source: "tutorial" });
       window.RewardSystem.grant("tutorial_xp",    { source: "tutorial" });
       window.RewardSystem.grant("tutorial_chest", { source: "tutorial" });
-      markCompleted({ skipped: false });
+      markDone();
       showCompletionModal();
     } else if (!interrupted) {
-      // Ran out of time without finishing — don't punish, just let them try
-      // again next time they log in (tutorial.completed stays false).
-      window.RewardSystem.showRewardToast("Tutorial ended — keep playing to earn it next time!", "#9aa0ff");
+      window.RewardSystem.showRewardToast("Tutorial ended — try again to earn the reward!", "#9aa0ff");
     }
-  }
-
-  function markCompleted({ skipped }) {
-    markTutorialDone();
-  }
-
-  // ── HUD ────────────────────────────────────────────────────────────────
-  function buildQuestHud() {
-    const hud = document.createElement("div");
-    hud.id = "tut-quest-hud";
-    hud.className = "prog-widget tut-quest-hud";
-    hud.innerHTML = `
-      <div class="tut-quest-row">
-        <span class="tut-quest-label">🎯 Slice ${QUEST_TARGET} cubes</span>
-        <span class="tut-quest-timer" id="tutTimer">1:00</span>
-      </div>
-      <div class="tut-quest-track"><div class="tut-quest-fill" id="tutFill"></div></div>
-      <div class="tut-quest-count" id="tutCount">0 / ${QUEST_TARGET}</div>
-      <div class="tut-quest-tip" id="tutTip"></div>`;
-    document.body.appendChild(hud);
-    els.hud = hud;
-    els.timer = hud.querySelector("#tutTimer");
-    els.fill  = hud.querySelector("#tutFill");
-    els.count = hud.querySelector("#tutCount");
-    els.tip   = hud.querySelector("#tutTip");
-    requestAnimationFrame(() => hud.classList.add("tut-open"));
-    updateHud();
-  }
-
-  function removeQuestHud() {
-    if (!els.hud) return;
-    els.hud.classList.remove("tut-open");
-    setTimeout(() => els.hud && els.hud.remove(), 250);
-    els = {};
-  }
-
-  function updateHud() {
-    if (!els.hud) return;
-    const secs = Math.max(0, Math.ceil(timeLeft / 1000));
-    els.timer.textContent = `0:${String(secs).padStart(2, "0")}`;
-    els.fill.style.width = `${Math.min(100, (sliced / QUEST_TARGET) * 100)}%`;
-    els.count.textContent = `${sliced} / ${QUEST_TARGET}`;
-  }
-
-  function setTip(text) {
-    if (els.tip) els.tip.textContent = "💡 " + text;
   }
 
   function showCompletionModal() {
@@ -270,13 +316,10 @@ window.TutorialSystem = (function () {
       </div>`;
     document.body.appendChild(overlay);
     requestAnimationFrame(() => overlay.classList.add("tut-open"));
-    document.getElementById("tutDoneBtn").addEventListener("click", () => {
-      overlay.classList.remove("tut-open");
-      setTimeout(() => overlay.remove(), 250);
-    });
+    document.getElementById("tutDoneBtn").addEventListener("click", () => closeOverlay(overlay));
   }
 
-  Events.on("progression:ready", init);
+  window.ProgressionEvents.on("progression:ready", init);
 
-  return { getState: () => state };
+  return {};
 })();

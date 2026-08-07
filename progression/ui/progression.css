@@ -300,3 +300,31 @@
 @media (max-width: 640px) {
   .tut-quest-hud { min-width: 82vw; top: 10px; }
 }
+
+/* ---- Tutorial: guided spotlight steps ---- */
+#tut-chrome { position: fixed; inset: 0; z-index: 10400; pointer-events: none; opacity: 0; transition: opacity 0.25s; }
+#tut-chrome.tut-open { opacity: 1; }
+.tut-spot-box {
+  position: fixed; border-radius: 12px;
+  box-shadow: 0 0 0 9999px rgba(6,7,14,0.68), 0 0 0 3px #67d7f0, 0 0 24px rgba(103,215,240,0.55);
+  transition: left 0.3s, top 0.3s, width 0.3s, height 0.3s, opacity 0.25s;
+  opacity: 0; pointer-events: none;
+}
+.tut-tip {
+  position: fixed; transform: translateX(-50%);
+  width: 300px; max-width: 82vw;
+  padding: 14px 16px 12px; border-radius: 14px;
+  background: linear-gradient(180deg, rgba(24,20,44,0.97), rgba(12,12,22,0.97));
+  border: 1px solid rgba(103,215,240,0.35);
+  box-shadow: 0 10px 32px rgba(0,0,0,0.5);
+  color: #fff; text-align: center;
+  pointer-events: auto;
+  transition: left 0.3s, top 0.3s, bottom 0.3s;
+}
+.tut-tip-timer { font-family:'Orbitron',monospace; font-weight: 900; font-size: 11px; color: #ffe000; margin-bottom: 6px; opacity: 0.85; }
+.tut-tip-text { font-size: 13px; line-height: 1.45; font-weight: 600; }
+.tut-tip-progress { margin-top: 8px; font-family:'Orbitron',monospace; font-weight: 800; font-size: 13px; color: #a6e02c; min-height: 16px; }
+
+@media (max-width: 640px) {
+  .tut-tip { width: 250px; }
+}
