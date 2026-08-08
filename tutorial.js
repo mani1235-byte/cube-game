@@ -4,57 +4,26 @@
   "use strict";
 
   const TUTORIAL_KEY = "tutorial";
-  const LOCAL_TUTORIAL_KEY = "cg_tutorial_progress_v2";
   const CUBE_GOAL = 5;
   let state = null;
-  let localState = null;
   let card = null;
   let backdrop = null;
   let hud = null;
   let initialized = false;
-  let manuallyOpened = false;
 
   function getTutorialState() {
-    if (!state) {
-      if (!localState) {
-        try {
-          localState = JSON.parse(localStorage.getItem(LOCAL_TUTORIAL_KEY) || "{}");
-        } catch (_) {
-          localState = {};
-        }
-      }
-      state = { [TUTORIAL_KEY]: localState };
-    }
+    if (!state) return null;
     state[TUTORIAL_KEY] = state[TUTORIAL_KEY] || {};
     const tutorial = state[TUTORIAL_KEY];
     tutorial.started = Boolean(tutorial.started);
     tutorial.cubesSmashed = Math.max(0, Number(tutorial.cubesSmashed) || 0);
     tutorial.completed = Boolean(tutorial.completed);
     tutorial.rewardGranted = Boolean(tutorial.rewardGranted);
-    tutorial.skipped = Boolean(tutorial.skipped);
     return tutorial;
   }
 
   function save() {
-    const tutorial = getTutorialState();
-    try {
-      localStorage.setItem(LOCAL_TUTORIAL_KEY, JSON.stringify(tutorial));
-    } catch (_) {}
     if (window.ProgressionEvents) window.ProgressionEvents.emit("progression:dirty");
-  }
-
-  function mergeSavedTutorial() {
-    const tutorial = getTutorialState();
-    let saved = null;
-    try {
-      saved = JSON.parse(localStorage.getItem(LOCAL_TUTORIAL_KEY) || "null");
-    } catch (_) {}
-    if (!saved || typeof saved !== "object") return tutorial;
-    tutorial.started = tutorial.started || Boolean(saved.started);
-    tutorial.cubesSmashed = Math.max(tutorial.cubesSmashed, Number(saved.cubesSmashed) || 0);
-    tutorial.completed = tutorial.completed || Boolean(saved.completed);
-    tutorial.rewardGranted = tutorial.rewardGranted || Boolean(saved.rewardGranted);
-    return tutorial;
   }
 
   function build() {
@@ -90,12 +59,6 @@
       return;
     }
 
-    if (tutorial.skipped && !manuallyOpened) {
-      backdrop.classList.remove("is-visible");
-      hud.hidden = true;
-      return;
-    }
-
     const started = tutorial.started;
     const smashed = Math.min(CUBE_GOAL, tutorial.cubesSmashed);
     const firstSlashDone = smashed >= 1;
@@ -120,7 +83,7 @@
     card.innerHTML = `
       <h2 id="cg-tutorial-title">Cube Training</h2>
       <p class="cg-tutorial-intro">${started
-        ? "Choose a mode below to begin training. Your progress carries between runs."
+        ? "Pick a game mode, then finish the core training steps. Your progress carries between runs."
         : "Learn the slash, smash a few cubes, and earn a starter reward."}</p>
       <div class="cg-tutorial-steps">
         ${stepMarkup(1, "Start a run", "Choose Normal Mode or Anti Lose Mode.", started)}
@@ -132,18 +95,15 @@
         <span class="cg-tutorial-reward-value">200 COINS</span>
       </div>
       <div class="cg-tutorial-actions">
-        <button type="button" class="cg-tutorial-primary" data-tutorial-action="normal">NORMAL MODE</button>
-        <button type="button" class="cg-tutorial-secondary" data-tutorial-action="anti">ANTI-LOSE MODE</button>
+        <button type="button" class="cg-tutorial-primary" data-tutorial-action="start">${started ? "CONTINUE" : "START TUTORIAL"}</button>
+        <button type="button" class="cg-tutorial-secondary" data-tutorial-action="later">LATER</button>
       </div>
-      <button type="button" class="cg-tutorial-skip" data-tutorial-action="skip">SKIP TUTORIAL</button>
     `;
 
-    const normalButton = card.querySelector('[data-tutorial-action="normal"]');
-    const antiButton = card.querySelector('[data-tutorial-action="anti"]');
-    const skipButton = card.querySelector('[data-tutorial-action="skip"]');
-    if (normalButton) normalButton.addEventListener("click", () => startMode("normal"));
-    if (antiButton) antiButton.addEventListener("click", () => startMode("anti"));
-    if (skipButton) skipButton.addEventListener("click", skipTutorial);
+    const startButton = card.querySelector('[data-tutorial-action="start"]');
+    const laterButton = card.querySelector('[data-tutorial-action="later"]');
+    if (startButton) startButton.addEventListener("click", startTutorial);
+    if (laterButton) laterButton.addEventListener("click", () => backdrop.classList.remove("is-visible"));
   }
 
   function stepMarkup(number, title, detail, complete) {
@@ -155,37 +115,15 @@
     `;
   }
 
-  function startMode(mode) {
+  function startTutorial() {
     const tutorial = getTutorialState();
     if (!tutorial) return;
     tutorial.started = true;
-    tutorial.skipped = false;
     save();
+    // Return control to the main menu so the player can choose a mode.
     backdrop.classList.remove("is-visible");
-    const selector = mode === "anti" ? ".play-casual-btn" : ".play-normal-btn";
-    const modeButton = document.querySelector(selector);
-    if (modeButton) modeButton.click();
-  }
-
-  function skipTutorial() {
-    const tutorial = getTutorialState();
-    if (!tutorial) return;
-    tutorial.skipped = true;
-    manuallyOpened = false;
-    save();
-    backdrop.classList.remove("is-visible");
-    hud.hidden = true;
-  }
-
-  function open() {
-    const tutorial = mergeSavedTutorial();
-    if (!tutorial || !backdrop) return;
-    manuallyOpened = true;
-    tutorial.skipped = false;
-    tutorial.started = true;
-    save();
-    render();
-    backdrop.classList.add("is-visible");
+    const normalButton = document.querySelector(".play-normal-btn");
+    if (normalButton) normalButton.focus();
   }
 
   function onModeSelected() {
@@ -208,29 +146,16 @@
     }
   }
 
-  function grantCompletionReward(tutorial) {
-    if (!tutorial || tutorial.rewardGranted) return;
-    const progressionReady = window.ProgressionManager
-      && typeof window.ProgressionManager.getState === "function"
-      && window.ProgressionManager.getState();
-    if (progressionReady && window.RewardSystem && typeof window.RewardSystem.grant === "function") {
-      window.RewardSystem.grant("tutorial_coins", { source: "tutorial" });
-      tutorial.rewardGranted = true;
-    } else if (typeof window.grantCoins === "function") {
-      // Standalone fallback when progression boot is unavailable.
-      window.grantCoins(200);
-      tutorial.rewardGranted = true;
-    } else if (window.CoinSystem && typeof window.CoinSystem.earn === "function") {
-      window.CoinSystem.earn(200, "reward:tutorial_coins");
-      tutorial.rewardGranted = true;
-    }
-  }
-
   function complete() {
     const tutorial = getTutorialState();
     if (!tutorial || tutorial.completed) return;
     tutorial.completed = true;
-    grantCompletionReward(tutorial);
+    if (!tutorial.rewardGranted) {
+      tutorial.rewardGranted = true;
+      if (window.RewardSystem && typeof window.RewardSystem.grant === "function") {
+        window.RewardSystem.grant("tutorial_coins", { source: "tutorial" });
+      }
+    }
     save();
     if (window.RewardSystem && typeof window.RewardSystem.showRewardToast === "function") {
       window.RewardSystem.showRewardToast("Tutorial complete · 200 Coins", "#ffe000");
@@ -266,50 +191,21 @@
     state = window.ProgressionManager && window.ProgressionManager.getState
       ? window.ProgressionManager.getState()
       : null;
-    if (state) {
-      let persisted = null;
-      try {
-        persisted = JSON.parse(localStorage.getItem(LOCAL_TUTORIAL_KEY) || "null");
-      } catch (_) {}
-      if (persisted && !state[TUTORIAL_KEY]) state[TUTORIAL_KEY] = persisted;
-      localState = state[TUTORIAL_KEY] || persisted || {};
-    }
+    if (!state) return;
     build();
     document.addEventListener("click", (event) => {
       if (event.target.closest(".play-normal-btn, .play-casual-btn")) onModeSelected();
-      if (event.target.closest("[data-open-tutorial]")) open();
     });
     if (window.ProgressionEvents) {
       window.ProgressionEvents.on("progression:ready", () => {
-        state = window.ProgressionManager && window.ProgressionManager.getState
-          ? window.ProgressionManager.getState()
-          : state;
-        if (state && !state[TUTORIAL_KEY] && localState) state[TUTORIAL_KEY] = localState;
-        mergeSavedTutorial();
-        const tutorial = getTutorialState();
-        if (tutorial.completed && !tutorial.rewardGranted) {
-          grantCompletionReward(tutorial);
-          save();
-        }
-        if (!tutorial.completed && !tutorial.skipped) {
-          tutorial.started = true;
-          save();
-        }
+        state = window.ProgressionManager.getState();
         render();
       });
-    }
-    mergeSavedTutorial();
-    const tutorial = getTutorialState();
-    // First visit: the training overlay is active immediately. The player
-    // only chooses a mode; there is no separate "start tutorial" step.
-    if (!tutorial.completed && !tutorial.skipped) {
-      tutorial.started = true;
-      save();
     }
     render();
   }
 
-  window.CGTutorial = { init, open, recordCube };
+  window.CGTutorial = { init, recordCube };
 
   const boot = () => {
     // progression-init runs immediately before this file, but defer one tick

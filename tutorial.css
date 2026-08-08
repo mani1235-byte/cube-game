@@ -159,24 +159,6 @@
   letter-spacing: 0.06em;
 }
 
-.cg-tutorial-skip {
-  display: block;
-  margin: 14px auto 0;
-  border: 0;
-  color: rgba(244, 251, 255, 0.5);
-  background: transparent;
-  cursor: pointer;
-  font: 700 10px "Orbitron", system-ui, sans-serif;
-  letter-spacing: 0.08em;
-  text-decoration: underline;
-  text-underline-offset: 3px;
-}
-
-.cg-tutorial-skip:hover,
-.cg-tutorial-skip:focus-visible {
-  color: #fff;
-}
-
 .cg-tutorial-primary {
   border: 1px solid #67d7f0;
   color: #03101a;
