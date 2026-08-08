@@ -67,6 +67,13 @@ body.room-gameover {
     radial-gradient(ellipse at 100% 80%, #220000 0%, transparent 55%);
 }
 
+/* Balance counters are useful between runs, but should not cover gameplay. */
+body.is-playing .prog-coin-widget,
+body.is-playing .prog-trophy-widget,
+body.is-playing #trophyHud {
+  display: none !important;
+}
+
 /* ── Room Glow Overlay (animated scanlines/grid effect per mode) ───────────── */
 body::after {
   content: '';

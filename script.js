@@ -1558,6 +1558,9 @@ handleClick($(".menu-btn--score"), () => setActiveMenu(MENU_MAIN));
 
 function setActiveMenu(menu) {
   state.menus.active = menu;
+  // Keep progression balances out of the way while the player is actively
+  // slicing cubes. They return automatically on pause, game over, and menus.
+  document.body.classList.toggle("is-playing", menu === null);
   if (menu === MENU_MAIN || menu === MENU_SCORE) {
     resetAllTargets();
     if (sessionTimerEl) sessionTimerEl.style.display = "none";
