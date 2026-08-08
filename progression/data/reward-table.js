@@ -8,6 +8,7 @@ window.REWARD_TABLE = {
   coins_medium:   { type: "coins", amount: 200,  label: "200 Coins",  icon: "🪙" },
   coins_large:    { type: "coins", amount: 750,  label: "750 Coins",  icon: "🪙" },
   coins_mega:     { type: "coins", amount: 2000, label: "2,000 Coins",icon: "🪙" },
+  tutorial_coins:  { type: "coins", amount: 200,  label: "200 Tutorial Coins", icon: "🪙" },
 
   // ── Chests ─────────────────────────────────────────────────────────────────
   chest_wooden:    { type: "chest", chestId: "wooden",    label: "Wooden Chest",    icon: "📦" },

@@ -1,0 +1,245 @@
+/* First-run tutorial */
+.cg-tutorial-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 12000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(2, 5, 18, 0.76);
+  backdrop-filter: blur(8px);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+}
+
+.cg-tutorial-backdrop.is-visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.cg-tutorial-card {
+  width: min(440px, 100%);
+  color: #f4fbff;
+  font-family: "Orbitron", system-ui, sans-serif;
+  background:
+    radial-gradient(circle at 100% 0%, rgba(103, 215, 240, 0.16), transparent 42%),
+    linear-gradient(145deg, rgba(11, 22, 47, 0.98), rgba(4, 8, 24, 0.98));
+  border: 1px solid rgba(103, 215, 240, 0.45);
+  border-radius: 20px;
+  padding: clamp(22px, 5vw, 34px);
+  box-shadow: 0 0 0 1px rgba(103, 215, 240, 0.08), 0 20px 80px rgba(0, 0, 0, 0.55);
+  animation: cgTutorialIn 0.3s ease both;
+}
+
+.cg-tutorial-card h2 {
+  margin: 0 0 8px;
+  color: #67d7f0;
+  font-size: clamp(18px, 4vw, 26px);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.cg-tutorial-card p {
+  margin: 0;
+  color: rgba(244, 251, 255, 0.72);
+  font-family: system-ui, sans-serif;
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+.cg-tutorial-intro {
+  margin-bottom: 18px !important;
+}
+
+.cg-tutorial-steps {
+  display: grid;
+  gap: 9px;
+  margin: 18px 0 20px;
+}
+
+.cg-tutorial-step {
+  display: grid;
+  grid-template-columns: 30px 1fr;
+  gap: 10px;
+  align-items: center;
+  padding: 11px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 11px;
+  background: rgba(255, 255, 255, 0.045);
+  transition: border-color 0.2s ease, background 0.2s ease, transform 0.2s ease;
+}
+
+.cg-tutorial-step.is-current {
+  border-color: rgba(103, 215, 240, 0.7);
+  background: rgba(103, 215, 240, 0.1);
+  transform: translateX(3px);
+}
+
+.cg-tutorial-step.is-complete {
+  border-color: rgba(166, 224, 44, 0.45);
+  background: rgba(166, 224, 44, 0.08);
+}
+
+.cg-tutorial-step-marker {
+  display: grid;
+  width: 26px;
+  height: 26px;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 50%;
+  color: rgba(244, 251, 255, 0.6);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.is-complete .cg-tutorial-step-marker {
+  border-color: #a6e02c;
+  color: #a6e02c;
+}
+
+.cg-tutorial-step-copy {
+  font-family: system-ui, sans-serif;
+  font-size: 14px;
+  line-height: 1.35;
+}
+
+.cg-tutorial-step-copy strong {
+  display: block;
+  color: #fff;
+  font-family: "Orbitron", system-ui, sans-serif;
+  font-size: 11px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.cg-tutorial-step-copy span {
+  display: block;
+  margin-top: 2px;
+  color: rgba(244, 251, 255, 0.58);
+}
+
+.cg-tutorial-reward {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 0 20px;
+  padding: 12px 14px;
+  border: 1px solid rgba(255, 224, 0, 0.4);
+  border-radius: 11px;
+  background: rgba(255, 224, 0, 0.08);
+}
+
+.cg-tutorial-reward-label {
+  color: rgba(244, 251, 255, 0.58);
+  font-family: system-ui, sans-serif;
+  font-size: 12px;
+}
+
+.cg-tutorial-reward-value {
+  color: #ffe000;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
+.cg-tutorial-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.cg-tutorial-actions button {
+  flex: 1;
+  min-height: 42px;
+  border-radius: 10px;
+  cursor: pointer;
+  font: 800 11px "Orbitron", system-ui, sans-serif;
+  letter-spacing: 0.06em;
+}
+
+.cg-tutorial-primary {
+  border: 1px solid #67d7f0;
+  color: #03101a;
+  background: #67d7f0;
+}
+
+.cg-tutorial-secondary {
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: rgba(244, 251, 255, 0.7);
+  background: transparent;
+}
+
+.cg-tutorial-hud {
+  position: fixed;
+  top: 76px;
+  right: 18px;
+  z-index: 1100;
+  width: min(290px, calc(100vw - 36px));
+  padding: 13px 15px;
+  color: #f4fbff;
+  font-family: "Orbitron", system-ui, sans-serif;
+  background: rgba(4, 8, 24, 0.88);
+  border: 1px solid rgba(103, 215, 240, 0.48);
+  border-radius: 13px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.3);
+  pointer-events: none;
+  animation: cgTutorialIn 0.25s ease both;
+}
+
+.cg-tutorial-hud-title {
+  color: #67d7f0;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.cg-tutorial-hud-message {
+  margin-top: 5px;
+  color: rgba(244, 251, 255, 0.78);
+  font-family: system-ui, sans-serif;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.cg-tutorial-hud-progress {
+  height: 5px;
+  margin-top: 10px;
+  overflow: hidden;
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.cg-tutorial-hud-progress span {
+  display: block;
+  height: 100%;
+  width: 0;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #67d7f0, #a6e02c);
+  transition: width 0.25s ease;
+}
+
+.cg-tutorial-complete {
+  text-align: center;
+}
+
+.cg-tutorial-complete .cg-tutorial-reward {
+  justify-content: center;
+  margin-top: 20px;
+}
+
+@keyframes cgTutorialIn {
+  from { opacity: 0; transform: translateY(10px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@media (max-width: 560px) {
+  .cg-tutorial-hud {
+    top: 70px;
+    right: 10px;
+    left: 10px;
+    width: auto;
+  }
+}

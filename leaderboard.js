@@ -7,6 +7,22 @@
 window.CGLeaderboard = (function () {
   const listEl    = () => document.getElementById('leaderboardList');
   const overlayEl = () => document.getElementById('leaderboardOverlay');
+  // Small, achievable weekly-style placement rewards. A player can claim a
+  // given placement once on this device; improving their placement can earn
+  // the higher placement's reward too.
+  const RANK_REWARDS = Object.freeze({
+    1: 100,
+    2: 90,
+    3: 80,
+    4: 70,
+    5: 60,
+    6: 50,
+    7: 40,
+    8: 30,
+    9: 20,
+    10: 10,
+  });
+  const CLAIMS_KEY = 'cg_leaderboard_rewards_v1';
 
   function base() {
     return (window.CUBE_SERVER || window.location.origin || '').replace(/\/$/, '');
@@ -28,10 +44,53 @@ window.CGLeaderboard = (function () {
         keepalive: true,
       });
       if (!res.ok) return null;
-      return await res.json();
+      const info = await res.json();
+      if (info && info.rank) claimRankReward(info.rank);
+      return info;
     } catch (_) {
       return null;
     }
+  }
+
+  function getClaims() {
+    try {
+      const parsed = JSON.parse(localStorage.getItem(CLAIMS_KEY) || '{}');
+      return parsed && typeof parsed === 'object' ? parsed : {};
+    } catch (_) {
+      return {};
+    }
+  }
+
+  function claimRankReward(rank) {
+    const reward = RANK_REWARDS[Number(rank)];
+    if (!reward) return;
+
+    const claims = getClaims();
+    const claimKey = String(rank);
+    if (claims[claimKey]) return;
+
+    claims[claimKey] = Date.now();
+    try {
+      localStorage.setItem(CLAIMS_KEY, JSON.stringify(claims));
+    } catch (_) {}
+
+    // Use the same progression coin path as missions and tutorial rewards.
+    // It updates the visible wallet and reports the earning to the server
+    // when the player has an account.
+    if (window.CoinSystem && typeof window.CoinSystem.earn === 'function') {
+      window.CoinSystem.earn(reward, `reward:leaderboard_rank_${rank}`);
+    } else if (typeof window.grantCoins === 'function') {
+      window.grantCoins(reward);
+    }
+
+    const label = `Leaderboard #${rank} reward · +${reward} coins`;
+    if (window.RewardSystem && typeof window.RewardSystem.showRewardToast === 'function') {
+      window.RewardSystem.showRewardToast(label, '#ffe000');
+    }
+  }
+
+  function rewardForRank(rank) {
+    return RANK_REWARDS[Number(rank)] || 0;
   }
 
   // Renders "Rank #N of M" (or "New best! Rank #N of M" when this run
@@ -77,11 +136,13 @@ window.CGLeaderboard = (function () {
       const rank = i + 1;
       const isYou = me && row.username === me;
       const nameSafe = String(row.username || '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      const reward = rewardForRank(rank);
       return `
-        <div class="lb-row${isYou ? ' lb-you' : ''}${rank <= 3 ? ' lb-top' : ''}">
+        <div class="lb-row${isYou ? ' lb-you' : ''}${rank <= 10 ? ' lb-top' : ''}">
           <div class="lb-rank">${medal(rank)}</div>
           <div class="lb-name">${nameSafe}${isYou ? ' <span class="lb-you-tag">YOU</span>' : ''}</div>
           <div class="lb-score">${(row.score || 0).toLocaleString()}</div>
+          ${reward ? `<div class="lb-reward">+${reward} 🪙</div>` : ''}
         </div>`;
     }).join('');
   }
@@ -128,5 +189,5 @@ window.CGLeaderboard = (function () {
     initUI();
   }
 
-  return { submitScore, renderRankLabel, open, close, refresh };
+  return { submitScore, renderRankLabel, open, close, refresh, rewardForRank };
 })();
