@@ -22,7 +22,7 @@ window.CGLeaderboard = (function () {
     9: 20,
     10: 10,
   });
-  const CLAIMS_KEY = 'cg_leaderboard_rewards_v1';
+  const CLAIMS_KEY = 'cg_leaderboard_rewards_v2';
 
   function base() {
     return (window.CUBE_SERVER || window.location.origin || '').replace(/\/$/, '');
@@ -45,7 +45,7 @@ window.CGLeaderboard = (function () {
       });
       if (!res.ok) return null;
       const info = await res.json();
-      if (info && info.rank) claimRankReward(info.rank);
+      if (info && info.rank) claimRankReward(username, info.rank);
       return info;
     } catch (_) {
       return null;
@@ -61,13 +61,13 @@ window.CGLeaderboard = (function () {
     }
   }
 
-  function claimRankReward(rank) {
+  function claimRankReward(username, rank) {
     const reward = RANK_REWARDS[Number(rank)];
-    if (!reward) return;
+    if (!reward || !username) return false;
 
     const claims = getClaims();
-    const claimKey = String(rank);
-    if (claims[claimKey]) return;
+    const claimKey = `${String(username).toLowerCase()}:${Number(rank)}`;
+    if (claims[claimKey]) return false;
 
     claims[claimKey] = Date.now();
     try {
@@ -87,6 +87,7 @@ window.CGLeaderboard = (function () {
     if (window.RewardSystem && typeof window.RewardSystem.showRewardToast === 'function') {
       window.RewardSystem.showRewardToast(label, '#ffe000');
     }
+    return true;
   }
 
   function rewardForRank(rank) {
@@ -113,8 +114,14 @@ window.CGLeaderboard = (function () {
   function currentUsername() {
     try {
       const user = JSON.parse(localStorage.getItem('cg_current_user'));
-      return user && !user.isGuest ? user.username : null;
+      // Guests are allowed on the public leaderboard too, so they should
+      // receive the local reward when their guest score is in the top 10.
+      return user && user.username ? user.username : null;
     } catch (_) { return null; }
+  }
+
+  function samePlayer(a, b) {
+    return Boolean(a && b && String(a).trim().toLowerCase() === String(b).trim().toLowerCase());
   }
 
   function medal(rank) {
@@ -134,9 +141,10 @@ window.CGLeaderboard = (function () {
     const me = currentUsername();
     el.innerHTML = entries.map((row, i) => {
       const rank = i + 1;
-      const isYou = me && row.username === me;
+      const isYou = samePlayer(row.username, me);
       const nameSafe = String(row.username || '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
       const reward = rewardForRank(rank);
+      if (isYou && reward) claimRankReward(me, rank);
       return `
         <div class="lb-row${isYou ? ' lb-you' : ''}${rank <= 10 ? ' lb-top' : ''}">
           <div class="lb-rank">${medal(rank)}</div>
@@ -145,6 +153,23 @@ window.CGLeaderboard = (function () {
           ${reward ? `<div class="lb-reward">+${reward} 🪙</div>` : ''}
         </div>`;
     }).join('');
+
+    const status = document.getElementById('leaderboardRewardStatus');
+    if (status) {
+      const myRank = me
+        ? entries.findIndex((row) => samePlayer(row.username, me)) + 1
+        : 0;
+      if (myRank > 0 && myRank <= 10) {
+        status.textContent = `You are #${myRank} — your ${rewardForRank(myRank)}-coin reward has been added.`;
+        status.className = 'lb-reward-status is-earned';
+      } else if (myRank > 10) {
+        status.textContent = `You are #${myRank}. Reach the top 10 to earn coins.`;
+        status.className = 'lb-reward-status';
+      } else {
+        status.textContent = 'Play a run and reach the top 10 to earn coins.';
+        status.className = 'lb-reward-status';
+      }
+    }
   }
 
   async function refresh() {

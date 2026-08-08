@@ -1185,6 +1185,39 @@ h1 {
   letter-spacing: 0.04em;
   margin-bottom: 14px;
 }
+.lb-reward-guide {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  margin-bottom: 10px;
+  padding: 9px 11px;
+  border: 1px solid rgba(255,224,0,0.24);
+  border-radius: 9px;
+  background: rgba(255,224,0,0.06);
+  color: rgba(255,255,255,0.58);
+  font-family: monospace;
+  font-size: 0.68rem;
+}
+.lb-reward-guide span {
+  width: 100%;
+  color: #ffe000;
+  font-size: 0.62rem;
+  letter-spacing: 0.08em;
+}
+.lb-reward-guide strong {
+  color: #fff;
+  font-weight: bold;
+}
+.lb-reward-status {
+  margin: 0 0 12px;
+  color: rgba(255,255,255,0.58);
+  font-family: monospace;
+  font-size: 0.72rem;
+}
+.lb-reward-status.is-earned {
+  color: #a6e02c;
+}
 .lb-list {
   display: flex;
   flex-direction: column;
@@ -1274,4 +1307,26 @@ h1 {
 .lb-row-divider {
   margin: 4px 0;
   border-top: 1px dashed rgba(255,255,255,0.15);
+}
+
+/* Main menu tutorial shortcut */
+.tutorial-open-btn {
+  display: block;
+  width: min(270px, 82vw);
+  margin: 8px auto 14px;
+  padding: 9px 16px;
+  border: 1px solid rgba(103, 215, 240, 0.42);
+  border-radius: 9px;
+  color: #67d7f0;
+  background: rgba(103, 215, 240, 0.08);
+  cursor: pointer;
+  font: 800 11px "Orbitron", system-ui, sans-serif;
+  letter-spacing: 0.08em;
+  transition: background 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
+}
+.tutorial-open-btn:hover,
+.tutorial-open-btn:focus-visible {
+  border-color: #67d7f0;
+  background: rgba(103, 215, 240, 0.16);
+  transform: translateY(-1px);
 }
