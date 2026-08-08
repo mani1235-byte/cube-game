@@ -142,8 +142,6 @@ const isMenuVisible = () => !!state.menus.active;
 const isCasualGame   = () => state.game.mode === GAME_MODE_CASUAL;
 const isAntiLoseGame = () => state.game.mode === GAME_MODE_ANTI_LOSE;
 const isPaused = () => state.menus.active === MENU_PAUSE;
-// Small public bridge for optional UI modules such as the first-run tutorial.
-window.isInGame = isInGame;
 
 ///////////////////
 // Local Storage //
@@ -1688,9 +1686,6 @@ function incrementCubeCount(inc) {
   if (isInGame()) {
     state.game.cubeCount += inc;
     renderScoreHud();
-    if (inc > 0 && window.CGTutorial && typeof window.CGTutorial.recordCube === "function") {
-      window.CGTutorial.recordCube(inc);
-    }
   }
 }
 
