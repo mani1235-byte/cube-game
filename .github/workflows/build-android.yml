@@ -24,7 +24,7 @@ jobs:
 
       - name: Install Capacitor dependencies
         working-directory: "mobile app"
-        run: npm ci
+        run: npm install
 
       - name: Sync Capacitor Android project
         working-directory: "mobile app"
