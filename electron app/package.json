@@ -5,7 +5,6 @@
   "author": "Cube Game",
   "main": "main.js",
   "type": "commonjs",
-
   "scripts": {
     "start": "electron .",
     "build": "electron-builder",
@@ -13,22 +12,18 @@
     "build:linux": "electron-builder --linux",
     "build:mac": "electron-builder --mac"
   },
-
   "build": {
     "appId": "club.cubegame.desktop",
     "productName": "Cube Game",
-
     "files": [
       "**/*"
     ],
-
     "win": {
       "icon": "cube_game_logo.ico",
       "target": [
         "nsis"
       ]
     },
-
     "mac": {
       "icon": "cube_game_logo.icns",
       "target": [
@@ -36,7 +31,6 @@
       ],
       "category": "public.app-category.games"
     },
-
     "linux": {
       "icon": "icons/512x512.png",
       "target": [
@@ -45,7 +39,6 @@
       "category": "Game"
     }
   },
-
   "devDependencies": {
     "electron": "^43.2.0",
     "electron-builder": "^26.15.3"
