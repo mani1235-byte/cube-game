@@ -178,6 +178,30 @@ function enterGame() {
   }
 }
 
+// ── Auto-launch Google sign-in when arriving via the app's "Connect to
+// Website" button (?social=google) ─────────────────────────────────────────
+// window.socialLogin is defined asynchronously by firebase-auth.js (it waits
+// on the firebase SDK + a /config fetch), so poll briefly for it instead of
+// assuming it's ready on DOMContentLoaded.
+(function initAutoSocialLogin() {
+  let wantsSocial = null;
+  try { wantsSocial = new URLSearchParams(window.location.search).get("social"); } catch (_) {}
+  if (!wantsSocial) return;
+
+  let attempts = 0;
+  const maxAttempts = 100; // ~10s at 100ms
+  const timer = setInterval(function () {
+    attempts++;
+    if (typeof window.socialLogin === "function") {
+      clearInterval(timer);
+      window.socialLogin(wantsSocial, { useRedirect: true });
+    } else if (attempts >= maxAttempts) {
+      clearInterval(timer);
+      console.error("[login] socialLogin never became available for auto sign-in");
+    }
+  }, 100);
+})();
+
 // ── "Connect to Website" button — only shown inside the downloaded app ────
 // index.html's guard script stores cg_app_shell (from the ?platform=...
 // the Electron/mobile wrapper opened us with) into localStorage the first

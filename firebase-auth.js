@@ -34,19 +34,13 @@
         googleProvider.addScope("profile");
         googleProvider.addScope("email");
 
-        window.socialLogin = async function (providerName) {
-          const provider = providerName === 'google' ? googleProvider : null;
-          if (!provider) return;
-
-          document.querySelectorAll(".btn--social").forEach(b => {
-            b.disabled = true; b.style.opacity = "0.5";
-          });
-
-          try {
-            const result  = await auth.signInWithPopup(provider);
-            const user    = result.user;
-            const idToken = await user.getIdToken();
-
+        // Shared "user is now signed in" handling for both the popup flow
+        // (normal click on the page) and the redirect flow (used when we
+        // auto-launch sign-in from the app's "Connect to Website" button —
+        // see login.js. Redirect doesn't need a live click/user-gesture the
+        // way a popup does, so it survives being triggered from a timer.
+        function finishLogin(user, providerName) {
+          return user.getIdToken().then(function (idToken) {
             const userData = {
               username:  user.displayName || (user.email ? user.email.split("@")[0] : "Player"),
               email:     user.email,
@@ -54,7 +48,7 @@
               photoURL:  user.photoURL,
               idToken,
               isGuest:   false,
-              provider:  providerName,
+              provider:  providerName || "google",
               lastSeen:  Date.now(),
             };
 
@@ -68,26 +62,58 @@
               if (window.CinematicNav) CinematicNav.cinematic("./index.html");
               else window.location.href = "./index.html";
             }, 700);
+          });
+        }
 
-          } catch (err) {
-            const active = document.querySelector(".panel.active");
-            const errEl  = active ? active.querySelector(".error-msg") : null;
-            if (errEl) {
-              const msgs = {
-                "auth/popup-closed-by-user":  "Sign-in cancelled.",
-                "auth/operation-not-allowed": "Enable Google provider in Firebase Console.",
-                "auth/popup-blocked":         "Popup blocked — please allow popups for this site.",
-              };
-              errEl.textContent = msgs[err.code] || "Sign-in failed: " + (err.code || err.message);
-              setTimeout(() => { errEl.textContent = ""; }, 5000);
+        function showAuthError(err) {
+          const active = document.querySelector(".panel.active");
+          const errEl  = active ? active.querySelector(".error-msg") : null;
+          const msgs = {
+            "auth/popup-closed-by-user":  "Sign-in cancelled.",
+            "auth/operation-not-allowed": "Enable Google provider in Firebase Console.",
+            "auth/popup-blocked":         "Popup blocked — please allow popups for this site.",
+          };
+          const message = msgs[err.code] || "Sign-in failed: " + (err.code || err.message);
+          if (errEl) {
+            errEl.textContent = message;
+            setTimeout(() => { errEl.textContent = ""; }, 5000);
+          }
+          console.error("[firebase-auth] auth error:", err.code, err.message);
+        }
+
+        window.socialLogin = async function (providerName, opts) {
+          const provider = providerName === 'google' ? googleProvider : null;
+          if (!provider) return;
+          const useRedirect = !!(opts && opts.useRedirect);
+
+          document.querySelectorAll(".btn--social").forEach(b => {
+            b.disabled = true; b.style.opacity = "0.5";
+          });
+
+          try {
+            if (useRedirect) {
+              // Navigates the whole page to Google and back — no popup, so
+              // it works even when triggered automatically (no click).
+              await auth.signInWithRedirect(provider);
+              return; // page is navigating away now
             }
-            console.error("[firebase-auth] socialLogin error:", err.code, err.message);
+            const result = await auth.signInWithPopup(provider);
+            await finishLogin(result.user, providerName);
+          } catch (err) {
+            showAuthError(err);
           } finally {
             document.querySelectorAll(".btn--social").forEach(b => {
               b.disabled = false; b.style.opacity = "";
             });
           }
         };
+
+        // Catch the user coming back from a signInWithRedirect() round trip.
+        auth.getRedirectResult().then(function (result) {
+          if (result && result.user) {
+            finishLogin(result.user, "google");
+          }
+        }).catch(showAuthError);
 
         auth.onAuthStateChanged(function (user) {
           if (user && !localStorage.getItem("cg_current_user")) {
