@@ -9,7 +9,10 @@
   <p>Loading Cube Game...</p>
 
   <script>
-    window.location.replace("https://cubegame.club");
+    // ?platform=app tells the website it's running inside the downloaded
+    // mobile app (see index.html's guard script on cubegame.club), which
+    // shows a "Connect to Website" button on the login screen.
+    window.location.replace("https://cubegame.club/?platform=app");
   </script>
 </body>
 </html>

@@ -147,9 +147,24 @@ const isPaused = () => state.menus.active === MENU_PAUSE;
 // Local Storage //
 ///////////////////
 
-const highScoreKey = "__menja__highScore";
+// High score is stored PER ACCOUNT (see account.js) so switching to a
+// different account never shows a leftover high score from someone else's
+// session — a different account starts at 0 until it earns its own.
+const LEGACY_HIGH_SCORE_KEY = "__menja__highScore";
+const highScoreKey = LEGACY_HIGH_SCORE_KEY + ":" + (window.CGAccount ? window.CGAccount.currentKey() : "anon");
 const getHighScore = () => {
-  const raw = localStorage.getItem(highScoreKey);
+  let raw = localStorage.getItem(highScoreKey);
+  // One-time migration: adopt an old shared/global high score into whichever
+  // account loads first after this change, then retire the legacy key so it
+  // can't leak into any other account afterwards.
+  if (raw === null) {
+    const legacy = localStorage.getItem(LEGACY_HIGH_SCORE_KEY);
+    if (legacy !== null) {
+      raw = legacy;
+      try { localStorage.setItem(highScoreKey, legacy); } catch (_) {}
+      try { localStorage.removeItem(LEGACY_HIGH_SCORE_KEY); } catch (_) {}
+    }
+  }
   return raw ? parseInt(raw, 10) : 0;
 };
 

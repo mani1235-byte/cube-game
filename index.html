@@ -18,6 +18,16 @@
   <title>3d game</title>
   <script>
     (function() {
+      // If the downloaded app (Electron or mobile) opened us with
+      // ?platform=..., remember that on cubegame.club's own localStorage —
+      // NOT the query string — so the flag survives every later redirect
+      // (intro.html → login.html → index.html, etc.) without having to
+      // thread it through each one. See login.html for where it's used.
+      try {
+        var platform = new URLSearchParams(window.location.search).get("platform");
+        if (platform) localStorage.setItem("cg_app_shell", platform);
+      } catch (e) {}
+
       var seen     = localStorage.getItem("introSeen") === "true";
       var user     = null;
       try { user = JSON.parse(localStorage.getItem("cg_current_user")); } catch(e) {}
@@ -466,6 +476,7 @@
   <script src="./transition.js"></script>
 <script src="./translate.js"></script>
 <script src="./cookie.js"></script>
+<script src="./account.js"></script>
 <script src="./script.js"></script>
 <script src="./sound.js"></script>
 <script src="./mobile.js"></script>

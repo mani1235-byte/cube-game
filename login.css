@@ -322,6 +322,36 @@ body {
 }
 .switch-note a:hover { text-decoration: underline; }
 
+/* ── "Connect to Website" (app-only) ────────────────────────────────────── */
+/* Hidden by default — only revealed with .visible when login.js detects
+   we're running inside the downloaded Electron/mobile app. */
+.website-connect-btn {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin: 10px auto 0;
+  padding: 9px 18px;
+  width: fit-content;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: rgba(103,215,240,0.08);
+  color: var(--cyan);
+  text-decoration: none;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  transition: background 0.2s, border-color 0.2s, transform 0.15s;
+}
+.website-connect-btn svg { width: 15px; height: 15px; flex-shrink: 0; }
+.website-connect-btn:hover {
+  background: rgba(103,215,240,0.16);
+  border-color: var(--cyan);
+  transform: translateY(-1px);
+}
+.website-connect-btn.visible { display: inline-flex; }
+
 /* ── YouTube link ────────────────────────────────────────────────────────── */
 .yt-link {
   display: inline-flex;

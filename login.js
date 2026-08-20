@@ -178,6 +178,29 @@ function enterGame() {
   }
 }
 
+// ── "Connect to Website" button — only shown inside the downloaded app ────
+// index.html's guard script stores cg_app_shell (from the ?platform=...
+// the Electron/mobile wrapper opened us with) into localStorage the first
+// time the app loads cubegame.club, so it's still readable here even after
+// redirects. navigator.userAgent is checked too as a fallback for Electron,
+// which tags itself in the UA by default.
+(function initAppShellButton() {
+  function ready(fn) {
+    if (document.readyState !== "loading") fn();
+    else document.addEventListener("DOMContentLoaded", fn);
+  }
+  ready(function () {
+    let inApp = false;
+    try { inApp = !!localStorage.getItem("cg_app_shell"); } catch (_) {}
+    if (!inApp && /Electron/i.test(navigator.userAgent || "")) inApp = true;
+
+    if (inApp) {
+      const btn = document.getElementById("websiteConnectBtn");
+      if (btn) btn.classList.add("visible");
+    }
+  });
+})();
+
 (function initPlatformModal() {
   function ready(fn) {
     if (document.readyState !== "loading") fn();
