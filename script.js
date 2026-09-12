@@ -2039,7 +2039,10 @@ function tick(width, height, simTime, simSpeed, lag) {
     targetSpeed = pointerIsDown ? 0.075 : 0.3;
   } else {
     const menuPointerDown = isMenuVisible() && pointerIsDown;
-    targetSpeed = menuPointerDown ? 0.025 : 1;
+    // Chaos mode is intentionally a little slower so the denser battlefield
+    // remains challenging without becoming unfair.
+    const chaosSpeedMultiplier = isChaosGame() ? 0.82 : 1;
+    targetSpeed = (menuPointerDown ? 0.025 : 1) * chaosSpeedMultiplier;
   }
 
   renderSlowmoStatus(slowmoRemaining / slowmoDuration);
