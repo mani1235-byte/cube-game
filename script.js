@@ -27,8 +27,9 @@ const BOMB_CHANCE = 0.12; // ~12% chance each spawn cycle
 const getSpawnDelay = () => {
   const spawnDelayMax = isAntiLoseGame() ? 1000 : 1400;
   const spawnDelayMin = isAntiLoseGame() ? 400  : 550;
-  const spawnDelay = spawnDelayMax - state.game.cubeCount * 3.1;
-  return Math.max(spawnDelay, spawnDelayMin);
+  let spawnDelay = spawnDelayMax - state.game.cubeCount * 3.1;
+  if (isChaosGame() && window._cgChaosEvent === "speed") spawnDelay *= 0.48;
+  return Math.max(spawnDelay, spawnDelayMin * (isChaosGame() && window._cgChaosEvent === "speed" ? 0.65 : 1));
 };
 
 // Max cubes on screen at once in anti-lose mode
@@ -107,6 +108,7 @@ const allShadowPolys = [];
 const GAME_MODE_RANKED   = Symbol("GAME_MODE_RANKED");
 const GAME_MODE_CASUAL   = Symbol("GAME_MODE_CASUAL");
 const GAME_MODE_ANTI_LOSE = Symbol("GAME_MODE_ANTI_LOSE");
+const GAME_MODE_CHAOS = Symbol("GAME_MODE_CHAOS");
 
 // Available Menus
 const MENU_MAIN = Symbol("MENU_MAIN");
@@ -141,6 +143,7 @@ const isInGame = () => !state.menus.active;
 const isMenuVisible = () => !!state.menus.active;
 const isCasualGame   = () => state.game.mode === GAME_MODE_CASUAL;
 const isAntiLoseGame = () => state.game.mode === GAME_MODE_ANTI_LOSE;
+const isChaosGame = () => state.game.mode === GAME_MODE_CHAOS;
 const isPaused = () => state.menus.active === MENU_PAUSE;
 
 ///////////////////
@@ -920,7 +923,8 @@ const getTarget = (() => {
     // Target Parameter Overrides
     // --------------------------------
     // Bombs only in normal (ranked) mode
-    if (state.game.mode === GAME_MODE_RANKED && Math.random() < BOMB_CHANCE) {
+    if ((state.game.mode === GAME_MODE_RANKED && Math.random() < BOMB_CHANCE) ||
+        (isChaosGame() && window._cgChaosEvent === "bombs" && Math.random() < 0.32)) {
       isBomb  = true;
       color   = RED;
       health  = 1;
@@ -1341,7 +1345,7 @@ function renderMenus() {
           menuScoreNode.querySelector('h1').insertAdjacentElement('afterend', modeLabel);
         }
         modeLabel.textContent = state.game.mode === GAME_MODE_RANKED ? '⚔️ NORMAL MODE' :
-                                state.game.mode === GAME_MODE_ANTI_LOSE ? '🛡️ ANTI-LOSE MODE' : 'CASUAL MODE';
+                                state.game.mode === GAME_MODE_ANTI_LOSE ? '🛡️ ANTI-LOSE MODE' : state.game.mode === GAME_MODE_CHAOS ? '⚡ CHAOS MODE' : 'CASUAL MODE';
       })();
       showMenu(menuScoreNode);
       break;
@@ -1503,6 +1507,12 @@ handleClick($(".play-normal-btn"), () => {
 
 handleClick($(".play-casual-btn"), () => {
   setGameMode(GAME_MODE_ANTI_LOSE);
+  setActiveMenu(null);
+  resetGame();
+});
+
+handleClick($(".play-chaos-btn"), () => {
+  setGameMode(GAME_MODE_CHAOS);
   setActiveMenu(null);
   resetGame();
 });
@@ -1713,11 +1723,13 @@ function incrementCubeCount(inc) {
 
 // ── Room / Hall Color Themes ─────────────────────────────────────────────────
 function updateRoomTheme(mode) {
-  document.body.classList.remove('room-menu','room-ranked','room-casual','room-gameover');
+  document.body.classList.remove('room-menu','room-ranked','room-casual','room-chaos','room-gameover');
   if (mode === 'gameover') {
     document.body.classList.add('room-gameover');
   } else if (mode === GAME_MODE_RANKED) {
     document.body.classList.add('room-ranked');
+  } else if (mode === GAME_MODE_CHAOS) {
+    document.body.classList.add('room-chaos');
   } else if (mode === GAME_MODE_ANTI_LOSE || mode === GAME_MODE_CASUAL) {
     document.body.classList.add('room-casual');
   } else {
@@ -1734,8 +1746,128 @@ function setGameMode(mode) {
   updateRoomTheme(mode);
 }
 
+// ── CHAOS MODE ─────────────────────────────────────────────────────────────
+// A contained event system for the 3D gameplay renderer. Events never alter
+// the normal/anti-lose rules and automatically reset when a run ends.
+const chaosObjects = [];
+const chaosEvents = [
+  { id: "speed",  label: "⚡ SPEED SURGE", duration: 6500 },
+  { id: "bombs",  label: "💣 BOMB STORM", duration: 6000 },
+  { id: "coins",  label: "🪙 3D COIN RAIN", duration: 7000 },
+  { id: "gravity",label: "🌙 LOW GRAVITY", duration: 7000 }
+];
+let chaosEvent = null;
+let chaosEventRemaining = 0;
+let chaosNextEvent = 9000;
+let chaosBannerEl = null;
+
+function renderChaosBanner() {
+  if (!isChaosGame()) {
+    if (chaosBannerEl) chaosBannerEl.style.display = "none";
+    return;
+  }
+  if (!chaosBannerEl) {
+    chaosBannerEl = document.createElement("div");
+    chaosBannerEl.id = "chaos-event-banner";
+    chaosBannerEl.style.cssText = [
+      "position:fixed","left:50%","top:82px","transform:translateX(-50%)",
+      "z-index:998","pointer-events:none","padding:7px 14px","border-radius:999px",
+      "font:800 12px/1 monospace","letter-spacing:.12em","color:#fff",
+      "background:rgba(10,15,25,.72)","border:1px solid rgba(255,255,255,.35)",
+      "box-shadow:0 0 22px rgba(103,215,240,.45)","backdrop-filter:blur(8px)",
+      "transition:opacity .2s,transform .2s"
+    ].join(";");
+    document.body.appendChild(chaosBannerEl);
+  }
+  chaosBannerEl.style.display = chaosEvent ? "block" : "none";
+  if (chaosEvent) {
+    chaosBannerEl.textContent = `${chaosEvent.label}  ${Math.ceil(chaosEventRemaining / 1000)}s`;
+  }
+}
+
+function resetChaos() {
+  chaosEvent = null;
+  chaosEventRemaining = 0;
+  chaosNextEvent = 9000;
+  window._cgChaosEvent = null;
+  while (chaosObjects.length) {
+    const obj = chaosObjects.pop();
+    obj.reset();
+  }
+  renderChaosBanner();
+}
+
+function startChaosEvent() {
+  chaosEvent = pickOne(chaosEvents);
+  chaosEventRemaining = chaosEvent.duration;
+  window._cgChaosEvent = chaosEvent.id;
+  if (chaosEvent.id === "coins") spawnChaosCoins();
+  renderChaosBanner();
+}
+
+function tickChaos(simTime) {
+  if (!isChaosGame() || !isInGame()) {
+    if (chaosEvent) resetChaos();
+    return;
+  }
+  if (!chaosEvent) {
+    chaosNextEvent -= simTime;
+    if (chaosNextEvent <= 0) startChaosEvent();
+  } else {
+    chaosEventRemaining -= simTime;
+    if (chaosEvent.id === "coins" && Math.random() < simTime / 1100) spawnChaosCoins(2);
+    if (chaosEventRemaining <= 0) {
+      chaosEvent = null;
+      window._cgChaosEvent = null;
+      chaosNextEvent = random(6500, 11000);
+    }
+  }
+  renderChaosBanner();
+
+  const width = canvas.clientWidth || canvas.width;
+  const height = canvas.clientHeight || canvas.height;
+  const centerX = width / 2;
+  const centerY = height / 2;
+  for (let i = chaosObjects.length - 1; i >= 0; i--) {
+    const o = chaosObjects[i];
+    o.x += o.xD * simTime / 16.67;
+    o.y += o.yD * simTime / 16.67;
+    o.z += o.zD * simTime / 16.67;
+    o.yD += 0.12 * simTime / 16.67;
+    o.rotateX += o.rotateXD * simTime / 16.67;
+    o.rotateY += o.rotateYD * simTime / 16.67;
+    o.rotateZ += o.rotateZD * simTime / 16.67;
+    o.transform(); o.project();
+    if (o.y > centerY + 100 || o.projected.x < -centerX - 80 || o.projected.x > centerX + 80) {
+      chaosObjects.splice(i, 1); continue;
+    }
+    // Collecting a falling 3D coin awards progression currency.
+    if (o.projected && Math.hypot(pointerScene.x - o.projected.x, pointerScene.y - o.projected.y) < 30 && pointerIsDown) {
+      if (window.CoinSystem && typeof window.CoinSystem.earn === "function") window.CoinSystem.earn(5, "chaos_coin_rain");
+      incrementScore(15);
+      chaosObjects.splice(i, 1);
+    }
+  }
+}
+
+function spawnChaosCoins(count = 5) {
+  const model = optimizeModel(makeCubeModel({ scale: 16 }));
+  for (let i = 0; i < count; i++) {
+    const o = new Entity({ model, color: ORANGE, wireframe: false });
+    o.scaleX = 1.0; o.scaleY = 0.22; o.scaleZ = 0.72;
+    o.x = random(-Math.min(canvas.clientWidth || 800, 900) * 0.45, Math.min(canvas.clientWidth || 800, 900) * 0.45);
+    o.y = random(-40, -canvas.clientHeight * 0.35);
+    o.z = random(-80, 80);
+    o.yD = random(2.5, 5.5); o.xD = random(-1.5, 1.5); o.zD = random(-.4, .4);
+    o.rotateXD = random(-.08, .08); o.rotateYD = random(-.12, .12); o.rotateZD = random(-.12, .12);
+    o.transform(); o.project();
+    chaosObjects.push(o);
+  }
+}
+
 function resetGame() {
   resetAllTargets();
+  resetChaos();
   state.game.time = 0;
   resetAllCooldowns();
   setScore(0);
@@ -1861,6 +1993,8 @@ function tick(width, height, simTime, simSpeed, lag) {
 
   state.game.time += simTime;
 
+  tickChaos(simTime);
+
   // Session time limit check (normal mode)
   tickSessionTimer();
 
@@ -1954,7 +2088,7 @@ function tick(width, height, simTime, simSpeed, lag) {
       target.y = centerY + targetHitRadius * 2;
       target.z = Math.random() * targetRadius * 2 - targetRadius;
       target.xD = Math.random() * ((target.x * -2) / 120);
-      target.yD = -20;
+      target.yD = -20 * (isChaosGame() && window._cgChaosEvent === "speed" ? 1.65 : 1);
       targets.push(target);
     } // end underCap
   }
@@ -1967,8 +2101,10 @@ function tick(width, height, simTime, simSpeed, lag) {
 
   targetLoop: for (let i = targets.length - 1; i >= 0; i--) {
     const target = targets[i];
-    target.x += target.xD * simSpeed;
-    target.y += target.yD * simSpeed;
+    const chaosSpeedMult = isChaosGame() && window._cgChaosEvent === "speed" ? 1.65 : 1;
+    target.x += target.xD * simSpeed * chaosSpeedMult;
+    target.y += target.yD * simSpeed * chaosSpeedMult;
+    target.z += target.zD * simSpeed * chaosSpeedMult;
 
     if (target.y < ceiling) {
       target.y = ceiling;
@@ -1988,7 +2124,7 @@ function tick(width, height, simTime, simSpeed, lag) {
       target.zD *= -boundDamping;
     }
 
-    target.yD += gravity * simSpeed;
+    target.yD += gravity * simSpeed * (isChaosGame() && window._cgChaosEvent === "gravity" ? 0.28 : 1);
     target.rotateX += target.rotateXD * simSpeed;
     target.rotateY += target.rotateYD * simSpeed;
     target.rotateZ += target.rotateZD * simSpeed;
@@ -2169,6 +2305,13 @@ function tick(width, height, simTime, simSpeed, lag) {
   allShadowVertices.length = 0;
   allShadowPolys.length = 0;
   targets.forEach((entity) => {
+    allVertices.push(...entity.vertices);
+    allPolys.push(...entity.polys);
+    allShadowVertices.push(...entity.shadowVertices);
+    allShadowPolys.push(...entity.shadowPolys);
+  });
+
+  chaosObjects.forEach((entity) => {
     allVertices.push(...entity.vertices);
     allPolys.push(...entity.polys);
     allShadowVertices.push(...entity.shadowVertices);

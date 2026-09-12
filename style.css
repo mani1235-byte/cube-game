@@ -1265,3 +1265,31 @@ h1 {
   margin: 4px 0;
   border-top: 1px dashed rgba(255,255,255,0.15);
 }
+
+
+/* ── Chaos Mode ─────────────────────────────────────────────────────────── */
+.play-chaos-btn {
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(110deg, rgba(250,36,115,.20), rgba(103,215,240,.22));
+  border-color: rgba(255,255,255,.45);
+  box-shadow: 0 0 18px rgba(103,215,240,.20);
+}
+.play-chaos-btn::after {
+  content: "";
+  position: absolute; inset: -60%;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,.22), transparent);
+  transform: rotate(20deg) translateX(-70%);
+  animation: chaosButtonShine 2.8s linear infinite;
+  pointer-events: none;
+}
+@keyframes chaosButtonShine {
+  to { transform: rotate(20deg) translateX(70%); }
+}
+body.room-chaos {
+  animation: chaosRoomPulse 1.6s ease-in-out infinite alternate;
+}
+@keyframes chaosRoomPulse {
+  from { filter: saturate(1); }
+  to { filter: saturate(1.18) brightness(1.03); }
+}
