@@ -1293,3 +1293,20 @@ body.room-chaos {
   from { filter: saturate(1); }
   to { filter: saturate(1.18) brightness(1.03); }
 }
+
+/* Chaos Mode: visual-only 3D effects. Gameplay values are unchanged. */
+body.chaos-spin #c { animation: chaosSpinScene 1.4s ease-in-out infinite alternate; }
+@keyframes chaosSpinScene {
+  from { filter: saturate(1.05); }
+  to { filter: saturate(1.35) brightness(1.08); }
+}
+body.chaos-glitch #c { animation: chaosGlitchScene .24s steps(2, end) infinite; }
+@keyframes chaosGlitchScene {
+  0%, 100% { filter: contrast(1); }
+  50% { filter: contrast(1.18) saturate(1.25); }
+}
+body.chaos-rainbow #c { animation: chaosRainbowScene 1.8s linear infinite; }
+@keyframes chaosRainbowScene {
+  0% { filter: hue-rotate(0deg) saturate(1.05); }
+  100% { filter: hue-rotate(360deg) saturate(1.25); }
+}

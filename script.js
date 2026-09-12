@@ -21,15 +21,22 @@ const MAX_HEARTS = 3;
 let hearts       = MAX_HEARTS;
 const MAX_HP     = 150;
 let currentHP    = MAX_HP;
-const BOMB_CHANCE = 0.12; // ~12% chance each spawn cycle
+const BOMB_CHANCE = 0.12; // Normal mode bomb chance
+const CHAOS_BOMB_CHANCE = 0.32; // Chaos mode: much more dangerous
+const CHAOS_SPAWN_MIN = 170;
+const CHAOS_SPAWN_MAX = 520;
 
 // Gameplay
 const getSpawnDelay = () => {
+  if (isChaosGame()) {
+    // Chaos keeps the same core rules, but the battlefield becomes much busier.
+    const chaosDelay = CHAOS_SPAWN_MAX - state.game.cubeCount * 4.5;
+    return Math.max(chaosDelay, CHAOS_SPAWN_MIN);
+  }
   const spawnDelayMax = isAntiLoseGame() ? 1000 : 1400;
   const spawnDelayMin = isAntiLoseGame() ? 400  : 550;
-  let spawnDelay = spawnDelayMax - state.game.cubeCount * 3.1;
-  if (isChaosGame() && window._cgChaosEvent === "speed") spawnDelay *= 0.48;
-  return Math.max(spawnDelay, spawnDelayMin * (isChaosGame() && window._cgChaosEvent === "speed" ? 0.65 : 1));
+  const spawnDelay = spawnDelayMax - state.game.cubeCount * 3.1;
+  return Math.max(spawnDelay, spawnDelayMin);
 };
 
 // Max cubes on screen at once in anti-lose mode
@@ -922,9 +929,9 @@ const getTarget = (() => {
 
     // Target Parameter Overrides
     // --------------------------------
-    // Bombs only in normal (ranked) mode
+    // Chaos has substantially more bombs; Normal keeps its original chance.
     if ((state.game.mode === GAME_MODE_RANKED && Math.random() < BOMB_CHANCE) ||
-        (isChaosGame() && window._cgChaosEvent === "bombs" && Math.random() < 0.32)) {
+        (isChaosGame() && Math.random() < CHAOS_BOMB_CHANCE)) {
       isBomb  = true;
       color   = RED;
       health  = 1;
@@ -1747,19 +1754,21 @@ function setGameMode(mode) {
 }
 
 // ── CHAOS MODE ─────────────────────────────────────────────────────────────
-// A contained event system for the 3D gameplay renderer. Events never alter
-// the normal/anti-lose rules and automatically reset when a run ends.
+// Chaos Mode keeps the exact same gameplay rules as Normal Mode. The chaos is
+// visual only: the 3D scene gets temporary, harmless effects while cube
+// spawning, movement, bombs, score, and difficulty stay unchanged.
 const chaosObjects = [];
 const chaosEvents = [
-  { id: "speed",  label: "⚡ SPEED SURGE", duration: 6500 },
-  { id: "bombs",  label: "💣 BOMB STORM", duration: 6000 },
-  { id: "coins",  label: "🪙 3D COIN RAIN", duration: 7000 },
-  { id: "gravity",label: "🌙 LOW GRAVITY", duration: 7000 }
+  { id: "spin",   label: "🌀 3D SPIN STORM", duration: 5200 },
+  { id: "burst",  label: "💥 3D CUBE BURST", duration: 4200 },
+  { id: "glitch", label: "⚡ 3D GLITCH", duration: 3600 },
+  { id: "rainbow",label: "🌈 3D COLOR SHIFT", duration: 6200 }
 ];
 let chaosEvent = null;
 let chaosEventRemaining = 0;
-let chaosNextEvent = 9000;
+let chaosNextEvent = 6500;
 let chaosBannerEl = null;
+let chaosVisualClock = 0;
 
 function renderChaosBanner() {
   if (!isChaosGame()) {
@@ -1774,94 +1783,116 @@ function renderChaosBanner() {
       "z-index:998","pointer-events:none","padding:7px 14px","border-radius:999px",
       "font:800 12px/1 monospace","letter-spacing:.12em","color:#fff",
       "background:rgba(10,15,25,.72)","border:1px solid rgba(255,255,255,.35)",
-      "box-shadow:0 0 22px rgba(103,215,240,.45)","backdrop-filter:blur(8px)",
-      "transition:opacity .2s,transform .2s"
+      "box-shadow:0 0 22px rgba(103,215,240,.45)","backdrop-filter:blur(8px)"
     ].join(";");
     document.body.appendChild(chaosBannerEl);
   }
   chaosBannerEl.style.display = chaosEvent ? "block" : "none";
-  if (chaosEvent) {
-    chaosBannerEl.textContent = `${chaosEvent.label}  ${Math.ceil(chaosEventRemaining / 1000)}s`;
-  }
+  if (chaosEvent) chaosBannerEl.textContent = `${chaosEvent.label}  ${Math.ceil(chaosEventRemaining / 1000)}s`;
 }
 
 function resetChaos() {
   chaosEvent = null;
   chaosEventRemaining = 0;
-  chaosNextEvent = 9000;
-  window._cgChaosEvent = null;
-  while (chaosObjects.length) {
-    const obj = chaosObjects.pop();
-    obj.reset();
-  }
+  chaosNextEvent = 6500;
+  chaosVisualClock = 0;
+  while (chaosObjects.length) chaosObjects.pop().reset();
+  document.body.classList.remove("chaos-spin", "chaos-glitch", "chaos-rainbow");
+  if (canvas) canvas.style.transform = "";
+  if (canvas) canvas.style.filter = "";
   renderChaosBanner();
 }
 
 function startChaosEvent() {
   chaosEvent = pickOne(chaosEvents);
   chaosEventRemaining = chaosEvent.duration;
-  window._cgChaosEvent = chaosEvent.id;
-  if (chaosEvent.id === "coins") spawnChaosCoins();
+  if (chaosEvent.id === "spin") spawnChaosCubes(9, "orbit");
+  if (chaosEvent.id === "burst") spawnChaosCubes(16, "burst");
+  if (chaosEvent.id === "glitch") spawnChaosCubes(7, "glitch");
+  if (chaosEvent.id === "rainbow") spawnChaosCubes(11, "rainbow");
   renderChaosBanner();
+}
+
+function spawnChaosCubes(count, type) {
+  const size = type === "burst" ? 10 : 14;
+  const model = optimizeModel(makeCubeModel({ scale: size }));
+  const width = canvas.clientWidth || canvas.width || 900;
+  const height = canvas.clientHeight || canvas.height || 700;
+  const colors = [BLUE, GREEN, PINK, ORANGE, RED];
+
+  for (let i = 0; i < count; i++) {
+    const o = new Entity({ model, color: pickOne(colors), wireframe: type === "glitch" });
+    o.chaosType = type;
+    o.life = random(2200, 5200);
+    o.x = random(-width * 0.42, width * 0.42);
+    o.y = random(-height * 0.25, height * 0.35);
+    o.z = random(-250, 120);
+    o.xD = type === "burst" ? random(-5, 5) : random(-1.2, 1.2);
+    o.yD = type === "burst" ? random(-5, 5) : random(-1.5, 1.5);
+    o.zD = random(-1.2, 1.2);
+    o.rotateXD = random(-0.18, 0.18);
+    o.rotateYD = random(-0.22, 0.22);
+    o.rotateZD = random(-0.18, 0.18);
+    o.transform();
+    o.project();
+    chaosObjects.push(o);
+  }
 }
 
 function tickChaos(simTime) {
   if (!isChaosGame() || !isInGame()) {
-    if (chaosEvent) resetChaos();
+    if (chaosEvent || chaosObjects.length) resetChaos();
     return;
   }
+
+  chaosVisualClock += simTime;
   if (!chaosEvent) {
     chaosNextEvent -= simTime;
     if (chaosNextEvent <= 0) startChaosEvent();
   } else {
     chaosEventRemaining -= simTime;
-    if (chaosEvent.id === "coins" && Math.random() < simTime / 1100) spawnChaosCoins(2);
     if (chaosEventRemaining <= 0) {
       chaosEvent = null;
-      window._cgChaosEvent = null;
-      chaosNextEvent = random(6500, 11000);
+      chaosNextEvent = random(4500, 8500);
+      document.body.classList.remove("chaos-spin", "chaos-glitch", "chaos-rainbow");
+      if (canvas) canvas.style.transform = "";
+      if (canvas) canvas.style.filter = "";
     }
   }
+
+  if (chaosEvent?.id === "spin") document.body.classList.add("chaos-spin");
+  else document.body.classList.remove("chaos-spin");
+  if (chaosEvent?.id === "glitch") document.body.classList.add("chaos-glitch");
+  else document.body.classList.remove("chaos-glitch");
+  if (chaosEvent?.id === "rainbow") document.body.classList.add("chaos-rainbow");
+  else document.body.classList.remove("chaos-rainbow");
+
+  if (canvas && chaosEvent?.id === "glitch") {
+    const j = Math.sin(chaosVisualClock * 0.11) * 3;
+    canvas.style.transform = `translate(${j.toFixed(1)}px, ${(Math.cos(chaosVisualClock * 0.17) * 2).toFixed(1)}px)`;
+  }
+
   renderChaosBanner();
 
-  const width = canvas.clientWidth || canvas.width;
-  const height = canvas.clientHeight || canvas.height;
-  const centerX = width / 2;
-  const centerY = height / 2;
   for (let i = chaosObjects.length - 1; i >= 0; i--) {
     const o = chaosObjects[i];
-    o.x += o.xD * simTime / 16.67;
-    o.y += o.yD * simTime / 16.67;
-    o.z += o.zD * simTime / 16.67;
-    o.yD += 0.12 * simTime / 16.67;
-    o.rotateX += o.rotateXD * simTime / 16.67;
-    o.rotateY += o.rotateYD * simTime / 16.67;
-    o.rotateZ += o.rotateZD * simTime / 16.67;
-    o.transform(); o.project();
-    if (o.y > centerY + 100 || o.projected.x < -centerX - 80 || o.projected.x > centerX + 80) {
-      chaosObjects.splice(i, 1); continue;
+    o.life -= simTime;
+    const step = simTime / 16.67;
+    if (o.chaosType === "orbit") {
+      o.x += o.xD * step + Math.sin(chaosVisualClock * 0.006 + i) * 0.9;
+      o.y += o.yD * step + Math.cos(chaosVisualClock * 0.006 + i) * 0.9;
+      o.rotateY += 0.035 * step;
+    } else {
+      o.x += o.xD * step;
+      o.y += o.yD * step;
     }
-    // Collecting a falling 3D coin awards progression currency.
-    if (o.projected && Math.hypot(pointerScene.x - o.projected.x, pointerScene.y - o.projected.y) < 30 && pointerIsDown) {
-      if (window.CoinSystem && typeof window.CoinSystem.earn === "function") window.CoinSystem.earn(5, "chaos_coin_rain");
-      incrementScore(15);
-      chaosObjects.splice(i, 1);
-    }
-  }
-}
-
-function spawnChaosCoins(count = 5) {
-  const model = optimizeModel(makeCubeModel({ scale: 16 }));
-  for (let i = 0; i < count; i++) {
-    const o = new Entity({ model, color: ORANGE, wireframe: false });
-    o.scaleX = 1.0; o.scaleY = 0.22; o.scaleZ = 0.72;
-    o.x = random(-Math.min(canvas.clientWidth || 800, 900) * 0.45, Math.min(canvas.clientWidth || 800, 900) * 0.45);
-    o.y = random(-40, -canvas.clientHeight * 0.35);
-    o.z = random(-80, 80);
-    o.yD = random(2.5, 5.5); o.xD = random(-1.5, 1.5); o.zD = random(-.4, .4);
-    o.rotateXD = random(-.08, .08); o.rotateYD = random(-.12, .12); o.rotateZD = random(-.12, .12);
-    o.transform(); o.project();
-    chaosObjects.push(o);
+    o.z += o.zD * step;
+    o.rotateX += o.rotateXD * step;
+    o.rotateY += o.rotateYD * step;
+    o.rotateZ += o.rotateZD * step;
+    o.transform();
+    o.project();
+    if (o.life <= 0) { chaosObjects.splice(i, 1); o.reset(); }
   }
 }
 
@@ -2082,14 +2113,27 @@ function tick(width, height, simTime, simSpeed, lag) {
     // Only spawn if under cap
     const underCap = !isAntiLoseGame() || targets.length < maxAnti;
     if (underCap) {
-      const target = getTarget();
+      // Normal mode spawns one target. Chaos can throw several 3D targets into
+      // the arena at once, while still respecting the anti-lose cap.
+      const spawnCount = isChaosGame() ? (Math.random() < 0.58 ? 2 : 1) : 1;
       const spawnRadius = Math.min(centerX * 0.8, maxSpawnX);
-      target.x = Math.random() * spawnRadius * 2 - spawnRadius;
-      target.y = centerY + targetHitRadius * 2;
-      target.z = Math.random() * targetRadius * 2 - targetRadius;
-      target.xD = Math.random() * ((target.x * -2) / 120);
-      target.yD = -20 * (isChaosGame() && window._cgChaosEvent === "speed" ? 1.65 : 1);
-      targets.push(target);
+      for (let si = 0; si < spawnCount; si++) {
+        const target = getTarget();
+        target.x = Math.random() * spawnRadius * 2 - spawnRadius;
+        target.y = centerY + targetHitRadius * 2;
+        target.z = Math.random() * targetRadius * 2 - targetRadius;
+        target.xD = Math.random() * ((target.x * -2) / 120);
+        target.yD = isChaosGame() ? -(16 + Math.random() * 14) : -20;
+        if (isChaosGame()) {
+          // Different launch directions make the 3D field unpredictable.
+          target.xD += random(-5, 5);
+          target.zD += random(-2.5, 2.5);
+          target.rotateXD += random(-0.12, 0.12);
+          target.rotateYD += random(-0.16, 0.16);
+          target.rotateZD += random(-0.12, 0.12);
+        }
+        targets.push(target);
+      }
     } // end underCap
   }
 
@@ -2101,10 +2145,9 @@ function tick(width, height, simTime, simSpeed, lag) {
 
   targetLoop: for (let i = targets.length - 1; i >= 0; i--) {
     const target = targets[i];
-    const chaosSpeedMult = isChaosGame() && window._cgChaosEvent === "speed" ? 1.65 : 1;
-    target.x += target.xD * simSpeed * chaosSpeedMult;
-    target.y += target.yD * simSpeed * chaosSpeedMult;
-    target.z += target.zD * simSpeed * chaosSpeedMult;
+    target.x += target.xD * simSpeed;
+    target.y += target.yD * simSpeed;
+    target.z += target.zD * simSpeed;
 
     if (target.y < ceiling) {
       target.y = ceiling;
@@ -2124,7 +2167,7 @@ function tick(width, height, simTime, simSpeed, lag) {
       target.zD *= -boundDamping;
     }
 
-    target.yD += gravity * simSpeed * (isChaosGame() && window._cgChaosEvent === "gravity" ? 0.28 : 1);
+    target.yD += gravity * simSpeed;
     target.rotateX += target.rotateXD * simSpeed;
     target.rotateY += target.rotateYD * simSpeed;
     target.rotateZ += target.rotateZD * simSpeed;
@@ -2187,7 +2230,7 @@ function tick(width, height, simTime, simSpeed, lag) {
                 sparkBurst(hitX, hitY, 12, sparkSpeed * 1.4);
                 targets.splice(i, 1);
                 returnTarget(target);
-                if (state.game.mode === GAME_MODE_RANKED || state.game.mode === GAME_MODE_ANTI_LOSE || state.game.mode === GAME_MODE_CASUAL) loseHeart();
+                if (state.game.mode === GAME_MODE_RANKED || state.game.mode === GAME_MODE_ANTI_LOSE || state.game.mode === GAME_MODE_CASUAL || isChaosGame()) loseHeart();
               } else {
                 incrementCubeCount(1);
                 triggerCombo();
