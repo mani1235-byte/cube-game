@@ -135,12 +135,16 @@
       }));
     }
 
+    canvas.style.touchAction = "none";
     let lastTouch = null;
     let touchMoved = false;
+    let activeTouchId = null;
 
     canvas.addEventListener("touchstart", e => {
       e.preventDefault();
+      if (activeTouchId !== null) return;
       const t = e.touches[0];
+      activeTouchId = t.identifier;
       lastTouch = { x: t.clientX, y: t.clientY };
       touchMoved = false;
       spawnTrail(t.clientX, t.clientY);
@@ -149,7 +153,8 @@
 
     canvas.addEventListener("touchmove", e => {
       e.preventDefault();
-      const t = e.touches[0];
+      const t = Array.from(e.touches).find(x => x.identifier === activeTouchId) || e.touches[0];
+      if (!t) return;
       touchMoved = true;
       spawnTrail(t.clientX, t.clientY);
       if (settings.swipe) simulatePointer("pointermove", t.clientX, t.clientY);
@@ -168,6 +173,7 @@
         simulatePointer("pointerup", lastTouch.x, lastTouch.y);
       }
       lastTouch = null;
+      activeTouchId = null;
     }, { passive: false });
 
     // Prevent scroll & context menu
@@ -184,7 +190,17 @@
       });
     }
 
-    // Canvas size is locked at startup — no resize listener needed
+    // Keep the 3D canvas correctly sized after rotation, browser-bar changes and split-screen.
+    const resizeCanvas = () => {
+      const rect = canvas.getBoundingClientRect();
+      if (rect.width > 0 && rect.height > 0) {
+        canvas.style.touchAction = "none";
+        window.dispatchEvent(new Event("cg:mobile-resize"));
+      }
+    };
+    window.addEventListener("resize", resizeCanvas, { passive: true });
+    window.addEventListener("orientationchange", () => setTimeout(resizeCanvas, 250), { passive: true });
+    resizeCanvas();
   }
 
   // ── Init ───────────────────────────────────────────────────────────────

@@ -19,10 +19,14 @@
       lastFpsTime = now;
       applyQuality();
     }
-    requestAnimationFrame(measureFPS);
+    let monitorRunning = true;
+  document.addEventListener("visibilitychange", () => { monitorRunning = !document.hidden; });
+  function monitorLoop() {
+    if (monitorRunning) measureFPS();
+    else requestAnimationFrame(monitorLoop);
   }
-  requestAnimationFrame(measureFPS);
-
+  requestAnimationFrame(monitorLoop);
+  }
   // ── Dynamic Resolution ───────────────────────────────────────────────────
   let currentQuality = isMobile ? "medium" : "high";
   let lastQualityChange = 0;
@@ -82,7 +86,8 @@
       document.head.appendChild(link);
     });
   }
-  setTimeout(prefetchNext, 2000);
+  if ("requestIdleCallback" in window) requestIdleCallback(prefetchNext, { timeout: 3500 });
+  else setTimeout(prefetchNext, 2500);
 
   // ── Reduce shadow resolution on mobile ───────────────────────────────────
   // Inject CSS to skip expensive box-shadows on low-end

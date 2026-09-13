@@ -991,7 +991,15 @@ function showToast(msg) {
 }
 
 // ── Shop open/close ────────────────────────────────────────────────────────
+function enhanceShopMotion() {
+  if (document.getElementById("cg-shop-motion")) return;
+  const style = document.createElement("style"); style.id = "cg-shop-motion";
+  style.textContent = `#shopOverlay.open .shop-panel{animation:cgShopIn .28s cubic-bezier(.16,1,.3,1)} .shop-tab,.shop-item,.shop-card,.purchase-btn{transition:transform .18s ease,filter .18s ease,box-shadow .18s ease} .shop-tab:hover,.shop-item:hover,.shop-card:hover{transform:translateY(-3px);filter:brightness(1.08)} @keyframes cgShopIn{from{opacity:0;transform:translateY(18px) scale(.97)}to{opacity:1;transform:none}}`;
+  document.head.appendChild(style);
+}
+
 function openShop() {
+  enhanceShopMotion();
   const overlay = document.getElementById("shopOverlay");
   if (overlay) overlay.classList.add("open");
   buildCoinGrid();

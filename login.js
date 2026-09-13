@@ -114,6 +114,8 @@ function doSignup() {
   const newUser = defaultSave(username, email);
   newUser.passHash = simpleHash(pass);
 
+  newUser.loginHistory = [{ at: Date.now(), type: "signup" }];
+  newUser.loginCount = 1;
   users[email] = newUser;
   saveUsers(users);
   setCurrentUser(newUser);
@@ -138,6 +140,10 @@ function doLogin() {
   if (user.passHash !== simpleHash(pass)) return showError("loginError", "Wrong password.");
 
   user.lastSeen = Date.now();
+  user.loginCount = (user.loginCount || 0) + 1;
+  user.loginHistory = Array.isArray(user.loginHistory) ? user.loginHistory : [];
+  user.loginHistory.unshift({ at: Date.now(), type: "login" });
+  user.loginHistory = user.loginHistory.slice(0, 20);
   users[email]  = user;
   saveUsers(users);
   setCurrentUser(user);
