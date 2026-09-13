@@ -154,58 +154,10 @@
     jVector.y = ky / JOYSTICK_RADIUS;
   }
 
-  // Show joystick when game is active
-  let joystickVisible = false;
-  function showJoystick(show) {
-    joystickVisible = show;
-    jZone.classList.toggle("active", show);
-    if (!show) {
-      jKnob.style.transform = "";
-      jVector.x = 0; jVector.y = 0;
-    }
-  }
-
-  // Joystick → simulate swipe on game canvas
-  const gameCanvas = document.getElementById("c");
-  if (gameCanvas) {
-    let jPointerActive = false;
-    let jLastX = 0, jLastY = 0;
-
-    // Touch on left third of screen = joystick
-    gameCanvas.addEventListener("touchstart", e => {
-      const t = e.touches[0];
-      if (t.clientX < window.innerWidth * 0.4) {
-        jOrigin = { x: t.clientX, y: t.clientY };
-        jBase.style.left = (t.clientX - 55) + "px";
-        jBase.style.bottom = (window.innerHeight - t.clientY - 55) + "px";
-        jActive = true;
-        jLastX = t.clientX; jLastY = t.clientY;
-        showJoystick(true);
-        vibrate(12);
-      }
-    }, { passive: true });
-
-    gameCanvas.addEventListener("touchmove", e => {
-      if (!jActive) return;
-      const t = e.touches[0];
-      updateKnob(t.clientX, t.clientY);
-
-      // Translate joystick to pointer events on canvas
-      const speed = 5;
-      const nx = jLastX + jVector.x * speed;
-      const ny = jLastY + jVector.y * speed;
-      gameCanvas.dispatchEvent(new PointerEvent("pointermove", {
-        bubbles: true, cancelable: true,
-        clientX: nx, clientY: ny,
-        pointerId: 99, pointerType: "touch", isPrimary: true,
-      }));
-      jLastX = nx; jLastY = ny;
-    }, { passive: true });
-
-    gameCanvas.addEventListener("touchend", () => {
-      if (jActive) { jActive = false; showJoystick(false); }
-    }, { passive: true });
-  }
+  // The main mobile.js controller owns the real 3D swipe input.
+  // Do not install a second touch controller here: competing touch handlers
+  // caused short/vanishing swipes and premature missed-cube game overs.
+  // AAA remains visual-only on the game canvas.
 
   // ═══════════════════════════════════════════════════════════════════════════
   // TOUCH RIPPLE FEEDBACK
@@ -272,85 +224,7 @@
     return best;
   }
 
-  document.addEventListener("touchmove", e => {
-    const t = e.touches[0];
-    const near = findNearestTarget(t.clientX, t.clientY);
-    if (near) {
-      aimRing.style.display = "block";
-      aimRing.style.left = near.x + "px";
-      aimRing.style.top  = near.y + "px";
-      aimRing.classList.add("locked");
-      aimTarget = near;
-    } else {
-      aimRing.classList.remove("locked");
-      aimRing.style.left = t.clientX + "px";
-      aimRing.style.top  = t.clientY + "px";
-      aimRing.style.display = "block";
-      aimTarget = null;
-    }
-  }, { passive: true });
+  // Aim assist is intentionally disabled for the primary swipe surface.
+  // It previously competed with the 3D slash gesture on smaller screens.
 
-  document.addEventListener("touchend", () => {
-    setTimeout(() => { aimRing.style.display = "none"; aimTarget = null; }, 200);
-  }, { passive: true });
-
-  // ═══════════════════════════════════════════════════════════════════════════
-  // EXPOSE TARGET POSITIONS (patch into game tick)
-  // ═══════════════════════════════════════════════════════════════════════════
-  window.addEventListener("load", () => {
-    const origTick = window.tick;
-    if (typeof origTick !== "function") return;
-    window.tick = function(w, h, st, ss, lag) {
-      origTick(w, h, st, ss, lag);
-      try {
-        const vScale = window._cgViewScale || (window.innerHeight / 1000);
-        const halfW  = window._cgHalfW    || (window.innerWidth / 2);
-        const halfH  = window._cgHalfH    || (window.innerHeight / 2);
-        // targets is global in script.js
-        if (typeof targets !== "undefined") {
-          window._cgTargetPositions = targets
-            .filter(t => !t.removed)
-            .map(t => ({
-              x: (t.projected.x + halfW) * vScale,
-              y: (t.projected.y + halfH) * vScale,
-            }));
-        }
-      } catch(e) {}
-    };
-  });
-
-  // ═══════════════════════════════════════════════════════════════════════════
-  // ORIENTATION LOCK NOTICE
-  // ═══════════════════════════════════════════════════════════════════════════
-  const orientEl = document.createElement("div");
-  orientEl.id = "aaa-orient";
-  orientEl.innerHTML = `
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-      <rect x="5" y="2" width="14" height="20" rx="2"/>
-      <path d="M12 18h.01"/>
-    </svg>
-    <span>ROTATE TO LANDSCAPE</span>
-  `;
-  document.body.appendChild(orientEl);
-
-  function orientLockEnabled() {
-    try {
-      const s = JSON.parse(localStorage.getItem("cg_mobile_settings"));
-      return !!(s && s.orientLock);
-    } catch (e) { return false; }
-  }
-
-  function checkOrientation() {
-    const portrait = window.innerHeight > window.innerWidth;
-    // Only block gameplay with the full-screen "rotate" overlay if the
-    // player explicitly turned on Orientation Lock in Mobile Settings.
-    // Otherwise the game supports portrait play and this must never
-    // swallow taps (it was freezing the whole game for portrait users).
-    orientEl.classList.toggle("show", portrait && !!gameCanvas && orientLockEnabled());
-  }
-  window.addEventListener("resize", checkOrientation);
-  window.addEventListener("orientationchange", () => setTimeout(checkOrientation, 300));
-  checkOrientation();
-
-  console.log("📱 MobileAAA Phase 7 loaded!");
 })();

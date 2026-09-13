@@ -136,6 +136,9 @@
     }
 
     canvas.style.touchAction = "none";
+    canvas.style.webkitUserSelect = "none";
+    canvas.style.userSelect = "none";
+    canvas.style.webkitTouchCallout = "none";
     let lastTouch = null;
     let touchMoved = false;
     let activeTouchId = null;
@@ -148,7 +151,9 @@
       lastTouch = { x: t.clientX, y: t.clientY };
       touchMoved = false;
       spawnTrail(t.clientX, t.clientY);
-      if (settings.swipe) simulatePointer("pointerdown", t.clientX, t.clientY);
+      if (settings.swipe) {
+        simulatePointer("pointerdown", t.clientX, t.clientY);
+      }
     }, { passive: false });
 
     canvas.addEventListener("touchmove", e => {
@@ -157,7 +162,9 @@
       if (!t) return;
       touchMoved = true;
       spawnTrail(t.clientX, t.clientY);
-      if (settings.swipe) simulatePointer("pointermove", t.clientX, t.clientY);
+      if (settings.swipe) {
+        simulatePointer("pointermove", t.clientX, t.clientY);
+      }
       lastTouch = { x: t.clientX, y: t.clientY };
     }, { passive: false });
 
@@ -195,6 +202,9 @@
       const rect = canvas.getBoundingClientRect();
       if (rect.width > 0 && rect.height > 0) {
         canvas.style.touchAction = "none";
+    canvas.style.webkitUserSelect = "none";
+    canvas.style.userSelect = "none";
+    canvas.style.webkitTouchCallout = "none";
         window.dispatchEvent(new Event("cg:mobile-resize"));
       }
     };
