@@ -22,15 +22,15 @@ let hearts       = MAX_HEARTS;
 const MAX_HP     = 150;
 let currentHP    = MAX_HP;
 const BOMB_CHANCE = 0.12; // Normal mode bomb chance
-const CHAOS_BOMB_CHANCE = 0.32; // Chaos mode: much more dangerous
-const CHAOS_SPAWN_MIN = 170;
-const CHAOS_SPAWN_MAX = 520;
+const CHAOS_BOMB_CHANCE = 0.16; // Chaos mode: much more dangerous
+const CHAOS_SPAWN_MIN = 420;
+const CHAOS_SPAWN_MAX = 1100;
 
 // Gameplay
 const getSpawnDelay = () => {
   if (isChaosGame()) {
     // Chaos keeps the same core rules, but the battlefield becomes much busier.
-    const chaosDelay = CHAOS_SPAWN_MAX - state.game.cubeCount * 4.5;
+    const chaosDelay = CHAOS_SPAWN_MAX - state.game.cubeCount * 1.8;
     return Math.max(chaosDelay, CHAOS_SPAWN_MIN);
   }
   const spawnDelayMax = isAntiLoseGame() ? 1000 : 1400;
