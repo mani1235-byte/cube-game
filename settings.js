@@ -200,3 +200,5 @@
 
   console.log("📱 Mobile system loaded!");
 })();
+
+function setGamePlayingUI(isPlaying){document.body.classList.toggle("game-playing",!!isPlaying);}

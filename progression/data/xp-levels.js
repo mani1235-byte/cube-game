@@ -28,3 +28,5 @@ window.XP_CURVE_TAIL = {
   perLevel: 4500,
   growth: 1.04
 };
+
+function setGamePlayingUI(isPlaying){document.body.classList.toggle("game-playing",!!isPlaying);}

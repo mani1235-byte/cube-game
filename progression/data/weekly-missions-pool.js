@@ -39,3 +39,5 @@ window.WEEKLY_MISSION_POOL = [
 
 // How many missions are active at once each week.
 window.WEEKLY_MISSION_COUNT = 4;
+
+function setGamePlayingUI(isPlaying){document.body.classList.toggle("game-playing",!!isPlaying);}

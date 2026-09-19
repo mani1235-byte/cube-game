@@ -50,3 +50,5 @@ window.ProgressionMath = (function () {
 
   return { clamp, lerp, easeOutCubic, randRange, weightedPick, levelForXP };
 })();
+
+function setGamePlayingUI(isPlaying){document.body.classList.toggle("game-playing",!!isPlaying);}

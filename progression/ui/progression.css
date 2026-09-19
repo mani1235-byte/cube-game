@@ -238,3 +238,6 @@
   .prog-trophy-widget { top: 112px; }
   .prog-streak-day-label { display: none; }
 }
+
+/* Hide bottom UI during gameplay */
+body.game-playing .bottom-menu, body.game-playing .bottom-panel, body.game-playing .bottom-bar, body.game-playing .bottom-controls, body.game-playing .menu-bottom, body.game-playing .footer, body.game-playing .bottom-ui { display:none!important; }

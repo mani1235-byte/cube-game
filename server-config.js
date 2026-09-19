@@ -9,3 +9,5 @@
 //
 // Update this single value whenever your Render URL changes.
 window.CUBE_SERVER = 'https://cube-game-fnam.onrender.com';
+
+function setGamePlayingUI(isPlaying){document.body.classList.toggle("game-playing",!!isPlaying);}

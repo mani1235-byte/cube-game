@@ -483,3 +483,6 @@
 .tcp-icon { font-size: 3rem; margin-bottom: 8px; filter: drop-shadow(0 0 14px rgba(255,215,0,0.6)); }
 .tcp-name { font-size: 1.1rem; font-weight: 900; color: #ffd700; margin-bottom: 4px; }
 .tcp-tier { font-size: 0.7rem; color: rgba(255,255,255,0.5); }
+
+/* Hide bottom UI during gameplay */
+body.game-playing .bottom-menu, body.game-playing .bottom-panel, body.game-playing .bottom-bar, body.game-playing .bottom-controls, body.game-playing .menu-bottom, body.game-playing .footer, body.game-playing .bottom-ui { display:none!important; }

@@ -291,3 +291,5 @@ html, body {
   text-decoration: none;
 }
 .sound-hud-btn:hover { color: var(--cyan); }
+/* Hide bottom UI during gameplay */
+body.game-playing .bottom-menu, body.game-playing .bottom-panel, body.game-playing .bottom-bar, body.game-playing .bottom-controls, body.game-playing .menu-bottom, body.game-playing .footer, body.game-playing .bottom-ui { display:none!important; }

@@ -22,3 +22,5 @@ window.ChestAnimation = (function () {
 
   return { play };
 })();
+
+function setGamePlayingUI(isPlaying){document.body.classList.toggle("game-playing",!!isPlaying);}

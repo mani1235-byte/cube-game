@@ -45,3 +45,5 @@ window.TrophyHall = (function () {
 
   return { mount, render };
 })();
+
+function setGamePlayingUI(isPlaying){document.body.classList.toggle("game-playing",!!isPlaying);}

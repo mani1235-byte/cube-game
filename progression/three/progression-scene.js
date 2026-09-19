@@ -68,3 +68,5 @@ window.ProgressionScene = (function () {
 
 // expose the hook progression-init.js looks for
 window.initProgressionScene = function () { window.ProgressionScene.start(); };
+
+function setGamePlayingUI(isPlaying){document.body.classList.toggle("game-playing",!!isPlaying);}

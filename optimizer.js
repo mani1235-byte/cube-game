@@ -136,3 +136,5 @@
 
   console.log(`⚡ Optimizer Phase 6 loaded! Mobile: ${isMobile}`);
 })();
+
+function setGamePlayingUI(isPlaying){document.body.classList.toggle("game-playing",!!isPlaying);}

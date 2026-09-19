@@ -21,3 +21,5 @@ window.PASS_TRACK = Array.from({ length: 70 }, (_, idx) => {
 
   return { tier, xpRequired: tier * 200, rewardId };
 });
+
+function setGamePlayingUI(isPlaying){document.body.classList.toggle("game-playing",!!isPlaying);}

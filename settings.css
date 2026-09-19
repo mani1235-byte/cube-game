@@ -155,3 +155,6 @@ html, body {
   .hud__actions { padding-right: max(0.65em, env(safe-area-inset-right)); }
   .hud__score   { padding-left:  max(0.65em, env(safe-area-inset-left)); }
 }
+
+/* Hide bottom UI during gameplay */
+body.game-playing .bottom-menu, body.game-playing .bottom-panel, body.game-playing .bottom-bar, body.game-playing .bottom-controls, body.game-playing .menu-bottom, body.game-playing .footer, body.game-playing .bottom-ui { display:none!important; }

@@ -45,3 +45,5 @@
     if (window.RewardPopup) window.RewardPopup.show({ icon: "🎚️", label: `Milestone: Level ${m.level}!` });
   });
 })();
+
+function setGamePlayingUI(isPlaying){document.body.classList.toggle("game-playing",!!isPlaying);}

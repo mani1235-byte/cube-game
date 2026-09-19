@@ -5,3 +5,5 @@ window.DIFFICULTIES = [
   { id: "hard",    name: "Hard",    order: 2, requirement: { type: "trophies", value: 2000 }, speedMult: 1.5, scoreMult: 1.6 },
   { id: "extreme", name: "Extreme", order: 3, requirement: { type: "rewardId", value: "difficulty_extreme" }, speedMult: 2.0, scoreMult: 2.5 }
 ];
+
+function setGamePlayingUI(isPlaying){document.body.classList.toggle("game-playing",!!isPlaying);}

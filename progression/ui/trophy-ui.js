@@ -33,3 +33,5 @@
     if (window.RewardPopup) window.RewardPopup.show({ icon: "🏆", label: `Milestone: ${m.trophies} trophies!` });
   });
 })();
+
+function setGamePlayingUI(isPlaying){document.body.classList.toggle("game-playing",!!isPlaying);}

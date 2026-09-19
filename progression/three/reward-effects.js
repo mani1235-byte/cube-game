@@ -19,3 +19,5 @@ window.RewardEffects = (function () {
 
   return { play, register };
 })();
+
+function setGamePlayingUI(isPlaying){document.body.classList.toggle("game-playing",!!isPlaying);}

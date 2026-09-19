@@ -46,3 +46,5 @@ window.PassSystem = (function () {
 
   return { init, checkTiers, getProgress };
 })();
+
+function setGamePlayingUI(isPlaying){document.body.classList.toggle("game-playing",!!isPlaying);}

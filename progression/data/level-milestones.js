@@ -13,3 +13,5 @@ window.LEVEL_MILESTONES = [
   { level: 75,  id: "lvl_75",  tier: "diamond", rewardId: "chest_crystal" },
   { level: 100, id: "lvl_100", tier: "diamond", rewardId: "chest_legendary" },
 ];
+
+function setGamePlayingUI(isPlaying){document.body.classList.toggle("game-playing",!!isPlaying);}

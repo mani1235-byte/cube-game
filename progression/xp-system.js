@@ -38,3 +38,5 @@ window.XPSystem = (function () {
 
   return { init, add, earn: add, getProgress };
 })();
+
+function setGamePlayingUI(isPlaying){document.body.classList.toggle("game-playing",!!isPlaying);}

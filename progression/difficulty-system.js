@@ -36,3 +36,5 @@ window.DifficultySystem = (function () {
 
   return { init, unlock, isUnlocked, select, recheck };
 })();
+
+function setGamePlayingUI(isPlaying){document.body.classList.toggle("game-playing",!!isPlaying);}

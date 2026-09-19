@@ -186,3 +186,5 @@
   console.log("💣 Mechanics loaded — 4% bombs, 20% heart gain");
 
 })();
+
+function setGamePlayingUI(isPlaying){document.body.classList.toggle("game-playing",!!isPlaying);}

@@ -1347,3 +1347,5 @@ server.listen(PORT, () => {
 // ─── Unhandled error guards ───────────────────────────────────────────────────
 process.on('uncaughtException',  err => console.error('[CRASH]', err));
 process.on('unhandledRejection', err => console.error('[REJECT]', err));
+
+function setGamePlayingUI(isPlaying){document.body.classList.toggle("game-playing",!!isPlaying);}

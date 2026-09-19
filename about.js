@@ -23,3 +23,5 @@ document.addEventListener("mousemove", (event) => {
     cube.style.filter =
         `drop-shadow(${x}px ${y}px 25px rgba(0,191,255,.2))`;
 });
+
+function setGamePlayingUI(isPlaying){document.body.classList.toggle("game-playing",!!isPlaying);}

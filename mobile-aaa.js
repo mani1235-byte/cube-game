@@ -228,3 +228,5 @@
   // It previously competed with the 3D slash gesture on smaller screens.
 
 })();
+
+function setGamePlayingUI(isPlaying){document.body.classList.toggle("game-playing",!!isPlaying);}

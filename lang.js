@@ -377,3 +377,5 @@
   console.log(`🌍 ${LANGUAGES.length} languages loaded`);
 
 })();
+
+function setGamePlayingUI(isPlaying){document.body.classList.toggle("game-playing",!!isPlaying);}

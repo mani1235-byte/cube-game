@@ -57,3 +57,5 @@ window.ChestSystem = (function () {
 
   return { init, addToInventory, open };
 })();
+
+function setGamePlayingUI(isPlaying){document.body.classList.toggle("game-playing",!!isPlaying);}

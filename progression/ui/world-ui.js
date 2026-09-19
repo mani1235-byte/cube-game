@@ -36,3 +36,5 @@
   window.ProgressionEvents.on("world:unlocked", render);
   window.ProgressionEvents.on("world:travel", render);
 })();
+
+function setGamePlayingUI(isPlaying){document.body.classList.toggle("game-playing",!!isPlaying);}

@@ -30,3 +30,5 @@
   window.ProgressionEvents.on("coins:earned", ({ amount }) => { refresh(); floatGain(amount); });
   window.ProgressionEvents.on("coins:spent", refresh);
 })();
+
+function setGamePlayingUI(isPlaying){document.body.classList.toggle("game-playing",!!isPlaying);}

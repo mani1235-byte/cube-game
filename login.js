@@ -293,3 +293,5 @@ document.addEventListener("keydown", e => {
   if (active.id === "panelLogin")  doLogin();
   if (active.id === "panelSignup") doSignup();
 });
+
+function setGamePlayingUI(isPlaying){document.body.classList.toggle("game-playing",!!isPlaying);}

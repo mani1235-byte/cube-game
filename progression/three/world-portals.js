@@ -51,3 +51,5 @@ window.WorldPortals = (function () {
 
   return { build, syncLockStates };
 })();
+
+function setGamePlayingUI(isPlaying){document.body.classList.toggle("game-playing",!!isPlaying);}

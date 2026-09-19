@@ -412,3 +412,5 @@ window.Engine3D = (function () {
 
   return { Vec, room, box, ring, bipyramid, faceNormal, openScene };
 })();
+
+function setGamePlayingUI(isPlaying){document.body.classList.toggle("game-playing",!!isPlaying);}

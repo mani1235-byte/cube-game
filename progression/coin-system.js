@@ -66,3 +66,5 @@ window.CoinSystem = (function () {
 
   return { init, earn, spend, getBalance };
 })();
+
+function setGamePlayingUI(isPlaying){document.body.classList.toggle("game-playing",!!isPlaying);}

@@ -22,3 +22,5 @@ window.ProgressionEvents = (function () {
 
   return { on, off, emit };
 })();
+
+function setGamePlayingUI(isPlaying){document.body.classList.toggle("game-playing",!!isPlaying);}
