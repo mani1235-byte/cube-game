@@ -1505,23 +1505,44 @@ function showSessionExpiredModal() {
 }
 
 // Main Menu
-handleClick($(".play-normal-btn"), () => {
-  setGameMode(GAME_MODE_RANKED);
-  setActiveMenu(null);
-  resetGame();
-  startSessionTimer();
+const modeSelectOverlay = $("#modeSelectOverlay");
+
+function closeModeSelect() {
+  modeSelectOverlay?.classList.remove("open");
+  modeSelectOverlay?.setAttribute("aria-hidden", "true");
+}
+
+handleClick($(".play-btn"), () => {
+  modeSelectOverlay?.classList.add("open");
+  modeSelectOverlay?.setAttribute("aria-hidden", "false");
 });
 
-handleClick($(".play-casual-btn"), () => {
-  setGameMode(GAME_MODE_ANTI_LOSE);
-  setActiveMenu(null);
-  resetGame();
+handleClick($("#modeSelectClose"), closeModeSelect);
+
+document.querySelectorAll(".mode-choice").forEach((button) => {
+  button.addEventListener("click", () => {
+    const mode = button.dataset.mode;
+    closeModeSelect();
+
+    if (mode === "normal") {
+      setGameMode(GAME_MODE_RANKED);
+      setActiveMenu(null);
+      resetGame();
+      startSessionTimer();
+    } else if (mode === "anti") {
+      setGameMode(GAME_MODE_ANTI_LOSE);
+      setActiveMenu(null);
+      resetGame();
+    } else if (mode === "chaos") {
+      setGameMode(GAME_MODE_CHAOS);
+      setActiveMenu(null);
+      resetGame();
+    }
+  });
 });
 
-handleClick($(".play-chaos-btn"), () => {
-  setGameMode(GAME_MODE_CHAOS);
-  setActiveMenu(null);
-  resetGame();
+modeSelectOverlay?.addEventListener("click", (event) => {
+  if (event.target === modeSelectOverlay) closeModeSelect();
 });
 
 // ── Combo system (anti-lose mode) ───────────────────────────────────────────

@@ -170,7 +170,7 @@
 
   // ── Mode-switch handling — reset hearts on fresh starts ────────────────────
   document.addEventListener("click", (e) => {
-    if (e.target.closest(".play-normal-btn") || e.target.closest(".play-casual-btn")) {
+    if (e.target.closest(".mode-normal-choice") || e.target.closest(".mode-anti-choice")) {
       resetHearts(); lastTargetsLen = 0;
     } else if (e.target.closest(".menu-btn--pause") || e.target.closest(".menu-btn--score")) {
       resetHearts();

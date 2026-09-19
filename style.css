@@ -1310,3 +1310,99 @@ body.chaos-rainbow #c { animation: chaosRainbowScene 1.8s linear infinite; }
   0% { filter: hue-rotate(0deg) saturate(1.05); }
   100% { filter: hue-rotate(360deg) saturate(1.25); }
 }
+
+/* ── Play / mode selection ─────────────────────────────────────────────── */
+.play-btn {
+  width: auto;
+  margin-top: 8px;
+  px 20px;
+  px;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  border: 1px solid rgba(255,255,255,.45);
+  border-radius: 10px;
+  background: linear-gradient(135deg, rgba(80,190,255,.22), rgba(150,90,255,.22));
+  box-shadow: 0 0 24px rgba(80,190,255,.16);
+}
+
+.mode-select-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10050;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(0,0,0,.72);
+  backdrop-filter: blur(10px);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity .22s ease, visibility .22s ease;
+}
+.mode-select-overlay.open {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+}
+.mode-select-modal {
+  width: min(520px, 94vw);
+  padding: 28px;
+  border: 1px solid rgba(255,255,255,.18);
+  border-radius: 18px;
+  background: linear-gradient(160deg, rgba(20,35,52,.98), rgba(7,14,24,.98));
+  box-shadow: 0 20px 70px rgba(0,0,0,.55), 0 0 35px rgba(70,170,255,.12);
+  text-align: center;
+}
+.mode-select-title {
+  font-size: clamp(1.5rem, 4vw, 2rem);
+  font-weight: 900;
+  letter-spacing: .12em;
+}
+.mode-select-subtitle {
+  margin: 7px 0 22px;
+  color: rgba(255,255,255,.58);
+  font-family: monospace;
+}
+.mode-select-options {
+  display: grid;
+  gap: 11px;
+}
+.mode-choice {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  width: 100%;
+  padding: 16px 18px;
+  border: 1px solid rgba(255,255,255,.16);
+  border-radius: 12px;
+  background: rgba(255,255,255,.045);
+  color: #fff;
+  text-align: left;
+  cursor: pointer;
+}
+.mode-choice strong {
+  font-size: 1.05rem;
+  letter-spacing: .04em;
+}
+.mode-choice span {
+  margin-top: 5px;
+  color: rgba(255,255,255,.52);
+  font-family: monospace;
+  font-size: .78rem;
+}
+.mode-choice:hover {
+  border-color: rgba(255,255,255,.4);
+  background: rgba(255,255,255,.09);
+}
+.mode-select-close {
+  margin-top: 18px;
+  padding: 8px 20px;
+  color: rgba(255,255,255,.6);
+  font-family: monospace;
+  font-size: .78rem;
+  background: transparent;
+  border: 1px solid rgba(255,255,255,.12);
+  border-radius: 8px;
+}

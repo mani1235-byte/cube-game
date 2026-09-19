@@ -150,12 +150,12 @@ window.TutorialSystem = (function () {
     overallTimeLeft = OVERALL_LIMIT_MS;
     stepIndex = -1;
     buildChrome();
-    // Tell them, don't do it for them: spotlight the real "Normal mod"
+    // Tell them, don't do it for them: spotlight the real "Normal Mode"
     // button on the main menu and wait for them to click it. If they later
     // game-over before finishing, handleGameOver() spotlights "Anti lose
     // mod" the same way instead of switching modes automatically.
-    showModeSelectStep(".play-normal-btn",
-      `Click "Normal mod" below to start your first match!`);
+    showModeSelectStep(".mode-normal-choice",
+      `Click "Normal Mode" below to start your first match!`);
   }
 
   function showModeSelectStep(target, text) {
@@ -281,8 +281,8 @@ window.TutorialSystem = (function () {
     }
     usedSafetyNet = true;
     resumeStepIndex = stepIndex; // remember exactly where we were — progress isn't lost
-    showModeSelectStep(".play-casual-btn",
-      `You ran out of hearts! Click "Anti lose mod" to try again without losing hearts.`);
+    showModeSelectStep(".mode-anti-choice",
+      `You ran out of hearts! Click "Anti Lose Mode" to try again without losing hearts.`);
   }
 
   function stopTutorial({ success, interrupted } = {}) {

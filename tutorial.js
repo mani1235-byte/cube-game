@@ -122,7 +122,7 @@
     save();
     // Return control to the main menu so the player can choose a mode.
     backdrop.classList.remove("is-visible");
-    const normalButton = document.querySelector(".play-normal-btn");
+    const normalButton = document.querySelector(".mode-normal-choice");
     if (normalButton) normalButton.focus();
   }
 
@@ -194,7 +194,7 @@
     if (!state) return;
     build();
     document.addEventListener("click", (event) => {
-      if (event.target.closest(".play-normal-btn, .play-casual-btn")) onModeSelected();
+      if (event.target.closest(".mode-normal-choice, .mode-anti-choice")) onModeSelected();
     });
     if (window.ProgressionEvents) {
       window.ProgressionEvents.on("progression:ready", () => {
