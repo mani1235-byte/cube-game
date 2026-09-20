@@ -41,5 +41,3 @@ window.TrophyModels = (function () {
 
   return { draw, TIER_COLORS };
 })();
-
-function setGamePlayingUI(isPlaying){document.body.classList.toggle("game-playing",!!isPlaying);}

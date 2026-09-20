@@ -1041,5 +1041,3 @@ if (shopOverlay) {
   shopOverlay.addEventListener("click", e => { if (e.target===e.currentTarget) closeShop(); });
 }
 document.addEventListener("keydown", e => { if (e.key==="Escape") closeShop(); });
-
-function setGamePlayingUI(isPlaying){document.body.classList.toggle("game-playing",!!isPlaying);}

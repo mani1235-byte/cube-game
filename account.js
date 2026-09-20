@@ -19,5 +19,3 @@ window.CGAccount = (function () {
   }
   return { currentKey };
 })();
-
-function setGamePlayingUI(isPlaying){document.body.classList.toggle("game-playing",!!isPlaying);}

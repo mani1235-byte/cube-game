@@ -65,5 +65,3 @@
   window.ProgressionEvents.on("progression:ready", refreshTrophyDisplays);
   window.ProgressionEvents.on("trophies:gained", refreshTrophyDisplays);
 })();
-
-function setGamePlayingUI(isPlaying){document.body.classList.toggle("game-playing",!!isPlaying);}

@@ -83,5 +83,3 @@ window.REWARD_TABLE = {
   emote_gg:     { type: "emote", emoteId: "gg",     label: "🎉 GG Emote",     icon: "🎉" },
   emote_crown:  { type: "emote", emoteId: "crown",  label: "👑 Crown Emote",  icon: "👑" },
 };
-
-function setGamePlayingUI(isPlaying){document.body.classList.toggle("game-playing",!!isPlaying);}

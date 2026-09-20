@@ -16,5 +16,3 @@ window.LEAGUES = [
   { name: "Diamond III", min: 2000, color: "#9fe8ff", bg: "#071a1f" },
   { name: "Masters",     min: 3000, color: "#ff4d8d", bg: "#1f0712" }
 ];
-
-function setGamePlayingUI(isPlaying){document.body.classList.toggle("game-playing",!!isPlaying);}

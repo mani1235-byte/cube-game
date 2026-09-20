@@ -308,5 +308,3 @@
 
   console.log("🎥 IntroEffects Phase 5 loaded!");
 })();
-
-function setGamePlayingUI(isPlaying){document.body.classList.toggle("game-playing",!!isPlaying);}

@@ -10,5 +10,3 @@ window.ACHIEVEMENTS = [
   { id: "level_20",        name: "Cube Master",      desc: "Reach level 20",               rewardId: "chest_gold" },
   { id: "trophy_1000",     name: "Trophy Hunter",    desc: "Earn 1000 trophies",           rewardId: "chest_crystal" }
 ];
-
-function setGamePlayingUI(isPlaying){document.body.classList.toggle("game-playing",!!isPlaying);}

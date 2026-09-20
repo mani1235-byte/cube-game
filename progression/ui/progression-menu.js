@@ -40,5 +40,3 @@
     setTimeout(relocatePanels, 0);
   });
 })();
-
-function setGamePlayingUI(isPlaying){document.body.classList.toggle("game-playing",!!isPlaying);}

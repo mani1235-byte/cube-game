@@ -39,5 +39,3 @@ window.WorldSystem = (function () {
 
   return { init, unlock, isUnlocked, travelTo, recheck };
 })();
-
-function setGamePlayingUI(isPlaying){document.body.classList.toggle("game-playing",!!isPlaying);}

@@ -33,5 +33,3 @@
   window.ProgressionEvents.on("difficulty:unlocked", render);
   window.ProgressionEvents.on("difficulty:selected", render);
 })();
-
-function setGamePlayingUI(isPlaying){document.body.classList.toggle("game-playing",!!isPlaying);}

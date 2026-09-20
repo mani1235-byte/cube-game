@@ -68,5 +68,3 @@ window.SaveSystem = (function () {
 
   return { load, persist, scheduleSave, getState, reset };
 })();
-
-function setGamePlayingUI(isPlaying){document.body.classList.toggle("game-playing",!!isPlaying);}

@@ -409,5 +409,3 @@ canvas {
 }
 
 .download-grid{display:flex;flex-direction:column;gap:18px;margin:20px}.download-btn{display:flex;justify-content:center;padding:18px;border-radius:16px;text-decoration:none;color:#fff;font-weight:bold}.windows{background:#0078D7}.linux{background:#555}.mac{background:#777}.android{background:#3DDC84}.tablet{background:#00a650}
-/* Hide bottom UI during gameplay */
-body.game-playing .bottom-menu, body.game-playing .bottom-panel, body.game-playing .bottom-bar, body.game-playing .bottom-controls, body.game-playing .menu-bottom, body.game-playing .footer, body.game-playing .bottom-ui { display:none!important; }

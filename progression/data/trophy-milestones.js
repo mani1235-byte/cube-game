@@ -18,5 +18,3 @@ window.TROPHY_MILESTONES = [
   { trophies: 6000, id: "t_6000", tier: "diamond", rewardId: "chest_legendary"  },
   { trophies: 10000,id: "t_10000",tier: "diamond", rewardId: "chest_legendary"  },
 ];
-
-function setGamePlayingUI(isPlaying){document.body.classList.toggle("game-playing",!!isPlaying);}

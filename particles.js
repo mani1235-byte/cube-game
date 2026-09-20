@@ -748,5 +748,3 @@ if (window.CubeParticles) {
   window.CubeParticles.setGridStep = (n) => {};
   window.CubeParticles.getLimit    = ()  => _limit;
 }
-
-function setGamePlayingUI(isPlaying){document.body.classList.toggle("game-playing",!!isPlaying);}

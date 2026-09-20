@@ -62,5 +62,3 @@ window.ChestModel3D = (function () {
 
   return { playOpenSequence };
 })();
-
-function setGamePlayingUI(isPlaying){document.body.classList.toggle("game-playing",!!isPlaying);}

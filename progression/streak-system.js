@@ -257,5 +257,3 @@ window.StreakSystem = (function () {
 
   return { init, checkIn, claim, unlock, unlockCost, getState, rewardForDay };
 })();
-
-function setGamePlayingUI(isPlaying){document.body.classList.toggle("game-playing",!!isPlaying);}

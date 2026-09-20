@@ -130,5 +130,3 @@ window.CGLeaderboard = (function () {
 
   return { submitScore, renderRankLabel, open, close, refresh };
 })();
-
-function setGamePlayingUI(isPlaying){document.body.classList.toggle("game-playing",!!isPlaying);}

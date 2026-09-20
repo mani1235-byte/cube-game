@@ -26,5 +26,3 @@ window.LevelMilestoneSystem = (function () {
 
   return { init, checkMilestones };
 })();
-
-function setGamePlayingUI(isPlaying){document.body.classList.toggle("game-playing",!!isPlaying);}

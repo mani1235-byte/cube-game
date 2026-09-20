@@ -291,22 +291,6 @@ body.bomb-warning {
   gap: 0;
 }
 
-/* YouTube HUD button */
-.yt-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 2.6em;
-  height: 2.6em;
-  color: rgba(255,255,255,0.75);
-  text-decoration: none;
-  padding: 0.55em 0.45em;
-  transition: color 0.2s;
-  font-size: calc(10px + 1.2vw + 0.6vh);
-}
-.yt-btn:hover { color: #ff0000; }
-.yt-btn svg { width: 1.3em; height: 1.3em; }
-
 /* Shop HUD button */
 .shop-btn {
   display: flex;
@@ -1406,6 +1390,3 @@ body.chaos-rainbow #c { animation: chaosRainbowScene 1.8s linear infinite; }
   border: 1px solid rgba(255,255,255,.12);
   border-radius: 8px;
 }
-
-/* Hide bottom UI during gameplay */
-body.game-playing .bottom-menu, body.game-playing .bottom-panel, body.game-playing .bottom-bar, body.game-playing .bottom-controls, body.game-playing .menu-bottom, body.game-playing .footer, body.game-playing .bottom-ui { display:none!important; }

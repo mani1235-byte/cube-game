@@ -5,5 +5,3 @@ window.WORLDS = [
   { id: "volcano",    name: "Volcano",    order: 2, requirement: { type: "rewardId", value: "world_volcano" }, portalColor: "#ff5a3c", portalModel: "progression/assets/models/portals/portal_hard.glb" },
   { id: "glacier",    name: "Glacier",    order: 3, requirement: { type: "rewardId", value: "world_glacier" }, portalColor: "#9fe8ff", portalModel: "progression/assets/models/portals/portal_extreme.glb" }
 ];
-
-function setGamePlayingUI(isPlaying){document.body.classList.toggle("game-playing",!!isPlaying);}

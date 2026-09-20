@@ -352,19 +352,6 @@ body {
 }
 .website-connect-btn.visible { display: inline-flex; }
 
-/* ── YouTube link ────────────────────────────────────────────────────────── */
-.yt-link {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  color: rgba(255,255,255,0.3);
-  text-decoration: none;
-  font-size: 0.72rem;
-  letter-spacing: 0.05em;
-  transition: color 0.2s;
-}
-.yt-link:hover { color: #ff4444; }
-
 /* ── Success flash ───────────────────────────────────────────────────────── */
 .card.success {
   animation: successFlash 0.4s ease;
@@ -443,6 +430,3 @@ body {
   font-weight: bold;
   letter-spacing: 0.06em;
 }
-
-/* Hide bottom UI during gameplay */
-body.game-playing .bottom-menu, body.game-playing .bottom-panel, body.game-playing .bottom-bar, body.game-playing .bottom-controls, body.game-playing .menu-bottom, body.game-playing .footer, body.game-playing .bottom-ui { display:none!important; }

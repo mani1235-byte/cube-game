@@ -224,5 +224,3 @@ window.RewardSystem = (function () {
 
   return { init, grant, showRewardToast, SKIN_COLORS };
 })();
-
-function setGamePlayingUI(isPlaying){document.body.classList.toggle("game-playing",!!isPlaying);}

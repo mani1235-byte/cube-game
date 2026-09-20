@@ -38,10 +38,7 @@
     <div class="cube-count-lbl"></div>
   </div>
   <div class="hud__actions">
-    <a class="yt-btn" href="https://www.youtube.com/@cubegame2026" target="_blank" title="YouTube Channel">
-      <png viewBox="0 0 24 24" fill="currentColor"><path d="M23.5 6.2a3 3 0 0 0-2.1-2.1C19.5 3.5 12 3.5 12 3.5s-7.5 0-9.4.6A3 3 0 0 0 .5 6.2 31 31 0 0 0 0 12a31 31 0 0 0 .5 5.8 3 3 0 0 0 2.1 2.1c1.9.6 9.4.6 9.4.6s7.5 0 9.4-.6a3 3 0 0 0 2.1-2.1A31 31 0 0 0 24 12a31 31 0 0 0-.5-5.8zM9.75 15.5v-7l6.25 3.5-6.25 3.5z"/></png>
-    </a>
-    <button class="shop-btn" id="openShop" title="Shop">
+<button class="shop-btn" id="openShop" title="Shop">
       <png viewBox="0 0 24 24" fill="currentColor"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4zM3.8 6h16.4M16 10a4 4 0 0 1-8 0" stroke="currentColor" stroke-width="1.5" fill="none"/><path d="M16 10a4 4 0 0 1-8 0"/></png>
     </button>
     <div class="pause-btn">
@@ -250,7 +247,13 @@
   <script src="privacy.js"></script>
 <script src="translate.js"></script>
   <script src="cookie.js"></script>
+
+<button id="run-record-btn" class="run-record-btn" type="button">RUN</button>
+<div id="run-record-panel" class="run-record-panel" hidden>
+  <div class="timer-record-title">TIME RECORD</div>
+  <div id="run-current">Current: 00:00.000</div>
+  <div id="run-best">Best: 00:00.000</div>
+  <button id="run-close-btn" type="button">Close</button>
+</div>
 </body>
 </html>
-
-function setGamePlayingUI(isPlaying){document.body.classList.toggle("game-playing",!!isPlaying);}

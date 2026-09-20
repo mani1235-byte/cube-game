@@ -292,5 +292,3 @@ window.draw = function(ctx, width, height, viewScale) {
 };
 
 console.log("🎮 Cube Evolution loaded! Stages:", EVOLUTION_STAGES.map(s => `${s.score}→${s.name}`).join(", "));
-
-function setGamePlayingUI(isPlaying){document.body.classList.toggle("game-playing",!!isPlaying);}

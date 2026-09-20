@@ -520,4 +520,3 @@
   console.log("🎬 CUBE GAME Intro loaded — 60s cinematic experience begins…");
 
 })();
-function setGamePlayingUI(isPlaying){document.body.classList.toggle("game-playing",!!isPlaying);}

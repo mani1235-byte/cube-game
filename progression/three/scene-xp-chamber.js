@@ -263,5 +263,3 @@ window.XPChamber3D = (function () {
 
   return { open };
 })();
-
-function setGamePlayingUI(isPlaying){document.body.classList.toggle("game-playing",!!isPlaying);}

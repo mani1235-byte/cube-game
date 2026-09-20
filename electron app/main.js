@@ -27,4 +27,3 @@ app.whenReady().then(createWindow);
 app.on("window-all-closed", () => {
     if (process.platform !== "darwin") app.quit();
 });
-function setGamePlayingUI(isPlaying){document.body.classList.toggle("game-playing",!!isPlaying);}

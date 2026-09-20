@@ -53,5 +53,3 @@ window.MissionSystem = (function () {
 
   return { init, recordMatch, checkMissions, getStat };
 })();
-
-function setGamePlayingUI(isPlaying){document.body.classList.toggle("game-playing",!!isPlaying);}

@@ -229,4 +229,39 @@
 
 })();
 
-function setGamePlayingUI(isPlaying){document.body.classList.toggle("game-playing",!!isPlaying);}
+/* Cube Game survival timer / record */
+(() => {
+  let start = 0, running = false, raf = 0;
+  let best = Number(localStorage.getItem("cubeGameBestTimeMs") || 0);
+  const $ = id => document.getElementById(id);
+  const format = ms => {
+    ms = Math.max(0, ms|0);
+    const m = Math.floor(ms/60000);
+    const s = Math.floor((ms%60000)/1000);
+    const x = ms%1000;
+    return String(m).padStart(2,"0")+":"+String(s).padStart(2,"0")+"."+String(x).padStart(3,"0");
+  };
+  function update(){
+    if(!running) return;
+    const now=performance.now()-start;
+    const cur=$("run-current"); if(cur) cur.textContent="Current: "+format(now);
+    raf=requestAnimationFrame(update);
+  }
+  window.cubeGameTimerRecord = {
+    start(){ running=true; start=performance.now(); cancelAnimationFrame(raf); update(); },
+    stop(){
+      if(!running) return 0;
+      running=false; cancelAnimationFrame(raf);
+      const elapsed=performance.now()-start;
+      if(elapsed>best){ best=elapsed; localStorage.setItem("cubeGameBestTimeMs",String(Math.floor(best))); }
+      const b=$("run-best"); if(b) b.textContent="Best: "+format(best);
+      return elapsed;
+    }
+  };
+  document.addEventListener("DOMContentLoaded",()=>{
+    const btn=$("run-record-btn"), panel=$("run-record-panel"), close=$("run-close-btn");
+    const b=$("run-best"); if(b) b.textContent="Best: "+format(best);
+    if(btn && panel) btn.addEventListener("click",()=>{panel.hidden=false;});
+    if(close && panel) close.addEventListener("click",()=>{panel.hidden=true;});
+  });
+})();

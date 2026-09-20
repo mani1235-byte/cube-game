@@ -291,5 +291,14 @@ html, body {
   text-decoration: none;
 }
 .sound-hud-btn:hover { color: var(--cyan); }
-/* Hide bottom UI during gameplay */
-body.game-playing .bottom-menu, body.game-playing .bottom-panel, body.game-playing .bottom-bar, body.game-playing .bottom-controls, body.game-playing .menu-bottom, body.game-playing .footer, body.game-playing .bottom-ui { display:none!important; }
+/* Timer record UI */
+.run-record-btn{margin:8px;padding:10px 20px;font-size:16px;cursor:pointer}
+.run-record-panel{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);padding:24px;min-width:260px;text-align:center;z-index:9999;background:rgba(10,10,20,.96);border:1px solid rgba(255,255,255,.25);border-radius:12px}
+.timer-record-title{font-size:22px;font-weight:700;margin-bottom:14px}
+.run-record-panel div{margin:8px 0}
+.run-record-panel button{margin-top:12px;padding:8px 16px}
+
+/* RUN mode */
+.run-record-btn{width:auto!important;min-width:120px!important;max-width:220px!important;padding:10px 20px!important;font-size:16px!important}
+.run-mode-description{margin:12px auto;max-width:520px;padding:14px 18px;text-align:center;line-height:1.45;font-size:14px;opacity:.9}
+.run-mode-description p{margin:7px 0}

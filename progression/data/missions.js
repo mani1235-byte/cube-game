@@ -25,5 +25,3 @@ window.MISSIONS = [
   { id: "m_chests_5",  type: "chestsOpened", target: 5,  label: "Open 5 chests",  rewardId: "skin_ice"    },
   { id: "m_chests_15", type: "chestsOpened", target: 15, label: "Open 15 chests", rewardId: "trail_stars" },
 ];
-
-function setGamePlayingUI(isPlaying){document.body.classList.toggle("game-playing",!!isPlaying);}

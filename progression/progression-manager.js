@@ -87,5 +87,3 @@ window.ProgressionManager = (function () {
 
   return { init, recordWin, getSnapshot, getState: () => state };
 })();
-
-function setGamePlayingUI(isPlaying){document.body.classList.toggle("game-playing",!!isPlaying);}
