@@ -1422,10 +1422,14 @@ body {
 
 .mode-select-modal {
   box-sizing: border-box !important;
-  width: min(560px, 100%) !important;
-  max-height: calc(100dvh - 28px) !important;
+  width: 100vw !important;
+  max-width: none !important;
+  height: 100dvh !important;
+  max-height: none !important;
+  min-height: 100vh !important;
   overflow-y: auto !important;
-  margin: auto !important;
+  margin: 0 !important;
+  border-radius: 0 !important;
 }
 
 @media (max-width: 600px) {
@@ -1438,5 +1442,64 @@ body {
     margin: auto 0 !important;
     border-radius: 14px !important;
     padding: 22px 16px !important;
+  }
+}
+
+
+/* FINAL PLAY MODE VIEWPORT OVERRIDE — laptop/desktop/tablet/phone */
+.mode-select-overlay,
+.mode-select-overlay.open {
+  position: fixed !important;
+  inset: 0 !important;
+  display: flex !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  height: 100dvh !important;
+  min-width: 100vw !important;
+  min-height: 100vh !important;
+  min-height: 100dvh !important;
+  max-width: none !important;
+  max-height: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  align-items: stretch !important;
+  justify-content: stretch !important;
+  overflow: hidden !important;
+  box-sizing: border-box !important;
+}
+
+.mode-select-overlay .mode-select-modal,
+.mode-select-overlay.open .mode-select-modal {
+  position: relative !important;
+  inset: auto !important;
+  flex: 1 1 auto !important;
+  width: 100% !important;
+  max-width: none !important;
+  height: 100% !important;
+  max-height: none !important;
+  min-height: 100% !important;
+  margin: 0 !important;
+  border-radius: 0 !important;
+  box-sizing: border-box !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+}
+
+/* Laptop/desktop: use the entire browser viewport. */
+@media (min-width: 769px) {
+  .mode-select-overlay .mode-select-modal {
+    width: 100vw !important;
+  }
+}
+
+/* Mobile/tablet: still fill the entire viewport without clipping. */
+@media (max-width: 768px) {
+  .mode-select-overlay {
+    overflow-y: auto !important;
+  }
+
+  .mode-select-overlay .mode-select-modal {
+    min-height: 100dvh !important;
+    height: auto !important;
   }
 }
