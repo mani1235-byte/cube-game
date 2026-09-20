@@ -1390,3 +1390,53 @@ body.chaos-rainbow #c { animation: chaosRainbowScene 1.8s linear infinite; }
   border: 1px solid rgba(255,255,255,.12);
   border-radius: 8px;
 }
+
+
+/* ── Full-screen Play Mode dashboard fix ─────────────────────────────── */
+html,
+body {
+  width: 100%;
+  min-width: 100%;
+  min-height: 100%;
+  margin: 0;
+}
+
+.mode-select-overlay {
+  position: fixed !important;
+  inset: 0 !important;
+  width: 100vw !important;
+  height: 100dvh !important;
+  min-height: 100vh !important;
+  box-sizing: border-box !important;
+  margin: 0 !important;
+  padding: clamp(14px, 3vw, 32px) !important;
+  overflow-y: auto !important;
+  z-index: 10050 !important;
+}
+
+.mode-select-overlay.open {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+.mode-select-modal {
+  box-sizing: border-box !important;
+  width: min(560px, 100%) !important;
+  max-height: calc(100dvh - 28px) !important;
+  overflow-y: auto !important;
+  margin: auto !important;
+}
+
+@media (max-width: 600px) {
+  .mode-select-overlay {
+    align-items: flex-start !important;
+    padding: 14px !important;
+  }
+
+  .mode-select-modal {
+    margin: auto 0 !important;
+    border-radius: 14px !important;
+    padding: 22px 16px !important;
+  }
+}
