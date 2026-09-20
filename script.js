@@ -1537,6 +1537,12 @@ document.querySelectorAll(".mode-choice").forEach((button) => {
       setGameMode(GAME_MODE_CHAOS);
       setActiveMenu(null);
       resetGame();
+    } else if (mode === "run") {
+      // Run Mode uses the normal gameplay rules with a dedicated time-record flow.
+      setGameMode(GAME_MODE_RANKED);
+      setActiveMenu(null);
+      resetGame();
+      if (window.cubeGameTimerRecord?.start) window.cubeGameTimerRecord.start();
     }
   });
 });

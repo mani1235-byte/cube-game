@@ -160,27 +160,23 @@
     <button type="button" class="play-btn">PLAY</button>
     <div class="mode-select-overlay" id="modeSelectOverlay" aria-hidden="true">
       <div class="mode-select-modal" role="dialog" aria-modal="true" aria-labelledby="modeSelectTitle">
-        <div class="mode-select-title" id="modeSelectTitle">SELECT MODE</div>
-        <div class="mode-select-subtitle">Choose how you want to play</div>
-        <div class="mode-select-options">
+        <div class="mode-select-title" id="modeSelectTitle">PLAY</div>
+        <div class="mode-select-options" aria-label="Game modes">
           <button type="button" class="mode-choice mode-normal-choice" data-mode="normal">
+            <span class="mode-thumb" aria-hidden="true"><span class="mode-thumb-mark">◆</span></span>
             <strong>Normal Mode</strong>
-            <span>Classic CUBE GAME</span>
           </button>
           <button type="button" class="mode-choice mode-anti-choice" data-mode="anti">
+            <span class="mode-thumb" aria-hidden="true"><span class="mode-thumb-mark">♥</span></span>
             <strong>Anti Lose Mode</strong>
-            <span>Play without losing hearts</span>
           </button>
           <button type="button" class="mode-choice mode-chaos-choice" data-mode="chaos">
-            <strong>⚡ Chaos Mode
-<div id="run-mode-description" class="run-mode-description">
-  <strong>RUN MODE</strong>
-  <p>Survive as long as you can. Your run records how long you stay alive.</p>
-  <p>Cubes can appear and disappear. False cubes can also appear and disappear, and touching a dangerous one can make you lose.</p>
-  <p>Bombs can appear too — avoid them. The objects are intentionally not brightly lit, so you have to pay attention.</p>
-</div>
-</strong>
-            <span>Faster and more intense</span>
+            <span class="mode-thumb" aria-hidden="true"><span class="mode-thumb-mark">⚡</span></span>
+            <strong>Chaos Mode</strong>
+          </button>
+          <button type="button" class="mode-choice mode-run-choice" data-mode="run">
+            <span class="mode-thumb" aria-hidden="true"><span class="mode-thumb-mark">⏱</span></span>
+            <strong>Run Mode</strong>
           </button>
         </div>
         <button type="button" class="mode-select-close" id="modeSelectClose">CANCEL</button>
