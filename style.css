@@ -1774,3 +1774,23 @@ body {
     grid-template-columns: 1fr !important;
   }
 }
+
+
+/* CUBE GAME — real mode thumbnails */
+.mode-select-overlay .mode-choice .mode-thumb {
+  position: relative !important;
+  padding: 0 !important;
+  background: #101828 !important;
+}
+.mode-select-overlay .mode-choice .mode-thumb::before,
+.mode-select-overlay .mode-choice .mode-thumb::after {
+  display: none !important;
+  content: none !important;
+}
+.mode-select-overlay .mode-choice .mode-thumb > img {
+  display: block !important;
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover !important;
+  object-position: center !important;
+}
