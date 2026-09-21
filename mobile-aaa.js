@@ -229,7 +229,7 @@
 
 })();
 
-/* Cube Game survival timer / record */
+/* Cube Game Run Mode survival timer / record */
 (() => {
   let start = 0, running = false, raf = 0;
   let best = Number(localStorage.getItem("cubeGameBestTimeMs") || 0);
@@ -241,23 +241,81 @@
     const x = ms%1000;
     return String(m).padStart(2,"0")+":"+String(s).padStart(2,"0")+"."+String(x).padStart(3,"0");
   };
+
+  function getHud(){
+    let el = $("run-survival-timer");
+    if (!el) {
+      el = document.createElement("div");
+      el.id = "run-survival-timer";
+      el.innerHTML = '<span class="run-timer-label">RUN TIME</span><span class="run-timer-value">00:00.000</span>';
+      el.style.cssText = [
+        "position:fixed","top:86px","left:50%","transform:translateX(-50%)",
+        "z-index:9998","pointer-events:none","display:none",
+        "padding:8px 18px","border:1px solid rgba(0,220,255,.55)",
+        "border-radius:999px","background:rgba(4,12,28,.78)",
+        "box-shadow:0 0 18px rgba(0,190,255,.25)",
+        "backdrop-filter:blur(8px)","text-align:center","white-space:nowrap"
+      ].join(";");
+      const style = document.createElement("style");
+      style.textContent = `
+        #run-survival-timer .run-timer-label {
+          display:block; font:700 9px/1.1 Orbitron,monospace;
+          letter-spacing:.18em; color:rgba(255,255,255,.55); margin-bottom:3px;
+        }
+        #run-survival-timer .run-timer-value {
+          display:block; font:900 clamp(18px,3vw,27px)/1 Orbitron,monospace;
+          letter-spacing:.08em; color:#00dcff; text-shadow:0 0 12px rgba(0,220,255,.65);
+        }
+      `;
+      document.head.appendChild(style);
+      document.body.appendChild(el);
+    }
+    return el;
+  }
+
   function update(){
     if(!running) return;
     const now=performance.now()-start;
     const cur=$("run-current"); if(cur) cur.textContent="Current: "+format(now);
+    const hud=getHud();
+    const value=hud.querySelector(".run-timer-value");
+    if(value) value.textContent=format(now);
     raf=requestAnimationFrame(update);
   }
+
   window.cubeGameTimerRecord = {
-    start(){ running=true; start=performance.now(); cancelAnimationFrame(raf); update(); },
+    start(){
+      running=true;
+      start=performance.now();
+      cancelAnimationFrame(raf);
+      const hud=getHud();
+      hud.style.display="block";
+      const value=hud.querySelector(".run-timer-value");
+      if(value) value.textContent="00:00.000";
+      update();
+    },
     stop(){
       if(!running) return 0;
-      running=false; cancelAnimationFrame(raf);
+      running=false;
+      cancelAnimationFrame(raf);
       const elapsed=performance.now()-start;
       if(elapsed>best){ best=elapsed; localStorage.setItem("cubeGameBestTimeMs",String(Math.floor(best))); }
       const b=$("run-best"); if(b) b.textContent="Best: "+format(best);
+      const cur=$("run-current"); if(cur) cur.textContent="Current: "+format(elapsed);
+      const hud=getHud();
+      const value=hud.querySelector(".run-timer-value");
+      if(value) value.textContent=format(elapsed);
+      hud.style.display="none";
       return elapsed;
+    },
+    hide(){
+      running=false;
+      cancelAnimationFrame(raf);
+      const hud=getHud();
+      hud.style.display="none";
     }
   };
+
   document.addEventListener("DOMContentLoaded",()=>{
     const btn=$("run-record-btn"), panel=$("run-record-panel"), close=$("run-close-btn");
     const b=$("run-best"); if(b) b.textContent="Best: "+format(best);

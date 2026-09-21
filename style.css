@@ -1794,3 +1794,10 @@ body {
   object-fit: cover !important;
   object-position: center !important;
 }
+
+
+/* Run Mode survival timer */
+#run-survival-timer { max-width: calc(100vw - 32px); }
+@media (max-width: 600px) {
+  #run-survival-timer { top: 72px !important; padding: 7px 13px !important; }
+}

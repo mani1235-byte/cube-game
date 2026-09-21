@@ -1524,6 +1524,8 @@ document.querySelectorAll(".mode-choice").forEach((button) => {
     const mode = button.dataset.mode;
     closeModeSelect();
 
+    if (mode !== "run" && window.cubeGameTimerRecord?.hide) window.cubeGameTimerRecord.hide();
+
     if (mode === "normal") {
       setGameMode(GAME_MODE_RANKED);
       setActiveMenu(null);
@@ -1951,6 +1953,9 @@ function resumeGame() {
 }
 
 function endGame() {
+  if (state.game.mode === GAME_MODE_RANKED && window.cubeGameTimerRecord?.stop) {
+    window.cubeGameTimerRecord.stop();
+  }
   handleCanvasPointerUp();
   resetAllTargets(); // clear cubes from screen immediately
   if (isNewHighScore()) {
