@@ -26,6 +26,7 @@ window.ProgressionManager = (function () {
     window.MissionSystem.init(state);
     window.WeeklyMissionSystem.init(state);
     window.StreakSystem.init(state);
+    window.WinBoostSystem.init(state);
 
     wireAchievements();
     wireRecheck();

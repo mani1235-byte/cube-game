@@ -18,11 +18,20 @@
 (function () {
   const Events = window.ProgressionEvents;
 
+  // ---- Win boost -------------------------------------------------------
+  // First win starts Day 1 (2x), then Day 2 (4x), Day 3 (8x), then expires.
+  function getWinBoost() {
+    if (window.WinBoostSystem) return window.WinBoostSystem.beginWin();
+    return { day: 0, multiplier: 1, active: false };
+  }
+
   // ---- Trophies --------------------------------------------------------
   window.CGTrophies = {
-    applyMatchResult(score) {
+    applyMatchResult(score, boostInfo) {
       const ratio = (window.ProgressionConfig.trophies || {}).scoreToTrophyRatio || 50;
-      const gained = Math.max(0, Math.floor((score || 0) / ratio));
+      const baseGained = Math.max(0, Math.floor((score || 0) / ratio));
+      const multiplier = boostInfo ? boostInfo.multiplier : 1;
+      const gained = Math.floor(baseGained * multiplier);
       const before = window.ProgressionManager.getState().trophies || 0;
 
       const milestonesHit = [];
@@ -31,30 +40,36 @@
       unsub();
 
       const total = window.ProgressionManager.getState().trophies || 0;
-      return { gained, before, total, milestones: milestonesHit };
+      return { gained, baseGained, multiplier, before, total, milestones: milestonesHit };
     },
 
-    renderMatchResult(info) {
+    renderMatchResult(info, boostInfo) {
       const el = document.getElementById("trophyResult");
       if (!el) return;
       if (!info || info.gained <= 0) { el.innerHTML = ""; return; }
+      const boostLine = boostInfo && boostInfo.active
+        ? `<div class="prog-match-milestone">⚡ WIN BOOST: ${boostInfo.multiplier}× — Day ${boostInfo.day}/3</div>`
+        : "";
       el.innerHTML =
         `<div class="prog-match-trophies">🏆 +${info.gained} Trophies <span class="prog-match-trophies-total">(${info.total} total)</span></div>` +
+        boostLine +
         info.milestones.map(m => `<div class="prog-match-milestone">🎉 Milestone: ${m.trophies} trophies!</div>`).join("");
     }
   };
 
   // ---- XP (independent of trophies, same match-end trigger) ------------
   window.CGXP = {
-    applyMatchResult(score) {
-      const perWin = window.ProgressionConfig.xp.perWin || 0;
+    applyMatchResult(score, boostInfo) {
+      const basePerWin = window.ProgressionConfig.xp.perWin || 0;
+      const multiplier = boostInfo ? boostInfo.multiplier : 1;
+      const perWin = Math.floor(basePerWin * multiplier);
       const before = window.ProgressionManager.getState().xp || 0;
       const beforeLevel = window.ProgressionManager.getState().level || 1;
 
       window.XPSystem.add(perWin, "match_end");
 
       const after = window.ProgressionManager.getState();
-      return { gained: perWin, before, total: after.xp, leveledUp: after.level > beforeLevel, level: after.level };
+      return { gained: perWin, baseGained: basePerWin, multiplier, before, total: after.xp, leveledUp: after.level > beforeLevel, level: after.level };
     },
 
     renderMatchResult() {
@@ -63,6 +78,19 @@
       // xp:gained / xp:levelup events fired above, so there's nothing
       // extra to render here. Kept as a no-op for call-site symmetry with
       // CGTrophies.
+    }
+  };
+
+  // ---- Coins (win reward) ----------------------------------------------
+  window.CGCoins = {
+    applyMatchResult(boostInfo) {
+      const basePerWin = window.ProgressionConfig.coins.perWin || 0;
+      const multiplier = boostInfo ? boostInfo.multiplier : 1;
+      const gained = Math.floor(basePerWin * multiplier);
+      if (gained > 0 && window.CoinSystem) {
+        window.CoinSystem.earn(gained, "win");
+      }
+      return { gained, baseGained: basePerWin, multiplier };
     }
   };
 

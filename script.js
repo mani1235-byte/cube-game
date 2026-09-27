@@ -1998,18 +1998,36 @@ function endGame() {
       } catch(e) {}
     }
   } catch(e) {}
+
+  // Three-day win reward boost: 2x on Day 1, 4x on Day 2, 8x on Day 3.
+  // The boost starts on this first counted win and is stored per account.
+  let winBoostInfo = { day: 0, multiplier: 1, active: false };
+  try {
+    if (window.WinBoostSystem) {
+      winBoostInfo = window.WinBoostSystem.beginWin();
+    }
+  } catch(e) {}
+
   // Trophy / Season Pass update
   try {
     if (window.CGTrophies) {
-      const trophyInfo = window.CGTrophies.applyMatchResult(state.game.score);
-      window.CGTrophies.renderMatchResult(trophyInfo);
+      const trophyInfo = window.CGTrophies.applyMatchResult(state.game.score, winBoostInfo);
+      window.CGTrophies.renderMatchResult(trophyInfo, winBoostInfo);
     }
   } catch(e) {}
+
   // XP update (independent of trophies — see progression-game-bridge.js)
   try {
     if (window.CGXP) {
-      const xpInfo = window.CGXP.applyMatchResult(state.game.score);
+      const xpInfo = window.CGXP.applyMatchResult(state.game.score, winBoostInfo);
       window.CGXP.renderMatchResult(xpInfo);
+    }
+  } catch(e) {}
+
+  // Coins earned from a win are boosted by the same multiplier.
+  try {
+    if (window.CGCoins) {
+      window.CGCoins.applyMatchResult(winBoostInfo);
     }
   } catch(e) {}
   // Mission progress update (games played / best score / lifetime score —
