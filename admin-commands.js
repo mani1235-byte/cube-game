@@ -99,23 +99,79 @@
     output("Unknown command. Use /admin help.");
   }
 
+  function createAdminPanel() {
+    if (document.getElementById("cg-admin-button")) return;
+
+    const button = document.createElement("button");
+    button.id = "cg-admin-button";
+    button.type = "button";
+    button.textContent = "ADMIN";
+    button.style.cssText = [
+      "position:fixed", "right:18px", "bottom:18px", "z-index:100001",
+      "padding:11px 18px", "border:1px solid rgba(0,220,255,.7)",
+      "border-radius:10px", "background:rgba(4,12,28,.96)",
+      "color:#dffaff", "font:700 12px/1 monospace", "letter-spacing:.12em",
+      "cursor:pointer", "box-shadow:0 8px 28px rgba(0,0,0,.4)"
+    ].join(";");
+
+    const panel = document.createElement("div");
+    panel.id = "cg-admin-panel";
+    panel.hidden = true;
+    panel.style.cssText = [
+      "position:fixed", "right:18px", "bottom:66px", "z-index:100002",
+      "width:min(420px,calc(100vw - 36px))", "padding:14px",
+      "background:rgba(4,8,20,.98)", "border:1px solid rgba(0,220,255,.45)",
+      "border-radius:14px", "box-shadow:0 16px 50px rgba(0,0,0,.55)"
+    ].join(";");
+
+    const title = document.createElement("div");
+    title.textContent = "CUBE GAME ADMIN";
+    title.style.cssText = "color:#dffaff;font:700 13px monospace;letter-spacing:.1em;margin-bottom:10px";
+
+    const input = document.createElement("input");
+    input.id = "cg-admin-input";
+    input.type = "text";
+    input.autocomplete = "off";
+    input.placeholder = "Type command, e.g. boost 8";
+    input.style.cssText = [
+      "width:100%", "box-sizing:border-box", "padding:11px 12px",
+      "border:1px solid rgba(0,220,255,.35)", "border-radius:9px",
+      "background:rgba(0,0,0,.35)", "color:#fff", "font:13px monospace",
+      "outline:none"
+    ].join(";");
+
+    const hint = document.createElement("div");
+    hint.textContent = "Enter runs the command. Example: boost 8";
+    hint.style.cssText = "color:#8da5b5;font:11px monospace;margin-top:8px";
+
+    panel.append(title, input, hint);
+    document.body.append(button, panel);
+
+    button.addEventListener("click", () => {
+      panel.hidden = !panel.hidden;
+      if (!panel.hidden) setTimeout(() => input.focus(), 0);
+    });
+
+    input.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter") return;
+      const command = String(input.value || "").trim();
+      if (!command) return;
+      input.value = "";
+      run(command.replace(/^\/admin\s*/i, ""));
+      event.preventDefault();
+    });
+
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") panel.hidden = true;
+    });
+  }
+
   function init() {
     adminEnabled = isOwner();
     if (!adminEnabled) return;
     window.CubeGameAdmin = { enabled: true, run };
-    document.addEventListener("keydown", (event) => {
-      if (!event.key || event.key.length !== 1) return;
-      // Admin commands are typed as /admin ... in any focused text input.
-      const el = document.activeElement;
-      if (!el || !(el.tagName === "INPUT" || el.tagName === "TEXTAREA")) return;
-      if (event.key === "Enter" && String(el.value || "").trim().toLowerCase().startsWith("/admin")) {
-        const command = el.value.trim().replace(/^\/admin\s*/i, "");
-        el.value = "";
-        run(command);
-        event.preventDefault();
-      }
-    });
-    output("Owner commands enabled. Type /admin help in a text field.");
+    createAdminPanel();
+    output("Owner admin enabled.");
   }
 
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);
