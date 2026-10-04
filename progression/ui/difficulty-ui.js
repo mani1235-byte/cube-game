@@ -12,7 +12,7 @@
 
   function render() {
     const state = window.ProgressionManager.getState();
-    panel.innerHTML = `<div class="prog-panel-title">Difficulty</div>` +
+    panel.innerHTML = `<div class="prog-panel-title">Difficulty</div><div class="prog-panel-subtitle">Select an unlocked difficulty to change gameplay.</div>` +
       (window.DIFFICULTIES || []).map(d => {
         const unlocked = window.DifficultySystem.isUnlocked(d.id);
         const active = state.currentDifficulty === d.id;

@@ -1801,3 +1801,29 @@ body {
 @media (max-width: 600px) {
   #run-survival-timer { top: 72px !important; padding: 7px 13px !important; }
 }
+
+/* ── Actual selectable game worlds ───────────────────────────────────────── */
+body.world-grasslands {
+  background-image:
+    radial-gradient(ellipse at 50% 0%, #194d2b 0%, #082616 38%, #03130a 75%),
+    radial-gradient(ellipse at 0% 100%, #0d3a1b 0%, transparent 60%),
+    radial-gradient(ellipse at 100% 100%, #123d19 0%, transparent 60%);
+}
+body.world-desert {
+  background-image:
+    radial-gradient(ellipse at 50% 0%, #7b4d1e 0%, #3d2410 40%, #1a0e06 78%),
+    radial-gradient(ellipse at 0% 100%, #5c3411 0%, transparent 60%),
+    radial-gradient(ellipse at 100% 100%, #704315 0%, transparent 60%);
+}
+body.world-volcano {
+  background-image:
+    radial-gradient(ellipse at 50% 0%, #68170d 0%, #300904 38%, #100302 78%),
+    radial-gradient(ellipse at 0% 100%, #4a0b06 0%, transparent 60%),
+    radial-gradient(ellipse at 100% 100%, #71170b 0%, transparent 60%);
+}
+body.world-glacier {
+  background-image:
+    radial-gradient(ellipse at 50% 0%, #174e68 0%, #082b3d 40%, #03131d 78%),
+    radial-gradient(ellipse at 0% 100%, #0c4055 0%, transparent 60%),
+    radial-gradient(ellipse at 100% 100%, #17536c 0%, transparent 60%);
+}

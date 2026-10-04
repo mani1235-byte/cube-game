@@ -28,15 +28,15 @@ const CHAOS_SPAWN_MAX = 1100;
 
 // Gameplay
 const getSpawnDelay = () => {
+  const settings = getGameplaySettings();
   if (isChaosGame()) {
-    // Chaos keeps the same core rules, but the battlefield becomes much busier.
-    const chaosDelay = CHAOS_SPAWN_MAX - state.game.cubeCount * 1.8;
-    return Math.max(chaosDelay, CHAOS_SPAWN_MIN);
+    const chaosDelay = (CHAOS_SPAWN_MAX - state.game.cubeCount * 1.8) / settings.spawnMult;
+    return Math.max(chaosDelay, CHAOS_SPAWN_MIN / settings.spawnMult);
   }
   const spawnDelayMax = isAntiLoseGame() ? 1000 : 1400;
   const spawnDelayMin = isAntiLoseGame() ? 400  : 550;
-  const spawnDelay = spawnDelayMax - state.game.cubeCount * 3.1;
-  return Math.max(spawnDelay, spawnDelayMin);
+  const spawnDelay = (spawnDelayMax - state.game.cubeCount * 3.1) / settings.spawnMult;
+  return Math.max(spawnDelay, spawnDelayMin / settings.spawnMult);
 };
 
 // Max cubes on screen at once in anti-lose mode
@@ -82,6 +82,44 @@ const makeTargetGlueColor = (target) => {
 };
 // Size of target fragments
 const fragRadius = targetRadius / 3;
+
+// Progression gameplay settings. World/difficulty selections are real gameplay
+// settings, not menu-only values.
+function getSelectedDifficulty() {
+  const id = window.ProgressionManager?.getState?.().currentDifficulty || "normal";
+  return (window.DIFFICULTIES || []).find(d => d.id === id) || (window.DIFFICULTIES || [])[1] || { speedMult: 1, spawnMult: 1, healthBonus: 0, bombMult: 1, scoreMult: 1 };
+}
+function getSelectedWorld() {
+  const id = window.ProgressionManager?.getState?.().currentWorld || "grasslands";
+  return (window.WORLDS || []).find(w => w.id === id) || (window.WORLDS || [])[0] || { speedMult: 1, spawnMult: 1, gravityMult: 1, targetColors: [] };
+}
+function getGameplaySettings() {
+  const d = getSelectedDifficulty();
+  const w = getSelectedWorld();
+  return {
+    speedMult: (d.speedMult || 1) * (w.speedMult || 1),
+    spawnMult: (d.spawnMult || 1) * (w.spawnMult || 1),
+    gravityMult: w.gravityMult || 1,
+    healthBonus: d.healthBonus || 0,
+    bombMult: d.bombMult || 1,
+    scoreMult: d.scoreMult || 1
+  };
+}
+
+function applySelectedDifficulty() {
+  updateRoomTheme(state.game.mode);
+}
+
+function applySelectedWorld(worldId) {
+  const world = (window.WORLDS || []).find(w => w.id === worldId);
+  if (!world) return;
+  document.body.classList.remove('world-grasslands','world-desert','world-volcano','world-glacier');
+  document.body.classList.add(world.backgroundClass || 'world-grasslands');
+  updateRoomTheme(state.game.mode);
+  resetAllTargets();
+  spawnTime = getSpawnDelay();
+}
+window.applySelectedWorld = applySelectedWorld;
 
 // Game canvas element needed in setup.js and interaction.js
 const canvas = document.querySelector("#c");
@@ -879,6 +917,7 @@ const getTarget = (() => {
 
   function getTargetOfStyle(color, wireframe) {
     const pool = wireframe ? targetWireframePool : targetPool;
+    if (!pool.has(color)) pool.set(color, []);
     let target = pool.get(color).pop();
     if (!target) {
       target = new Entity({
@@ -917,10 +956,16 @@ const getTarget = (() => {
 
     // Target Parameters
     // --------------------------------
-    let color = pickOne([BLUE, GREEN, ORANGE]);
+    const settings = getGameplaySettings();
+    const world = getSelectedWorld();
+    const colorPool = (world.targetColors || []).map(hex => {
+      const n = parseInt(hex.replace("#", ""), 16);
+      return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
+    });
+    let color = pickOne(colorPool.length ? colorPool : [BLUE, GREEN, ORANGE]);
     let wireframe = false;
-    let health = 1;
-    let maxHealth = 3;
+    let health = 1 + settings.healthBonus;
+    let maxHealth = 3 + settings.healthBonus;
     let isBomb = false;
     const spinner =
       state.game.cubeCount >= spinnerThreshold &&
@@ -930,8 +975,8 @@ const getTarget = (() => {
     // Target Parameter Overrides
     // --------------------------------
     // Chaos has substantially more bombs; Normal keeps its original chance.
-    if ((state.game.mode === GAME_MODE_RANKED && Math.random() < BOMB_CHANCE) ||
-        (isChaosGame() && Math.random() < CHAOS_BOMB_CHANCE)) {
+    if ((state.game.mode === GAME_MODE_RANKED && Math.random() < Math.min(0.95, BOMB_CHANCE * settings.bombMult)) ||
+        (isChaosGame() && Math.random() < Math.min(0.95, CHAOS_BOMB_CHANCE * settings.bombMult))) {
       isBomb  = true;
       color   = RED;
       health  = 1;
@@ -1772,6 +1817,9 @@ function updateRoomTheme(mode) {
     // main menu / default
     document.body.classList.add('room-menu');
   }
+  const world = getSelectedWorld();
+  document.body.classList.remove('world-grasslands','world-desert','world-volcano','world-glacier');
+  document.body.classList.add(world.backgroundClass || 'world-grasslands');
 }
 
 // Initialise to menu theme
@@ -1961,6 +2009,13 @@ function endGame() {
   if (isNewHighScore()) {
     setHighScore(state.game.score);
   }
+  // Apply the selected difficulty's score multiplier to the completed run.
+  const difficultySettings = getGameplaySettings();
+  if (difficultySettings.scoreMult !== 1) {
+    state.game.score = Math.floor(state.game.score * difficultySettings.scoreMult);
+    renderScoreHud();
+  }
+
   // Save score to logged-in user profile
   const rankLbl = document.getElementById("scoreRankLbl");
   if (rankLbl) rankLbl.textContent = ""; // clear any rank shown from a previous run
@@ -1999,8 +2054,7 @@ function endGame() {
     }
   } catch(e) {}
 
-  // Three-day win reward boost: 2x on Day 1, 4x on Day 2, 8x on Day 3.
-  // The boost starts on this first counted win and is stored per account.
+  // Weekend-only win boost: Sat 2x/4x, Sun 8x/16x.
   let winBoostInfo = { day: 0, multiplier: 1, active: false };
   try {
     if (window.WinBoostSystem) {
@@ -2176,7 +2230,7 @@ function tick(width, height, simTime, simSpeed, lag) {
         target.y = centerY + targetHitRadius * 2;
         target.z = Math.random() * targetRadius * 2 - targetRadius;
         target.xD = Math.random() * ((target.x * -2) / 120);
-        target.yD = isChaosGame() ? -(16 + Math.random() * 14) : -20;
+        target.yD = (isChaosGame() ? -(16 + Math.random() * 14) : -20) * getGameplaySettings().speedMult;
         if (isChaosGame()) {
           // Different launch directions make the 3D field unpredictable.
           target.xD += random(-5, 5);
@@ -2220,7 +2274,7 @@ function tick(width, height, simTime, simSpeed, lag) {
       target.zD *= -boundDamping;
     }
 
-    target.yD += gravity * simSpeed;
+    target.yD += gravity * getGameplaySettings().gravityMult * simSpeed;
     target.rotateX += target.rotateXD * simSpeed;
     target.rotateY += target.rotateYD * simSpeed;
     target.rotateZ += target.rotateZD * simSpeed;

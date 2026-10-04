@@ -12,7 +12,7 @@
 
   function render() {
     const state = window.ProgressionManager.getState();
-    panel.innerHTML = `<div class="prog-panel-title">Worlds</div>` +
+    panel.innerHTML = `<div class="prog-panel-title">Worlds</div><div class="prog-panel-subtitle">Select an unlocked world to change the arena.</div>` +
       `<button class="prog-world-btn prog-portal-room-btn">🌍 Enter Portal Room</button>` +
       (window.WORLDS || []).map(w => {
         const unlocked = window.WorldSystem.isUnlocked(w.id);

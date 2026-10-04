@@ -22,6 +22,7 @@ window.DifficultySystem = (function () {
   function select(difficultyId) {
     if (!isUnlocked(difficultyId)) return false;
     state.currentDifficulty = difficultyId;
+    if (typeof window.applySelectedDifficulty === "function") window.applySelectedDifficulty(difficultyId);
     Events.emit("difficulty:selected", { difficultyId });
     Events.emit("progression:dirty");
     return true;

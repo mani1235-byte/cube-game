@@ -21,6 +21,9 @@
     // sync with the new progression state for any code still reading it
     window.player = window.player || { xp: 0, level: 1, trophies: 0, rewards: [] };
     const state = window.ProgressionManager.getState();
+    // Apply saved selections to the actual game immediately after progression boots.
+    if (typeof window.applySelectedWorld === "function") window.applySelectedWorld(state.currentWorld);
+    if (typeof window.applySelectedDifficulty === "function") window.applySelectedDifficulty(state.currentDifficulty);
     window.ProgressionEvents.on("xp:gained", () => {
       window.player.xp = state.xp;
       window.player.level = state.level;

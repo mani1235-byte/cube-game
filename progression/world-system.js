@@ -22,14 +22,13 @@ window.WorldSystem = (function () {
   function travelTo(worldId) {
     if (!isUnlocked(worldId)) return false;
     state.currentWorld = worldId;
+    // Apply immediately to the live game/scene as well as the saved state.
+    if (typeof window.applySelectedWorld === "function") window.applySelectedWorld(worldId);
     Events.emit("world:travel", { worldId });
     Events.emit("progression:dirty");
     return true;
   }
 
-  // Re-check requirement-based worlds against current stats (called after
-  // trophy/xp/reward changes in case a requirement was already satisfied
-  // by something other than the reward path, e.g. trophies threshold).
   function recheck() {
     (window.WORLDS || []).forEach(w => {
       if (isUnlocked(w.id) || !w.requirement) return;
