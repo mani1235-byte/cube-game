@@ -54,7 +54,7 @@ let pointerScreen = { x: 0, y: 0 };
 // Same as `pointerScreen`, but converted to scene coordinates in rAF.
 let pointerScene = { x: 0, y: 0 };
 // Minimum speed of pointer before "hits" are counted.
-const minPointerSpeed = 60;
+const minPointerSpeed = 12; // Allow ordinary mouse and touch swipes to register reliably.
 // The hit speed affects the direction the target post-hit. This number dampens that force.
 const hitDampening = 0.1;
 // Backboard receives shadows and is the farthest negative Z position of entities.
@@ -2230,7 +2230,7 @@ function tick(width, height, simTime, simSpeed, lag) {
         target.y = centerY + targetHitRadius * 2;
         target.z = Math.random() * targetRadius * 2 - targetRadius;
         target.xD = Math.random() * ((target.x * -2) / 120);
-        target.yD = (isChaosGame() ? -(16 + Math.random() * 14) : -20) * getGameplaySettings().speedMult;
+        target.yD = (isChaosGame() ? -(20 + Math.random() * 12) : -24) * getGameplaySettings().speedMult;
         if (isChaosGame()) {
           // Different launch directions make the 3D field unpredictable.
           target.xD += random(-5, 5);
