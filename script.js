@@ -86,11 +86,11 @@ const fragRadius = targetRadius / 3;
 // Progression gameplay settings. World/difficulty selections are real gameplay
 // settings, not menu-only values.
 function getSelectedDifficulty() {
-  const id = window.ProgressionManager?.getState?.().currentDifficulty || "normal";
+  const id = window.ProgressionManager?.getState?.()?.currentDifficulty || "normal";
   return (window.DIFFICULTIES || []).find(d => d.id === id) || (window.DIFFICULTIES || [])[1] || { speedMult: 1, spawnMult: 1, healthBonus: 0, bombMult: 1, scoreMult: 1 };
 }
 function getSelectedWorld() {
-  const id = window.ProgressionManager?.getState?.().currentWorld || "grasslands";
+  const id = window.ProgressionManager?.getState?.()?.currentWorld || "grasslands";
   return (window.WORLDS || []).find(w => w.id === id) || (window.WORLDS || [])[0] || { speedMult: 1, spawnMult: 1, gravityMult: 1, targetColors: [] };
 }
 function getGameplaySettings() {
