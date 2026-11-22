@@ -54,7 +54,7 @@ let pointerScreen = { x: 0, y: 0 };
 // Same as `pointerScreen`, but converted to scene coordinates in rAF.
 let pointerScene = { x: 0, y: 0 };
 // Minimum speed of pointer before "hits" are counted.
-const minPointerSpeed = 28;
+const minPointerSpeed = 60;
 // The hit speed affects the direction the target post-hit. This number dampens that force.
 const hitDampening = 0.1;
 // Backboard receives shadows and is the farthest negative Z position of entities.
@@ -2140,7 +2140,7 @@ function tick(width, height, simTime, simSpeed, lag) {
     if (slowmoRemaining < 0) {
       slowmoRemaining = 0;
     }
-    targetSpeed = pointerIsDown ? 0.075 : 0.3;
+    targetSpeed = (pointerIsDown && !hoverSlicing) ? 0.075 : 0.3;
   } else {
     const menuPointerDown = isMenuVisible() && pointerIsDown;
     // Chaos mode is intentionally a little slower so the denser battlefield
@@ -2230,15 +2230,7 @@ function tick(width, height, simTime, simSpeed, lag) {
         target.y = centerY + targetHitRadius * 2;
         target.z = Math.random() * targetRadius * 2 - targetRadius;
         target.xD = Math.random() * ((target.x * -2) / 120);
-        // Launch velocity is derived from the screen height so cubes always rise
-        // high (close to the top) instead of stalling around mid-screen.
-        // Peak height = v^2 / (2 * g)  ->  v = sqrt(2 * g * travel)
-        const _gs = getGameplaySettings();
-        const _travel = (height + targetHitRadius * 2) * (isChaosGame() ? (0.7 + Math.random() * 0.3) : (0.9 + Math.random() * 0.06));
-        const _launchV = Math.sqrt(2 * gravity * _gs.gravityMult * _travel);
-        // Difficulty/world speed nudges the throw slightly, but never past the ceiling.
-        const _speedNudge = Math.min(1 + (_gs.speedMult - 1) * 0.3, 1.08);
-        target.yD = -_launchV * _speedNudge;
+        target.yD = (isChaosGame() ? -(16 + Math.random() * 14) : -20) * 1.12 * getGameplaySettings().speedMult;
         if (isChaosGame()) {
           // Different launch directions make the 3D field unpredictable.
           target.xD += random(-5, 5);
@@ -2835,6 +2827,7 @@ function handleCanvasPointerDown(x, y) {
 }
 
 function handleCanvasPointerUp() {
+  hoverSlicing = false;
   if (pointerIsDown) {
     pointerIsDown = false;
     touchPoints.push({
@@ -2847,7 +2840,20 @@ function handleCanvasPointerUp() {
   }
 }
 
-function handleCanvasPointerMove(x, y) {
+// Mouse hover slicing: in-game, the blade follows the cursor without holding click.
+let hoverSlicing = false;
+
+function handleCanvasPointerMove(x, y, event) {
+  if (event && event.pointerType === "mouse") {
+    if (!pointerIsDown && isInGame()) {
+      hoverSlicing = true;
+      handleCanvasPointerDown(x, y);
+    } else if (hoverSlicing && !isInGame()) {
+      hoverSlicing = false;
+      handleCanvasPointerUp();
+      return;
+    }
+  }
   if (pointerIsDown) {
     pointerScreen.x = x;
     pointerScreen.y = y;
@@ -2861,6 +2867,7 @@ function handleCanvasPointerMove(x, y) {
 // Use pointer events if available, otherwise fallback to touch events (for iOS).
 if ("PointerEvent" in window) {
   canvas.addEventListener("pointerdown", (event) => {
+    hoverSlicing = false;
     event.isPrimary && handleCanvasPointerDown(event.clientX, event.clientY);
   });
 
@@ -2869,7 +2876,7 @@ if ("PointerEvent" in window) {
   });
 
   canvas.addEventListener("pointermove", (event) => {
-    event.isPrimary && handleCanvasPointerMove(event.clientX, event.clientY);
+    event.isPrimary && handleCanvasPointerMove(event.clientX, event.clientY, event);
   });
 
   // We also need to know if the mouse leaves the page. For this game, it's best if that
