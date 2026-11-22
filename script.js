@@ -2140,7 +2140,7 @@ function tick(width, height, simTime, simSpeed, lag) {
     if (slowmoRemaining < 0) {
       slowmoRemaining = 0;
     }
-    targetSpeed = (pointerIsDown && !hoverSlicing) ? 0.075 : 0.3;
+    targetSpeed = pointerIsDown ? 0.075 : 0.3;
   } else {
     const menuPointerDown = isMenuVisible() && pointerIsDown;
     // Chaos mode is intentionally a little slower so the denser battlefield
@@ -2230,7 +2230,7 @@ function tick(width, height, simTime, simSpeed, lag) {
         target.y = centerY + targetHitRadius * 2;
         target.z = Math.random() * targetRadius * 2 - targetRadius;
         target.xD = Math.random() * ((target.x * -2) / 120);
-        target.yD = (isChaosGame() ? -(16 + Math.random() * 14) : -20) * 1.12 * getGameplaySettings().speedMult;
+        target.yD = (isChaosGame() ? -(16 + Math.random() * 14) : -20) * getGameplaySettings().speedMult;
         if (isChaosGame()) {
           // Different launch directions make the 3D field unpredictable.
           target.xD += random(-5, 5);
@@ -2827,7 +2827,6 @@ function handleCanvasPointerDown(x, y) {
 }
 
 function handleCanvasPointerUp() {
-  hoverSlicing = false;
   if (pointerIsDown) {
     pointerIsDown = false;
     touchPoints.push({
@@ -2840,20 +2839,7 @@ function handleCanvasPointerUp() {
   }
 }
 
-// Mouse hover slicing: in-game, the blade follows the cursor without holding click.
-let hoverSlicing = false;
-
-function handleCanvasPointerMove(x, y, event) {
-  if (event && event.pointerType === "mouse") {
-    if (!pointerIsDown && isInGame()) {
-      hoverSlicing = true;
-      handleCanvasPointerDown(x, y);
-    } else if (hoverSlicing && !isInGame()) {
-      hoverSlicing = false;
-      handleCanvasPointerUp();
-      return;
-    }
-  }
+function handleCanvasPointerMove(x, y) {
   if (pointerIsDown) {
     pointerScreen.x = x;
     pointerScreen.y = y;
@@ -2867,7 +2853,6 @@ function handleCanvasPointerMove(x, y, event) {
 // Use pointer events if available, otherwise fallback to touch events (for iOS).
 if ("PointerEvent" in window) {
   canvas.addEventListener("pointerdown", (event) => {
-    hoverSlicing = false;
     event.isPrimary && handleCanvasPointerDown(event.clientX, event.clientY);
   });
 
@@ -2876,7 +2861,7 @@ if ("PointerEvent" in window) {
   });
 
   canvas.addEventListener("pointermove", (event) => {
-    event.isPrimary && handleCanvasPointerMove(event.clientX, event.clientY, event);
+    event.isPrimary && handleCanvasPointerMove(event.clientX, event.clientY);
   });
 
   // We also need to know if the mouse leaves the page. For this game, it's best if that
