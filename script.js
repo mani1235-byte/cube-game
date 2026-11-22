@@ -54,7 +54,7 @@ let pointerScreen = { x: 0, y: 0 };
 // Same as `pointerScreen`, but converted to scene coordinates in rAF.
 let pointerScene = { x: 0, y: 0 };
 // Minimum speed of pointer before "hits" are counted.
-const minPointerSpeed = 60;
+const minPointerSpeed = 30;
 // The hit speed affects the direction the target post-hit. This number dampens that force.
 const hitDampening = 0.1;
 // Backboard receives shadows and is the farthest negative Z position of entities.
@@ -93,6 +93,8 @@ function getSelectedWorld() {
   const id = window.ProgressionManager?.getState?.()?.currentWorld || "grasslands";
   return (window.WORLDS || []).find(w => w.id === id) || (window.WORLDS || [])[0] || { speedMult: 1, spawnMult: 1, gravityMult: 1, targetColors: [] };
 }
+const worldColorCache = new Map();
+
 function getGameplaySettings() {
   const d = getSelectedDifficulty();
   const w = getSelectedWorld();
@@ -959,8 +961,13 @@ const getTarget = (() => {
     const settings = getGameplaySettings();
     const world = getSelectedWorld();
     const colorPool = (world.targetColors || []).map(hex => {
-      const n = parseInt(hex.replace("#", ""), 16);
-      return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
+      // Reuse one colour object per hex: the target/fragment pools are keyed by
+      // object identity, so a fresh object every spawn breaks shattering.
+      if (!worldColorCache.has(hex)) {
+        const n = parseInt(hex.replace("#", ""), 16);
+        worldColorCache.set(hex, { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 });
+      }
+      return worldColorCache.get(hex);
     });
     let color = pickOne(colorPool.length ? colorPool : [BLUE, GREEN, ORANGE]);
     let wireframe = false;
@@ -1050,6 +1057,7 @@ const updateTargetHealth = (target, healthDelta) => {
 const returnTarget = (target) => {
   target.reset();
   const pool = target.wireframe ? targetWireframePool : targetPool;
+  if (!pool.has(target.color)) pool.set(target.color, []);
   pool.get(target.color).push(target);
 };
 
@@ -1085,6 +1093,7 @@ const createBurst = (() => {
 
   function getFragForTarget(target) {
     const pool = target.wireframe ? fragWireframePool : fragPool;
+    if (!pool.has(target.color)) pool.set(target.color, []);
     let frag = pool.get(target.color).pop();
     if (!frag) {
       frag = new Entity({
@@ -1187,6 +1196,7 @@ const createBurst = (() => {
 const returnFrag = (frag) => {
   frag.reset();
   const pool = frag.wireframe ? fragWireframePool : fragPool;
+  if (!pool.has(frag.color)) pool.set(frag.color, []);
   pool.get(frag.color).push(frag);
 };
 
