@@ -2230,7 +2230,7 @@ function tick(width, height, simTime, simSpeed, lag) {
         target.y = centerY + targetHitRadius * 2;
         target.z = Math.random() * targetRadius * 2 - targetRadius;
         target.xD = Math.random() * ((target.x * -2) / 120);
-        target.yD = (isChaosGame() ? -(16 + Math.random() * 14) : -20) * getGameplaySettings().speedMult;
+        target.yD = isChaosGame() ? -(16 + Math.random() * 14) : -20;
         if (isChaosGame()) {
           // Different launch directions make the 3D field unpredictable.
           target.xD += random(-5, 5);
@@ -2274,7 +2274,7 @@ function tick(width, height, simTime, simSpeed, lag) {
       target.zD *= -boundDamping;
     }
 
-    target.yD += gravity * getGameplaySettings().gravityMult * simSpeed;
+    target.yD += gravity * simSpeed;
     target.rotateX += target.rotateXD * simSpeed;
     target.rotateY += target.rotateYD * simSpeed;
     target.rotateZ += target.rotateZD * simSpeed;
